@@ -4,16 +4,16 @@ Consumer project built on [ServerFramework](https://github.com/JamesonRGrieve/Se
 
 ## Architecture
 
-This is a **consumer project**, not a framework fork. It depends on `zephyrex` via pip and provides only domain-specific extensions:
+This is a **consumer project**, not a framework fork. It depends on `zephyrex[genealogy]~=0.0.1` from PyPI and provides only domain-specific extensions:
 
-- **genealogy** — person/family tree models for RPG characters
+- **genealogy** — person/family tree models for RPG characters (bundled in the framework)
 - **rpg_state** — character state, inventory, progression tracking
 - **rpg_log** — session/event logging for RPG campaigns
 
 ## Commands
 
 ```bash
-pip install -e ".[dev]"      # Install with dev deps (pulls zephyrex from git)
+pip install -e ".[dev]"      # Install with dev deps (pulls zephyrex from PyPI)
 python app.py                # Boot the server on port 2000
 pytest extensions/           # Run extension tests
 ```

@@ -5,10 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zephyrex-rpg"
 version = "0.1.0"
-description = "RPG extensions for Zephyrex Framework Server — genealogy, state tracking, and logging"
+description = "RPG extensions for Zephyrex Framework Server — state tracking and logging"
 requires-python = ">=3.11"
 dependencies = [
-    "zephyrex @ git+https://github.com/JamesonRGrieve/ServerFramework.git",
+    # rpg_state widens the framework's genealogy extension. The framework's
+    # public 0.0.x releases on PyPI.
+    "zephyrex[genealogy]~=0.0.1",
 ]
 
 [project.optional-dependencies]

@@ -16,10 +16,11 @@ class TestExtensionMetadata:
 
     def test_depends_on_genealogy(self):
         # Hard dependency: rpg_state widens genealogy.PersonModel and
-        # genealogy.RelationshipModel via @extension_model.
-        assert "genealogy" in RPGStateExtension.extension_dependencies
+        # genealogy.RelationshipModel via @extension_model. Declared as the
+        # framework reads it, so loading rpg_state loads genealogy.
+        declared = {(d.name, d.optional) for d in RPGStateExtension.dependencies.ext}
+        assert declared == {("genealogy", False), ("acl_rbac", True)}
 
-    def test_models_returns_full_roster(self):
-        models = RPGStateExtension.models()
-        assert set(models) == set(ALL_MODELS)
-        assert len(models) == 13  # bump when adding owned tables.
+    def test_discovered_models_are_the_roster(self):
+        assert RPGStateExtension.models == set(ALL_MODELS)
+        assert len(ALL_MODELS) == 13  # bump when adding owned tables.

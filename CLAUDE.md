@@ -11,15 +11,15 @@ client/     Next.js frontend — consumes the `zephyrex` npm package
 
 ## Server
 
-The server is a consumer of the `zephyrex` Python package (PyPI). It defines three domain extensions:
+The server is a consumer of the `zephyrex` Python package (PyPI, `zephyrex[genealogy]~=0.0.1`). It runs three domain extensions:
 
-- `genealogy` — family tree / lineage tracking
+- `genealogy` — family tree / lineage tracking (bundled in the framework, the `genealogy` extra)
 - `rpg_state` — character stats, inventory, abilities
 - `rpg_log` — session logging and campaign history
 
 ```bash
 cd server
-pip install -e "../../server-framework[all]"
+pip install -e ".[dev]"     # pulls zephyrex from PyPI
 python app.py
 ```
 

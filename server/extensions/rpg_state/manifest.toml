@@ -1,6 +1,10 @@
 name = "rpg_state"
 version = "0.1.0"
-description = "Present-state schema for an RPG campaign — characters (via genealogy), factions, items, quests, locations, traits"
+description = "Present-state schema for RPG campaigns (system-agnostic). Widens genealogy.PersonModel to serve as the character table."
+entry_module = "EXT_RPGState"
+minimum_framework_version = "0.0.1"
+# Where this extension's source is offered (AGPL-3.0 section 13).
+repository = "https://github.com/JamesonRGrieve/zephyrex-rpg"
 
 # Hard dependency. rpg_state does not define its own Character table —
 # it widens genealogy.PersonModel via @extension_model so the persons
@@ -16,5 +20,3 @@ optional = false
 [[extension_dependencies]]
 name = "acl_rbac"
 optional = true
-
-[python_dependencies]

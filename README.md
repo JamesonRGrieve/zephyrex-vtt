@@ -39,7 +39,7 @@ pip install -e ".[dev]"
 python app.py
 ```
 
-This installs the framework from GitHub. To work against a local framework checkout instead, run `pip install -e "../../server-framework[all]"` before the line above.
+This installs the framework (`zephyrex[genealogy]~=0.0.1`) from PyPI. To work against a local framework checkout instead, run `pip install -e "../../server-framework[all]"` before the line above.
 
 The API listens on port 2000. On first boot it creates a SQLite database and seeds it.
 
