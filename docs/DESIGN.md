@@ -115,6 +115,7 @@ page. Every row is re-checked in `docs/research/competitors.md` before launch.
 | V53 | Discord integration: rolls and summaries to a channel, play from Discord | Roll20 *(verify)* | – | ✓ |
 | V54 | PDF and handout viewer shared to chosen players | Foundry, Roll20 | ✓ | ✓ |
 | V55 | Localisation of the UI and of system packs | Foundry | ✓ | ✓ |
+| V56 | Resolution modes: mechanical (rules as written, the VTT as referee), narrative (rolls on request, light dice styles), hybrid by scene kind; declared per system pack | ours | ✓ | ✓ |
 
 The package system (V40), scripts (V41) and the marketplace (V42) run third-party code. It
 runs only in a sandbox with declared permissions, never with the server's own rights. The
@@ -153,6 +154,27 @@ rings on every tool, and a list equivalent for everything on the canvas (tokens,
 lights) for keyboard and screen-reader use. Motion: dice tumble and fog dissolves are
 respectful of reduced motion (instant reveal). Light chrome is available, though the
 canvas itself is the map's own colours.
+
+## Narrative and mechanical play
+
+The AI product runs a campaign in a resolution mode its frame sets (zephyrex-rpg-ai
+`docs/DESIGN.md`, *Narrative and mechanical modes*). A human GM at this table picks one the
+same way. The VTT serves both modes:
+
+- **Mechanical:** the VTT is the referee. Every check the system pack defines is rolled here,
+  `legal_actions` lists what a combatant may do, and `apply_action` is the only way a sheet,
+  condition or position changes. Results stand: the table can only override them by an
+  explicit, logged GM action.
+- **Narrative:** the VTT holds the map, the positions and the sheets as reference. Rolls are
+  made on request, including light dice styles a system pack can declare (e.g. 2d6 with
+  full success, partial and miss). Initiative and movement limits are off unless the GM
+  calls for them.
+- **Hybrid:** the mode follows the scene's kind (combat, social, exploration). The scene's
+  mode is shown on the table's top bar and in the combat HUD.
+
+A system pack (V26) declares which of its rules apply in each mode, so "mechanical" means the
+pack's rules as written. Scenario encounters from the AI product open as VTT encounters, with
+their combatants placed.
 
 ## Real-time architecture
 
