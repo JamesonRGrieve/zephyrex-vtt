@@ -233,3 +233,20 @@ their combatants placed.
 Ported back from the AI product's build: the shared UI shell, dice result cards, the
 combat HUD, and the mechanics endpoints the AI GM proved out (phase 1 comes first for that
 reason) ([zephyrex-rpg-ai: docs/DESIGN.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/DESIGN.md)).
+
+## Proposed, not confirmed
+
+Ideas this product proposes beyond the operator's confirmed scope above. **None is built until the
+operator confirms it.** Size: S (days), M (one to two weeks), L (more). Requested 2026-11-20 for the
+operator's review.
+
+| # | Idea | Why it helps | Size | Depends on |
+|---|---|---|---|---|
+| VP1 | Map from a description | Draft a battlemap from a scene's text through the cartography composer, then edit it in the map editor | L | V1, the AI product |
+| VP2 | Phone as a player controller | A minimal phone view (my token, my sheet, my dice) while a shared screen shows the map | M | V17, V32 |
+| VP3 | Physical-table mode | A TV or projector shows the map top-down with fog, players use their phones, and a grid calibrates to real minis | M | VP2, V12 |
+| VP4 | Encounter difficulty estimate | How hard a planned encounter is for this party, from the system pack, with the reasons shown | M | V26, the AI product's decision models |
+| VP5 | Session replay | Scrub back through a session's token moves, rolls and chat | M | V17 (event log) |
+| VP6 | Walls from an imported image | Detect walls and doors on an uploaded map image as a first draft to correct | M | V10 |
+| VP7 | Accessible play | Colour-blind-safe token rings, a screen-reader summary of each combat turn, and a dyslexia-friendly font option | S | V20 |
+| VP8 | Low-bandwidth table | Vector-only maps and no video for weak connections, chosen automatically from the device tier and connection | S | Device tier probe, V25 |
