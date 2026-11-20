@@ -1,8 +1,8 @@
 {
-  "name": "zephyrex-rpg-client",
+  "name": "zephyrex-vtt-client",
   "version": "1.0.0-alpha.1",
   "private": true,
-  "description": "RPG client app built on Zephyrex Framework",
+  "description": "Zephyrex VTT client, built on the Zephyrex framework",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "next dev -p 1109",

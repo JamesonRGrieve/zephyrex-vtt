@@ -16,7 +16,7 @@ DerivativeTraits (edges defining how Traits contribute to one
 another), Factions, Locations, Items, Hooks (narrative DAG; replaces
 Quest+Objective), and the per-person / per-faction join tables that
 wire them together. Historical events (combat actions, dialogue,
-transactions) live in the sibling ``rpg_log`` extension.
+transactions) live in the ``rpg_log`` extension (zephyrex-rpg-wiki).
 
 Schema integrity
 ----------------

@@ -3,9 +3,9 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "zephyrex-rpg"
+name = "zephyrex-vtt"
 version = "0.1.0"
-description = "RPG extensions for Zephyrex Framework Server — state tracking and logging"
+description = "Zephyrex VTT: maps, scenes, tokens, sheets, dice, combat, live play"
 requires-python = ">=3.11"
 dependencies = [
     # rpg_state widens the framework's genealogy extension. The framework's

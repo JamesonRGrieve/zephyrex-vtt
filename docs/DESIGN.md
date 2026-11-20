@@ -3,11 +3,11 @@
 A virtual tabletop that competes with Foundry VTT and Roll20, with map authoring that
 competes with Inkarnate (and Dungeondraft for interiors). It is where a session is played:
 maps, scenes, tokens, sheets, dice, combat, live play. It reads the world from the wiki,
-and the AI product drives it. Suite context and ownership: [../SUITE.md](../SUITE.md).
-Entity fields: [OBJECT_PLAN](../../server/OBJECT_PLAN.md) §4 (`world_spatial` map
+and the AI product drives it. Suite context and ownership: [zephyrex-rpg-ai: docs/SUITE.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/SUITE.md).
+Entity fields: [OBJECT_PLAN](https://github.com/JamesonRGrieve/zephyrex-rpg-wiki/blob/main/server/OBJECT_PLAN.md) §4 (`world_spatial` map
 authoring, `rpg_core`, `rpg_traits`, `rpg_scene`, `rpg_dice`, `rpg_combat`, `rpg_cards`),
 §7 (UVTT and Foundry adapters) and §9 (MapEditor and SceneEditor components). Geometry
-lessons: [DESIGN-LESSONS](../../server/DESIGN-LESSONS.md).
+lessons: [DESIGN-LESSONS](../server/DESIGN-LESSONS.md).
 
 ## Who it is for
 
@@ -173,7 +173,7 @@ canvas itself is the map's own colours.
 
 - **Extensions:** `vtt_cartography` (the authoring half of OBJECT_PLAN `world_spatial`),
   `rpg_core` (game systems, character injection), `rpg_traits`, `rpg_scene`, `rpg_dice`,
-  `rpg_combat`, `rpg_cards` (ownership in [../SUITE.md](../SUITE.md)). Mechanical events
+  `rpg_combat`, `rpg_cards` (ownership in [zephyrex-rpg-ai: docs/SUITE.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/SUITE.md)). Mechanical events
   are written to the wiki's `rpg_log`.
 - **It depends on the wiki** for locations, maps, persons, items and campaigns.
 - **The AI product calls these as tools,** under the caller's ACL:
@@ -210,4 +210,4 @@ canvas itself is the map's own colours.
 
 Ported back from the AI product's build: the shared UI shell, dice result cards, the
 combat HUD, and the mechanics endpoints the AI GM proved out (phase 1 comes first for that
-reason) ([../ai/DESIGN.md](../ai/DESIGN.md)).
+reason) ([zephyrex-rpg-ai: docs/DESIGN.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/DESIGN.md)).

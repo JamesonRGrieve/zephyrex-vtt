@@ -1,6 +1,6 @@
-# Zephyrex RPG
+# Zephyrex VTT server
 
-Consumer project built on [ServerFramework](https://github.com/JamesonRGrieve/ServerFramework). Provides RPG domain extensions — the framework handles all infrastructure.
+Consumer project built on the zephyrex server framework. Provides Zephyrex VTT’s domain extensions — the framework handles all infrastructure.
 
 ## Architecture
 
@@ -8,7 +8,6 @@ This is a **consumer project**, not a framework fork. It depends on `zephyrex[ge
 
 - **genealogy** — person/family tree models for RPG characters (bundled in the framework)
 - **rpg_state** — character state, inventory, progression tracking
-- **rpg_log** — session/event logging for RPG campaigns
 
 ## Commands
 
@@ -20,7 +19,7 @@ pytest extensions/           # Run extension tests
 
 ## How it works
 
-`app.py` calls `zephyrex.run(extensions="genealogy,rpg_state,rpg_log", extensions_path="./extensions")`. The framework:
+`app.py` calls `zephyrex.run(extensions="genealogy,rpg_state", extensions_path="./extensions")`. The framework:
 
 1. Discovers `BLL_*.py` models in `./extensions/<name>/`
 2. Auto-generates SQLAlchemy tables (via `create_all` fallback — no Alembic migrations needed for dev)

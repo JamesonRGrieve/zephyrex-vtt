@@ -1,4 +1,4 @@
-"""Test configuration for zephyrex-rpg consumer project.
+"""Test configuration for zephyrex-vtt.
 
 Sets up the extensions path so test imports like
 ``from zephyrex.extensions.rpg_state.BLL_RPGState import ...``
@@ -18,7 +18,7 @@ _extensions_dir = _project_root / "extensions"
 # the zephyrex.extensions namespace package path.
 os.environ.setdefault("EXTENSIONS_PATH", str(_extensions_dir))
 os.environ.setdefault("DATABASE_TYPE", "sqlite")
-os.environ.setdefault("DATABASE_NAME", "test_rpg")
+os.environ.setdefault("DATABASE_NAME", "test_vtt")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-32-bytes-or-more-aaaaaa")
 os.environ.setdefault("SEED_DATA", "true")
 
