@@ -8579,6 +8579,7 @@ packages:
 
   zephyrex@file:../../client-framework/packages/zephyrex:
     resolution: {directory: ../../client-framework/packages/zephyrex, type: directory}
+    hasBin: true
     peerDependencies:
       '@testing-library/react': ^16.3.3
       msw: ^3.0.1
