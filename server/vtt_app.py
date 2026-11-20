@@ -4,8 +4,8 @@ Virtual tabletop on the Zephyrex framework: maps, scenes, tokens, sheets, dice, 
 All infrastructure (auth, DB, REST, GraphQL, migrations) comes from the
 framework; this project only provides its own domain extensions.
 
-    python app.py              # boot with uvicorn
-    python -c "from app import create; create()"  # programmatic
+    python vtt_app.py          # boot with uvicorn
+    python -c "from vtt_app import create; create()"  # programmatic
 """
 import os
 
@@ -17,7 +17,9 @@ os.environ.setdefault("JWT_SECRET", "dev-only-change-in-production-32chars!")
 
 from zephyrex import run
 
-EXTENSIONS = "genealogy,rpg_state"
+# auth_session holds the signed-in sessions (the hosted edition has accounts); genealogy is the
+# character table rpg_state widens.
+EXTENSIONS = "auth_session,genealogy,rpg_state"
 
 if __name__ == "__main__":
     run(

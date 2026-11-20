@@ -10,4 +10,3 @@ build/
 .eggs/
 node_modules/
 .next/
-pnpm-lock.yaml

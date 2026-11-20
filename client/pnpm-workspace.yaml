@@ -1,3 +1,38 @@
+# Playwright 1.63's typed responses import zod; declare it as playwright-core's
+# peer so pnpm resolves it (otherwise e2e response types silently become any).
+packageExtensions:
+  playwright-core:
+    peerDependencies:
+      zod: '*'
+
 allowBuilds:
-  core-js: set this to true or false
-  sharp: set this to true or false
+  '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@swc/core': true
+  better-sqlite3: true
+  # postinstall only prints a funding banner
+  core-js: false
+  # ships prebuilt @img/* binaries; the install script is a build-from-source fallback
+  sharp: false
+  esbuild: true
+  prisma: true
+  unrs-resolver: true
+  core-js-pure: true
+
+# The Zephyrex packages are not on a registry yet (publishing needs operator
+# approval), so resolve them from the framework checkouts' compiled dist/, laid out
+# beside this repository by deploy/fetch-frameworks.sh at the deploy/frameworks.env
+# pins. They are injected (hard-linked copies, peers resolved from this app) via
+# package.json dependenciesMeta, so there is one React/Next/zod tree.
+overrides:
+  # The runners carry the browser build Playwright 1.63 drives (chromium 1243), not 1.65's (1255):
+  # hold every copy, the Storybook test-runner's included, at that pin.
+  playwright: 1.63.0
+  playwright-core: 1.63.0
+  zephyrex: file:../../client-framework/packages/zephyrex
+  '@zephyrex/auth': file:../../auth
+  '@zephyrex/lite': file:../../client-framework/packages/lite
+  '@zephyrex/marketing': file:../../client-framework/packages/marketing
+  '@jgrieve/forms': file:../../dynamic-form
+  zod2gql: file:../../zod2gql

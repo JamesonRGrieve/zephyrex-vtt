@@ -6,16 +6,33 @@ build-backend = "setuptools.build_meta"
 name = "zephyrex-vtt"
 version = "0.1.0"
 description = "Zephyrex VTT: maps, scenes, tokens, sheets, dice, combat, live play"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
-    # rpg_state widens the framework's genealogy extension. The framework's
-    # public 0.0.x releases on PyPI.
-    "zephyrex[genealogy]~=0.0.1",
+    # auth_session holds signed-in sessions; rpg_state widens the framework's genealogy extension.
+    "zephyrex[auth-session,genealogy]",
+    # zephyrex passes FastAPI(openapi_version=...), which FastAPI 0.162 rejects;
+    # hold the version the framework's own requirements.lock vets.
+    "fastapi~=0.142.2",
 ]
 
-[project.optional-dependencies]
+# The framework from the checkout beside the repository, at the commit deploy/frameworks.env
+# pins (deploy/fetch-frameworks.sh lays it out), as the other Zephyrex apps use it; back to the
+# PyPI release once one ships what they need.
+[tool.uv.sources]
+zephyrex = { path = "../../server-framework", editable = true }
+
+[dependency-groups]
 dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-xdist",
 ]
+
+[tool.setuptools]
+# Named for the app, not `app`: server-framework ships `zephyrex/app.py`, and a bare `app` module
+# can resolve to it.
+py-modules = ["vtt_app"]
+
+[tool.pytest.ini_options]
+testpaths = ["extensions"]
