@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The lite edition's records: the same resources, fields and rules as the SaaS server's rpg_state
+// extension (server/extensions/rpg_state). Every record keeps the owner that created it
+// (createdById), resolved in one place (src/lib/owner.ts): one local owner for now, local accounts
+// next, which changes the resolver and not this schema.
+
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// A game system a campaign runs on (rpg_state GameSystemModel).
+model GameSystem {
+  id          String   @id @default(uuid())
+  createdById String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  updatedById String?
+
+  @@index([createdById])
+}
+
+/// A campaign, the root of a table's state (rpg_state CampaignModel); userId is its game master.
+model Campaign {
+  id           String   @id @default(uuid())
+  createdById  String
+  name         String
+  description  String?
+  gameSystemId String?
+  userId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+  updatedById  String?
+
+  @@index([createdById])
+}

@@ -35,18 +35,29 @@ docs/     DESIGN.md
 ## Running
 
 ```bash
-cd server && pip install -e ".[dev]" && python app.py     # API on :2000
-cd client && pnpm install && pnpm dev                       # UI on :1109
+deploy/fetch-frameworks.sh <root>    # this repo + the five frameworks at deploy/frameworks.env's pins
+deploy/compile-frameworks.sh <root>  # compile the framework packages the client installs
+cd <root>/zephyrex-vtt/server && uv sync && uv run python vtt_app.py      # API on :2000
+cd <root>/zephyrex-vtt/client && pnpm install --frozen-lockfile && pnpm dev   # UI on :1109 (lite)
 ```
 
-The client depends on the framework packages checked out as siblings (`../client-framework`,
-`../auth`, `../zod2gql`, `../dynamic-form`) through `file:` paths.
+The client takes the framework packages from the checkouts `fetch-frameworks.sh` lays out beside
+the repository, injected from their compiled `dist` (`client/pnpm-workspace.yaml` overrides); the
+server takes server-framework from the same layout (`server/pyproject.toml`, `[tool.uv.sources]`).
+`VTT_VARIANT=saas` builds the client against the server instead of its own lite handlers.
 
 ## Tests
 
+On a build runner, never the desktop:
+
 ```bash
-cd server && python -m pytest extensions/
+cd <root>/zephyrex-vtt/server && uv run pytest
+cd <root>/zephyrex-vtt/client && pnpm test
 ```
+
+`contract/api-cases.json` holds the HTTP cases both back ends answer the same way; the client's
+`src/contract.test.ts` runs them against the lite handlers and the server's
+`extensions/rpg_state/EP_Contract_test.py` against the server.
 
 ## License
 

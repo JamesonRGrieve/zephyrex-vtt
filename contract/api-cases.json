@@ -1,0 +1,111 @@
+{
+  "$comment": "HTTP cases both back ends answer the same way: the lite route handlers (client/src/contract.test.ts) and the SaaS server (server/extensions/rpg_state/EP_Contract_test.py). Each case is a sequence of requests by one signed-in person. `save` keeps a response under a name; a string '{name.id}' or '{name.etag}' in a later path, header or body is that record's id or ETag. `expect.body` is matched as a subset: every key it names must be there with that value.",
+  "cases": [
+    {
+      "name": "a game system is created with its description defaulting to null, read and listed",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/game_system",
+          "body": { "game_system": { "name": "Pathfinder 2e" } },
+          "expect": { "status": 201, "body": { "game_system": { "name": "Pathfinder 2e", "description": null } } },
+          "save": "system"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/game_system/{system.id}",
+          "expect": { "status": 200, "body": { "game_system": { "id": "{system.id}", "name": "Pathfinder 2e" } } }
+        },
+        { "method": "GET", "path": "/v1/game_system", "expect": { "status": 200, "listed": { "key": "game_systems", "id": "{system.id}" } } }
+      ]
+    },
+    {
+      "name": "a game system needs a name",
+      "requests": [
+        { "method": "POST", "path": "/v1/game_system", "body": { "game_system": { "description": "No name" } }, "expect": { "status": 422 } }
+      ]
+    },
+    {
+      "name": "an update needs the current version: missing is 428, stale is 412, current is 200",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/game_system",
+          "body": { "game_system": { "name": "[redacted]" } },
+          "expect": { "status": 201 },
+          "save": "first"
+        },
+        { "method": "PUT", "path": "/v1/game_system/{first.id}", "body": { "game_system": { "name": "x" } }, "expect": { "status": 428 } },
+        {
+          "method": "PUT",
+          "path": "/v1/game_system/{first.id}",
+          "headers": { "If-Match": "{first.etag}" },
+          "body": { "game_system": { "description": "Second edition" } },
+          "expect": { "status": 200, "body": { "game_system": { "name": "[redacted]", "description": "Second edition" } } }
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/game_system/{first.id}",
+          "headers": { "If-Match": "{first.etag}" },
+          "body": { "game_system": { "name": "lost" } },
+          "expect": { "status": 412 }
+        }
+      ]
+    },
+    {
+      "name": "a delete needs the current version, and the record is gone after it",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/game_system",
+          "body": { "game_system": { "name": "Gone" } },
+          "expect": { "status": 201 },
+          "save": "gone"
+        },
+        { "method": "DELETE", "path": "/v1/game_system/{gone.id}", "expect": { "status": 428 } },
+        { "method": "DELETE", "path": "/v1/game_system/{gone.id}", "headers": { "If-Match": "{gone.etag}" }, "expect": { "status": 204 } },
+        { "method": "GET", "path": "/v1/game_system/{gone.id}", "expect": { "status": 404 } }
+      ]
+    },
+    {
+      "name": "a campaign keeps its game system and game master; both default to null",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/game_system",
+          "body": { "game_system": { "name": "Pathfinder 2e" } },
+          "expect": { "status": 201 },
+          "save": "system"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/campaign",
+          "body": { "campaign": { "name": "Abomination Vaults", "game_system_id": "{system.id}" } },
+          "expect": {
+            "status": 201,
+            "body": { "campaign": { "name": "Abomination Vaults", "description": null, "game_system_id": "{system.id}", "user_id": null } }
+          },
+          "save": "campaign"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/campaign",
+          "body": { "campaign": { "name": "Loose" } },
+          "expect": { "status": 201, "body": { "campaign": { "game_system_id": null, "user_id": null } } }
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/campaign/{campaign.id}",
+          "headers": { "If-Match": "{campaign.etag}" },
+          "body": { "campaign": { "description": "Below Otari" } },
+          "expect": { "status": 200, "body": { "campaign": { "description": "Below Otari", "game_system_id": "{system.id}" } } }
+        },
+        { "method": "GET", "path": "/v1/campaign", "expect": { "status": 200, "listed": { "key": "campaigns", "id": "{campaign.id}" } } }
+      ]
+    },
+    {
+      "name": "a campaign that isn't there is 404",
+      "requests": [{ "method": "GET", "path": "/v1/campaign/00000000-0000-4000-8000-000000000000", "expect": { "status": 404 } }]
+    }
+  ]
+}

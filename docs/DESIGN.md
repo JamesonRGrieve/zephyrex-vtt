@@ -234,6 +234,15 @@ Ported back from the AI product's build: the shared UI shell, dice result cards,
 combat HUD, and the mechanics endpoints the AI GM proved out (phase 1 comes first for that
 reason) ([zephyrex-rpg-ai: docs/DESIGN.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/DESIGN.md)).
 
+## Progress
+
+| Item | State |
+|---|---|
+| Framework pins and lockfiles | `deploy/frameworks.env` pins all five frameworks; `client/pnpm-lock.yaml` and `server/uv.lock` are committed. |
+| Lite edition, first slice | `VTT_VARIANT` switch (`route.lite.ts` in lite, `/api` proxied in SaaS), a Prisma SQLite store, `/api/v1/extension` and `/healthz`, and lite twins of rpg_state's game systems and campaigns on `@zephyrex/lite`, held to `contract/api-cases.json` on both back ends. |
+| Lite owner | lite: one local owner for now; local accounts (V30) next as its own item. The owner is resolved in one place (`client/src/lib/owner.ts`) and every record keeps `createdById`, so local accounts swap the resolver, with no migration. |
+| Landing | `/` on `@zephyrex/marketing`: what works today, with every planned feature marked "Planned". |
+
 ## Proposed, not confirmed
 
 Ideas this product proposes beyond the operator's confirmed scope above. **None is built until the

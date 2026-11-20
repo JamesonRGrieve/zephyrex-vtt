@@ -1,0 +1,8 @@
+/* Design system (Tailwind, theme tokens, base styles) from the framework. Tailwind v4 skips
+   node_modules when detecting sources, so scan the compiled packages whose class names end up on
+   the page (SOP Stack Standards → TypeScript and JavaScript §9). */
+@import 'zephyrex/styles.css';
+@source '../../node_modules/zephyrex/dist';
+@source '../../node_modules/@zephyrex/auth/dist';
+@source '../../node_modules/@zephyrex/marketing/dist';
+@source '../../node_modules/@jgrieve/forms/dist';

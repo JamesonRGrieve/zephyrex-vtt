@@ -1,15 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { ZephyrexApp } from 'zephyrex';
+import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
-import config from '@/zephyrex.config';
+import { cn } from '~/lib/utils';
+import appConfig from '~/zephyrex.config';
+import { Providers } from './Providers';
+import './globals.css';
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export { metadata, viewport } from './metadata';
+
+export default async function RootLayout({ children }: { children: ReactNode }): Promise<ReactNode> {
+  const cookieStore = await cookies();
+  const theme = cookieStore.get('theme')?.value ?? appConfig.app.defaultTheme ?? 'dark';
+  const appearance = cookieStore.get('appearance')?.value ?? '';
+  const htmlThemeClass = theme === 'dark' || theme === 'colorblind' || theme === 'colorblind-dark' ? theme : '';
+
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
-        <ZephyrexApp config={config}>
-          {children}
-        </ZephyrexApp>
+    <html lang='en' className={htmlThemeClass} suppressHydrationWarning>
+      <body className={cn(theme, appearance)}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

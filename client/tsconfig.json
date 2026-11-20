@@ -1,63 +1,39 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "strict": true,
-    "esModuleInterop": true,
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
     "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "noEmit": true,
+    "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
+    "jsx": "react-jsx",
     "incremental": true,
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@/components/*": [
-        "../../client-framework/src/components/*"
-      ],
-      "@/lib/*": [
-        "../../client-framework/src/lib/*"
-      ],
-      "@/hooks/*": [
-        "../../client-framework/src/hooks/*"
-      ],
-      "@jgrieve/appwrapper/*": [
-        "../../client-framework/src/components/appwrapper/src/*"
-      ],
-      "@zephyrex/auth/*": [
-        "../../auth/src/*"
-      ],
-      "zod2gql": [
-        "../../zod2gql/src"
-      ],
-      "@jgrieve/forms/*": [
-        "../../dynamic-form/src/*"
-      ]
-    },
     "plugins": [
       {
         "name": "next"
       }
     ],
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "allowJs": true
+    "paths": {
+      "~/*": ["./src/*"]
+    }
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-e2e-lite/types/**/*.ts",
+    ".next-e2e-lite/dev/types/**/*.ts",
+    ".next-e2e-saas/types/**/*.ts",
+    ".next-e2e-saas/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }
