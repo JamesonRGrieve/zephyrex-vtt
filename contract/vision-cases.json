@@ -1,0 +1,163 @@
+{
+  "$comment": "What a token perceives (server/extensions/rpg_scene/Vision.py, Vision_test.py). Pixels, y down; tokens' width and height in cells; sight_range in the scene's distance units. Every case's scene is grid_size 100, grid_distance 5 unless it says otherwise, and its viewer V sits at (0, 0), 1×1, so its centre is (50, 50); A is a 1×1 token at (300, 0), centre (350, 50), 15 units away.",
+  "cases": [
+    {
+      "name": "an open room: the other token is seen, with its distance",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "a wall between them blocks sight",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, -100], [200, 300]] }],
+      "expect": { "viewer": "V", "lit": true, "seen": [], "doors": [] }
+    },
+    {
+      "name": "an open door lets sight through, and the door is seen",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, -100], [200, 300]], "door_type": "door", "door_state": "open" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": ["w1"] }
+    },
+    {
+      "name": "a closed door blocks, though the door itself is seen",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, -100], [200, 300]], "door_type": "door", "door_state": "closed" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [], "doors": ["w1"] }
+    },
+    {
+      "name": "a broken door no longer blocks",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, -100], [200, 300]], "door_type": "door", "door_state": "broken" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": ["w1"] }
+    },
+    {
+      "name": "a secret door blocks and is never listed",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, -100], [200, 300]], "door_type": "secret", "door_state": "closed" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [], "doors": [] }
+    },
+    {
+      "name": "beyond sight range is unseen",
+      "viewer": { "id": "V", "x": 0, "y": 0, "sight_range": 10 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [],
+      "expect": { "viewer": "V", "lit": true, "seen": [], "doors": [] }
+    },
+    {
+      "name": "a short wall hides the centre, but a corner shows",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, 0], [200, 60]] }],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "a 90° cone facing down sees what's below, not what's beside",
+      "viewer": { "id": "V", "x": 0, "y": 0, "rotation": 0, "sight_angle": 90 },
+      "tokens": [
+        { "id": "A", "x": 300, "y": 0 },
+        { "id": "B", "x": 0, "y": 300 }
+      ],
+      "walls": [],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "B", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "turned to face right (270°), the cone sees A instead",
+      "viewer": { "id": "V", "x": 0, "y": 0, "rotation": 270, "sight_angle": 90 },
+      "tokens": [
+        { "id": "A", "x": 300, "y": 0 },
+        { "id": "B", "x": 0, "y": 300 }
+      ],
+      "walls": [],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "a hidden token is never seen",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0, "is_hidden": true }],
+      "walls": [],
+      "expect": { "viewer": "V", "lit": true, "seen": [], "doors": [] }
+    },
+    {
+      "name": "a dark scene shows nothing until lights exist",
+      "scene": { "global_illumination": false, "darkness_level": 1 },
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [],
+      "expect": { "viewer": "V", "lit": false, "seen": [], "doors": [] }
+    },
+    {
+      "name": "dim but not dark is still lit",
+      "scene": { "global_illumination": false, "darkness_level": 0.4 },
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "one limited wall lets sight through",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, -100], [200, 300]], "sight_restriction": "limited" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "two limited walls block it",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [
+        { "id": "w1", "points": [[200, -100], [200, 300]], "sight_restriction": "limited" },
+        { "id": "w2", "points": [[250, -100], [250, 300]], "sight_restriction": "limited" }
+      ],
+      "expect": { "viewer": "V", "lit": true, "seen": [], "doors": [] }
+    },
+    {
+      "name": "a wall that blocks no sight (a sound barrier) is seen through",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, -100], [200, 300]], "sight_restriction": "none" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "a one-way wall facing the other way lets the viewer see through",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, 300], [200, -100]], "direction": "left" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [{ "id": "A", "distance": 15.0 }], "doors": [] }
+    },
+    {
+      "name": "the same wall facing the viewer blocks",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [{ "id": "A", "x": 300, "y": 0 }],
+      "walls": [{ "id": "w1", "points": [[200, 300], [200, -100]], "direction": "right" }],
+      "expect": { "viewer": "V", "lit": true, "seen": [], "doors": [] }
+    },
+    {
+      "name": "nearest first, then by id; the viewer never sees itself",
+      "viewer": { "id": "V", "x": 0, "y": 0 },
+      "tokens": [
+        { "id": "V", "x": 0, "y": 0 },
+        { "id": "C", "x": 0, "y": 300 },
+        { "id": "A", "x": 300, "y": 0 },
+        { "id": "D", "x": 100, "y": 0 }
+      ],
+      "walls": [],
+      "expect": {
+        "viewer": "V",
+        "lit": true,
+        "seen": [
+          { "id": "D", "distance": 5.0 },
+          { "id": "A", "distance": 15.0 },
+          { "id": "C", "distance": 15.0 }
+        ],
+        "doors": []
+      }
+    }
+  ]
+}

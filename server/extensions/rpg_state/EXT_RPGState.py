@@ -1,38 +1,35 @@
-"""rpg_state extension definition.
-
-Hard-depends on ``genealogy`` (widens PersonModel and RelationshipModel
-via @extension_model). ``rpg_log`` depends on rpg_state for trait /
-item / location references.
-"""
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""rpg_state extension definition."""
 
 from typing import ClassVar
 
-from zephyrex.extensions.AbstractExtensionProvider import (
-    AbstractStaticExtension,
-)
+from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
 class RPGStateExtension(AbstractStaticExtension):
     name: ClassVar[str] = "rpg_state"
     version: ClassVar[str] = "0.1.0"
-    description: ClassVar[str] = (
-        "Present-state schema for RPG campaigns (system-agnostic). "
-        "Widens genealogy.PersonModel to serve as the character table."
-    )
+    description: ClassVar[str] = "Narrative hooks and faction endpoints on relationships, until the wiki takes them"
     dependencies: ClassVar[Dependencies] = Dependencies(
         [
             EXT_Dependency(
                 name="genealogy",
                 friendly_name="Genealogy",
                 optional=False,
-                reason="rpg_state widens genealogy's Person and Relationship models",
+                reason="It widens genealogy's relationships with faction endpoints",
             ),
             EXT_Dependency(
-                name="acl_rbac",
-                friendly_name="ACL / RBAC",
-                optional=True,
-                reason="Per-row visibility for GM-secret NPCs, quests and lore",
+                name="rpg_core",
+                friendly_name="Rpg Core",
+                optional=False,
+                reason="A hook belongs to a campaign",
+            ),
+            EXT_Dependency(
+                name="world_social",
+                friendly_name="World Social",
+                optional=False,
+                reason="Faction hooks and endpoints name the wiki's factions",
             ),
         ]
     )

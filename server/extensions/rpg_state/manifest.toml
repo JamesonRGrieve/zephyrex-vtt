@@ -1,22 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 name = "rpg_state"
 version = "0.1.0"
-description = "Present-state schema for RPG campaigns (system-agnostic). Widens genealogy.PersonModel to serve as the character table."
+description = "Narrative hooks and faction endpoints on relationships, until the wiki takes them"
 entry_module = "EXT_RPGState"
 minimum_framework_version = "0.0.1"
 # Where this extension's source is offered (AGPL-3.0 section 13).
 repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
 
-# Hard dependency. rpg_state does not define its own Character table —
-# it widens genealogy.PersonModel via @extension_model so the persons
-# table is the character table for RPG users. It also widens
-# genealogy.RelationshipModel with Faction endpoints.
+# It widens genealogy's relationships with faction endpoints
 [[extension_dependencies]]
 name = "genealogy"
 optional = false
 
-# Optional: when present, ACL drives per-row visibility for GM-secret
-# NPCs, hidden quests/lore, etc. rpg_state never carries its own
-# visibility column.
+# A hook belongs to a campaign
 [[extension_dependencies]]
-name = "acl_rbac"
-optional = true
+name = "rpg_core"
+optional = false
+
+# Faction hooks and endpoints name the wiki's factions
+[[extension_dependencies]]
+name = "world_social"
+optional = false

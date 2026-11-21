@@ -1,4 +1,4 @@
-"""Extension-level tests for rpg_state."""
+"""Extension-level tests for what's left of rpg_state."""
 
 import os
 
@@ -10,17 +10,14 @@ from zephyrex.extensions.rpg_state.EXT_RPGState import RPGStateExtension
 
 
 class TestExtensionMetadata:
-    def test_name_and_description(self):
+    def test_name(self):
         assert RPGStateExtension.name == "rpg_state"
-        assert "RPG" in RPGStateExtension.description
 
-    def test_depends_on_genealogy(self):
-        # Hard dependency: rpg_state widens genealogy.PersonModel and
-        # genealogy.RelationshipModel via @extension_model. Declared as the
-        # framework reads it, so loading rpg_state loads genealogy.
+    def test_depends_on_genealogy_and_the_wikis_campaigns_and_factions(self):
+        # It widens genealogy's relationships, and its hooks name the wiki's campaigns and factions.
         declared = {(d.name, d.optional) for d in RPGStateExtension.dependencies.ext}
-        assert declared == {("genealogy", False), ("acl_rbac", True)}
+        assert declared == {("genealogy", False), ("rpg_core", False), ("world_social", False)}
 
     def test_discovered_models_are_the_roster(self):
         assert RPGStateExtension.models == set(ALL_MODELS)
-        assert len(ALL_MODELS) == 13  # bump when adding owned tables.
+        assert len(ALL_MODELS) == 4  # the hook tables, until the wiki's world_narrative takes them

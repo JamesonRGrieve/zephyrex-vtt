@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name = "rpg_systems"
+version = "0.1.0"
+description = "Game systems, and the game system of the wiki's campaigns and items"
+entry_module = "EXT_RPGSystems"
+minimum_framework_version = "0.0.1"
+# Where this extension's source is offered (AGPL-3.0 section 13).
+repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
+
+# It adds game_system_id to the wiki's campaigns
+[[extension_dependencies]]
+name = "rpg_core"
+optional = false
+
+# It adds game_system_id to the wiki's items
+[[extension_dependencies]]
+name = "world_inventory"
+optional = false

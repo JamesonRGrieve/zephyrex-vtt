@@ -1,8 +1,8 @@
 """Test configuration for zephyrex-vtt.
 
-Sets up the extensions path so test imports like
-``from zephyrex.extensions.rpg_state.BLL_RPGState import ...``
-resolve to the local ``./extensions/`` directory.
+Sets up the extensions roots (this product's, then the wiki's pinned checkout; vtt_app.py) so test
+imports like ``from zephyrex.extensions.rpg_dice.Dice import ...`` or the wiki's
+``zephyrex.extensions.rpg_core...`` resolve.
 """
 
 import os
@@ -11,14 +11,15 @@ from pathlib import Path
 
 import pytest
 
-# Add the extensions directory to sys.path so Python can find
-# the consumer extensions under the zephyrex.extensions namespace.
 _project_root = Path(__file__).resolve().parent
-_extensions_dir = _project_root / "extensions"
+# This product's extensions, then the wiki's pinned checkout beside the repository (vtt_app.py).
+_roots = [
+    _project_root / "extensions",
+    _project_root.parent.parent / "zephyrex-rpg-wiki" / "server" / "extensions",
+]
 
-# Make extensions importable as zephyrex.extensions.* by extending
-# the zephyrex.extensions namespace package path.
-os.environ.setdefault("EXTENSIONS_PATH", str(_extensions_dir))
+# The roots the framework searches, in order (os.pathsep-joined, as EXTENSIONS_PATH takes them).
+os.environ.setdefault("EXTENSIONS_PATH", os.pathsep.join(str(root) for root in _roots))
 os.environ.setdefault("DATABASE_TYPE", "sqlite")
 # One database per xdist worker, assigned (never setdefault): the controller loads this file
 # first, and a setdefault would leave every worker on its name, sharing and seeding one database
@@ -30,8 +31,10 @@ os.environ.setdefault("SEED_DATA", "true")
 
 import zephyrex.extensions  # noqa: E402
 
-if str(_extensions_dir) not in zephyrex.extensions.__path__:
-    zephyrex.extensions.__path__ = [str(_extensions_dir)] + list(zephyrex.extensions.__path__)
+# Every root on the zephyrex.extensions namespace path, in order, ahead of the bundled extensions.
+for _root in reversed(_roots):
+    if str(_root) not in zephyrex.extensions.__path__:
+        zephyrex.extensions.__path__ = [str(_root), *zephyrex.extensions.__path__]
 
 
 @pytest.fixture(autouse=True)

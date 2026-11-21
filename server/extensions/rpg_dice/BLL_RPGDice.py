@@ -1,0 +1,482 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""rpg_dice: saved formulas and roll tables (OBJECT_PLAN §4), and the referee's rolls and checks.
+
+``POST /v1/dice/roll`` rolls a formula; ``POST /v1/dice/check`` rolls one for a character, with
+``@stat`` references resolved from their traits (Check.py). Both roll on the server with
+``secrets.SystemRandom``, so neither a player nor a model can choose a result (docs/DESIGN.md,
+Principle 2). Results are returned, not stored: writing them to the wiki's ``rpg_log`` is its own
+item (docs/DESIGN.md, Progress).
+
+Who may check is decided once: the campaign's GM, or the character's own player; anyone else gets
+the same 404 as a character that doesn't exist. Past that, the stats are read as the system (a
+trusted read), so a GM's hidden traits still count in a player's own check. What comes back is what
+the requester may see. A player may name the system's stat templates and the campaign traits they can
+read; any other name is ``unknown_stat``, the same as one that doesn't exist. Contributions from
+records they can't read are folded into one ``hidden`` step with only their net effect, so a check
+never reveals a hidden value. Per-record hiding waits for acl_rbac (docs/DESIGN.md, Progress).
+"""
+
+from __future__ import annotations
+
+import re
+import secrets
+from datetime import datetime, timezone
+from typing import Any, ClassVar, Literal, Optional, Type
+
+from fastapi import HTTPException
+from pydantic import BaseModel as PlainModel
+from pydantic import Field
+from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
+from zephyrex.extensions.rpg_dice.Check import Contribution, Step, check, resolve
+from zephyrex.extensions.rpg_dice.Dice import MAX_FORMULA_LENGTH, DiceError, roll
+from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemModel  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[import-not-found]
+    DerivativeTraitManager,
+    PersonTraitManager,
+    TraitManager,
+)
+from zephyrex.extensions.world_inventory.BLL_WorldInventory import (  # type: ignore[import-not-found]
+    ItemInstanceManager,
+)
+from zephyrex.extensions.world_spatial.BLL_WorldSpatial import LocationManager  # type: ignore[import-not-found]
+from zephyrex.lib.CustomRoute import ExposeIn, custom_route
+from zephyrex.lib.Environment import env
+from zephyrex.logic.AbstractLogicManager import (
+    AbstractBLLManager,
+    ApplicationModel,
+    DescriptionMixinModel,
+    ModelMeta,
+    NameMixinModel,
+    NumericalSearchModel,
+    StringSearchModel,
+    UpdateMixinModel,
+)
+from zephyrex.pydantic2.fastapi import RouterMixin
+from zephyrex.pydantic2.fastapi.types import RouteType
+from zephyrex.pydantic2.registry import BaseModel  # type: ignore[attr-defined]
+
+_SYSTEM_RANDOM = secrets.SystemRandom()
+_STAT_REFERENCE = re.compile(r"@([A-Za-z_][A-Za-z0-9_]*)")
+_NOT_A_WORD = re.compile(r"[^a-z0-9]+")
+MAX_QUALIFIERS = 20
+# Where an item is worn or wielded: a location of these kinds bound to the character.
+WORN_LOCATION_KINDS = frozenset({"equipment_slot", "body_part"})
+
+
+def live_draw(sides: int) -> int:
+    """A face from 1 to ``sides`` from the operating system's random source."""
+    return _SYSTEM_RANDOM.randint(1, sides)
+
+
+def stat_name(name: str) -> str:
+    """How a trait is named in a formula: ``[redacted]`` is ``@weapon_skill``."""
+    return _NOT_A_WORD.sub("_", name.strip().lower()).strip("_")
+
+
+# ---------------------------------------------------------------------------
+# Saved formulas and roll tables (OBJECT_PLAN §4 rpg_dice)
+# ---------------------------------------------------------------------------
+
+
+class DiceFormulaModel(
+    ApplicationModel.Optional,
+    UpdateMixinModel.Optional,
+    NameMixinModel.Optional,
+    DescriptionMixinModel.Optional,
+    GameSystemModel.Reference.Optional,
+    metaclass=ModelMeta,
+):
+    Manager: ClassVar[Type["DiceFormulaManager"]] = None
+    formula: Optional[str] = Field(None, description="Dice notation (rpg_dice Dice.py)")
+    table_comment: ClassVar[str] = "A saved formula, e.g. a system's attack roll; game_system_id NULL = any system"
+
+    class Create(BaseModel, GameSystemModel.Reference.ID.Optional):
+        name: str = Field(...)
+        formula: str = Field(..., max_length=MAX_FORMULA_LENGTH)
+        description: Optional[str] = None
+
+    class Update(BaseModel):
+        name: Optional[str] = None
+        formula: Optional[str] = Field(None, max_length=MAX_FORMULA_LENGTH)
+        description: Optional[str] = None
+
+    class Search(ApplicationModel.Search, GameSystemModel.Reference.ID.Search):
+        name: Optional[StringSearchModel] = None
+
+
+class RollTableModel(
+    ApplicationModel.Optional,
+    UpdateMixinModel.Optional,
+    NameMixinModel.Optional,
+    DescriptionMixinModel.Optional,
+    GameSystemModel.Reference.Optional,
+    metaclass=ModelMeta,
+):
+    Manager: ClassVar[Type["RollTableManager"]] = None
+    formula: Optional[str] = Field(None, description="The roll that picks an entry")
+    table_comment: ClassVar[str] = "A roll table (random encounters, loot); its entries cover the formula's range"
+
+    class Create(BaseModel, GameSystemModel.Reference.ID.Optional):
+        name: str = Field(...)
+        formula: str = Field(..., max_length=MAX_FORMULA_LENGTH)
+        description: Optional[str] = None
+
+    class Update(BaseModel):
+        name: Optional[str] = None
+        formula: Optional[str] = Field(None, max_length=MAX_FORMULA_LENGTH)
+        description: Optional[str] = None
+
+    class Search(ApplicationModel.Search, GameSystemModel.Reference.ID.Search):
+        name: Optional[StringSearchModel] = None
+
+
+class RollTableEntryModel(
+    ApplicationModel.Optional,
+    UpdateMixinModel.Optional,
+    RollTableModel.Reference.Optional,
+    metaclass=ModelMeta,
+):
+    Manager: ClassVar[Type["RollTableEntryManager"]] = None
+    range_low: Optional[int] = Field(None, description="The lowest roll that picks this entry")
+    range_high: Optional[int] = Field(None, description="The highest roll that picks this entry")
+    result_text: Optional[str] = Field(None)
+    result_entity_type: Optional[str] = Field(None, description="What the entry names, if a record")
+    result_entity_id: Optional[str] = Field(None)
+    weight: Optional[int] = Field(None, description="Draw weight, for tables rolled by weight")
+    table_comment: ClassVar[str] = "One row of a roll table: a range of results and what it gives"
+
+    class Create(BaseModel, RollTableModel.Reference.ID.Optional):
+        range_low: int = Field(...)
+        range_high: int = Field(...)
+        result_text: Optional[str] = None
+        result_entity_type: Optional[str] = None
+        result_entity_id: Optional[str] = None
+        weight: Optional[int] = None
+
+    class Update(BaseModel):
+        range_low: Optional[int] = None
+        range_high: Optional[int] = None
+        result_text: Optional[str] = None
+        result_entity_type: Optional[str] = None
+        result_entity_id: Optional[str] = None
+        weight: Optional[int] = None
+
+    class Search(ApplicationModel.Search, RollTableModel.Reference.ID.Search):
+        range_low: Optional[NumericalSearchModel] = None
+        range_high: Optional[NumericalSearchModel] = None
+
+
+class DiceFormulaManager(AbstractBLLManager, RouterMixin):
+    _model = DiceFormulaModel
+
+
+class RollTableManager(AbstractBLLManager, RouterMixin):
+    _model = RollTableModel
+
+
+class RollTableEntryManager(AbstractBLLManager, RouterMixin):
+    _model = RollTableEntryModel
+
+
+DiceFormulaModel.Manager = DiceFormulaManager
+RollTableModel.Manager = RollTableManager
+RollTableEntryModel.Manager = RollTableEntryManager
+
+ALL_MODELS: list[type] = [DiceFormulaModel, RollTableModel, RollTableEntryModel]
+
+
+# ---------------------------------------------------------------------------
+# Rolls and checks
+# ---------------------------------------------------------------------------
+
+
+class RollRequest(PlainModel):
+    formula: str = Field(..., max_length=MAX_FORMULA_LENGTH)
+
+
+class RollEnvelope(PlainModel):
+    roll: RollRequest
+
+
+class DieOut(PlainModel):
+    value: int
+    kept: bool
+    note: Optional[str] = None
+
+
+class TermOut(PlainModel):
+    notation: str
+    dice: list[DieOut]
+    value: int
+
+
+class RollOut(PlainModel):
+    formula: str
+    total: int
+    terms: list[TermOut]
+    stats: dict[str, int]
+
+
+class RollResultEnvelope(PlainModel):
+    roll: RollOut
+
+
+class CheckRequest(PlainModel):
+    person_id: str
+    formula: str = Field(..., max_length=MAX_FORMULA_LENGTH)
+    target: Optional[float] = None
+    compare: Literal[">=", "<="] = ">="
+    qualifiers: list[str] = Field(default_factory=list, max_length=MAX_QUALIFIERS)
+
+
+class CheckEnvelope(PlainModel):
+    check: CheckRequest
+
+
+class StepOut(PlainModel):
+    id: str
+    operation: str
+    size: float
+    result: float
+
+
+class StatOut(PlainModel):
+    """Why a stat is what it is (V21's breakdown): its base and each contribution in order."""
+
+    name: str
+    trait_id: str
+    base: float
+    value: float
+    steps: list[StepOut]
+
+
+class CheckOut(RollOut):
+    person_id: str
+    target: Optional[float]
+    compare: str
+    success: Optional[bool]
+    margin: Optional[float]
+    resolved: list[StatOut]
+
+
+class CheckResultEnvelope(PlainModel):
+    check: CheckOut
+
+
+def _refused(error: DiceError) -> HTTPException:
+    return HTTPException(
+        status_code=422,
+        detail={"message": error.message, "code": "dice_formula", "errors": [{"type": error.code, "loc": ["formula"]}]},
+    )
+
+
+def _not_found(model: str) -> HTTPException:
+    return HTTPException(
+        status_code=404, detail={"message": f"Request searched {model} and could not find the required record."}
+    )
+
+
+def _now_like(moment: datetime) -> datetime:
+    now = datetime.now(timezone.utc)
+    return now if moment.tzinfo is not None else now.replace(tzinfo=None)
+
+
+def _live(row: Any) -> bool:
+    """A trait value still in force: no expiry, or one still ahead."""
+    expires = getattr(row, "expires_at", None)
+    return expires is None or expires > _now_like(expires)
+
+
+HIDDEN_STEP = "hidden"
+
+
+def fold_hidden(base: float, steps: list[Step], visible: set[str]) -> list[StepOut]:
+    """The steps a requester may see: each run of steps from records they can't read becomes one
+    ``hidden`` step carrying only the net change, so no hidden value can be read back out."""
+    shown: list[StepOut] = []
+    before = base
+    for step in steps:
+        if step.id in visible:
+            shown.append(StepOut(**step.as_dict()))
+        elif shown and shown[-1].id == HIDDEN_STEP:
+            shown[-1] = StepOut(
+                id=HIDDEN_STEP, operation=HIDDEN_STEP, size=step.result - (before - shown[-1].size), result=step.result
+            )
+        else:
+            shown.append(StepOut(id=HIDDEN_STEP, operation=HIDDEN_STEP, size=step.result - before, result=step.result))
+        before = step.result
+    return shown
+
+
+class DiceManager(AbstractBLLManager[Any], RouterMixin):
+    """The referee's rolls; no table of its own."""
+
+    prefix: ClassVar[str | None] = "/v1/dice"
+    tags: ClassVar[list[str] | None] = ["Dice"]
+    routes_to_register: ClassVar[list[RouteType] | None] = []
+
+    def _manager(self, manager: type[Any]) -> Any:
+        """A manager as the requester sees records."""
+        return manager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+
+    def _trusted(self, manager: type[Any]) -> Any:
+        """A manager reading as the system, once the access rule has passed (as update_trusted)."""
+        return manager(requester_id=env("ROOT_ID"), model_registry=self.model_registry)
+
+    def _readable(self, manager: type[Any], record_id: str) -> bool:
+        """Whether the requester could read this record themselves."""
+        try:
+            self._manager(manager).get(id=record_id)
+        except HTTPException:
+            return False
+        return True
+
+    def roll_formula(self, formula: str) -> RollOut:
+        try:
+            return RollOut(**roll(formula, live_draw).as_dict())
+        except DiceError as error:
+            raise _refused(error) from error
+
+    def _get(self, manager: type[Any], model: str, record_id: str) -> Any:
+        try:
+            return self._trusted(manager).get(id=record_id)
+        except HTTPException as error:
+            raise _not_found(model) from error
+
+    def _person_values(self, person_id: str, trait_id: str) -> list[float]:
+        rows = self._trusted(PersonTraitManager).list(person_id=person_id, trait_id=trait_id)
+        return [float(row.value) for row in rows if row.value is not None and _live(row)]
+
+    def _trait_for(self, name: str, campaign: Any, gm: bool) -> Any:
+        """The trait ``@name`` means in this campaign: the campaign's own over its system's template.
+
+        A system's templates (``campaign_id`` NULL: Dexterity, Strength, the stats the rules define)
+        are public to every member of the campaign. A campaign's own traits are nameable by a player
+        only if they can read them, so a GM's secret (a Curse not yet discovered) answers exactly as
+        a name that doesn't exist. Per-record hiding of templates waits for acl_rbac.
+        """
+        traits = self._trusted(TraitManager)
+        named = [
+            trait
+            for trait in traits.list(campaign_id=campaign.id)
+            if stat_name(trait.name or "") == name and (gm or self._readable(TraitManager, trait.id))
+        ]
+        if not named and campaign.game_system_id is not None:
+            named = [
+                trait
+                for trait in traits.list(game_system_id=campaign.game_system_id)
+                if trait.campaign_id is None and stat_name(trait.name or "") == name
+            ]
+        if not named:
+            raise _refused(DiceError("unknown_stat", f"There is no stat called @{name}"))
+        if len(named) > 1:
+            raise _refused(DiceError("ambiguous_stat", f"More than one trait is called @{name}"))
+        return named[0]
+
+    def _worn_items(self, person_id: str) -> set[str]:
+        """The items the person wears or wields: instances placed in one of their equipment slots or
+        body parts (a world_spatial location of that kind bound to them, OBJECT_PLAN §4). An item in
+        a pack, or only carried, doesn't count."""
+        slots = {
+            location.id
+            for location in self._trusted(LocationManager).list(associated_person_id=person_id)
+            if location.kind in WORN_LOCATION_KINDS
+        }
+        if not slots:
+            return set()
+        instances = self._trusted(ItemInstanceManager).list()
+        return {instance.item_id for instance in instances if instance.location_id in slots}
+
+    def _resolve(self, person_id: str, trait: Any, qualifiers: list[str], worn: set[str], gm: bool) -> StatOut:
+        contributions = []
+        visible: set[str] = set()
+        for row in self._trusted(DerivativeTraitManager).list(target_trait_id=trait.id):
+            if row.operation is None or row.value is None:
+                continue
+            if row.source_trait_id is not None:
+                own = self._person_values(person_id, row.source_trait_id)
+                source: Literal["trait", "item", "constant"] = "trait"
+                source_value = sum(own) if own else None
+            elif row.source_item_id is not None:
+                source, source_value = "item", None
+            else:
+                source, source_value = "constant", None
+            if gm or (
+                self._readable(DerivativeTraitManager, row.id)
+                and (row.source_trait_id is None or self._readable(TraitManager, row.source_trait_id))
+            ):
+                visible.add(row.id)
+            contributions.append(
+                Contribution(
+                    id=row.id,
+                    operation=row.operation,
+                    value=float(row.value),
+                    order_index=row.order_index or 0,
+                    stacking_group=row.stacking_group,
+                    qualifier=row.qualifier,
+                    source=source,
+                    source_value=source_value,
+                    item_active=row.source_item_id in worn,
+                )
+            )
+        resolved = resolve(self._person_values(person_id, trait.id), contributions, qualifiers)
+        return StatOut(
+            name=stat_name(trait.name or ""),
+            trait_id=trait.id,
+            base=resolved.base,
+            value=resolved.value,
+            steps=fold_hidden(resolved.base, list(resolved.steps), visible),
+        )
+
+    def check_for(self, body: CheckRequest) -> CheckOut:
+        person = self._get(PersonManager, "PersonModel", body.person_id)
+        requester = str(self.requester.id)
+        campaign_id = getattr(person, "campaign_id", None)
+        campaign = None if campaign_id is None else self._get(CampaignManager, "CampaignModel", campaign_id)
+        gm = campaign is not None and requester == campaign.user_id
+        if not gm and requester != getattr(person, "user_id", None):
+            # The same answer as a character that isn't there: nobody learns which ids exist.
+            raise _not_found("PersonModel")
+        if campaign is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"message": "This character isn't in a campaign, so they have no stats to check"},
+            )
+        worn = self._worn_items(person.id)
+        names = list(dict.fromkeys(_STAT_REFERENCE.findall(body.formula)))
+        traits = [self._trait_for(name, campaign, gm) for name in names]
+        resolved = [self._resolve(person.id, trait, body.qualifiers, worn, gm) for trait in traits]
+        try:
+            checked = check(
+                body.formula, live_draw, {stat.name: stat.value for stat in resolved}, body.target, body.compare
+            )
+        except DiceError as error:
+            raise _refused(error) from error
+        return CheckOut(**checked.as_dict(), person_id=person.id, resolved=resolved)
+
+    @custom_route(
+        method="POST",
+        path="/roll",
+        input_model=RollEnvelope,
+        output_model=RollResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Dice",),
+        summary="Roll a formula on the server (A21)",
+    )
+    async def roll_route(self, body: RollEnvelope) -> RollResultEnvelope:
+        return RollResultEnvelope(roll=self.roll_formula(body.roll.formula))
+
+    @custom_route(
+        method="POST",
+        path="/check",
+        input_model=CheckEnvelope,
+        output_model=CheckResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Dice",),
+        summary="Roll a check for a character, their @stats resolved from their traits (A21)",
+    )
+    async def check_route(self, body: CheckEnvelope) -> CheckResultEnvelope:
+        return CheckResultEnvelope(check=self.check_for(body.check))

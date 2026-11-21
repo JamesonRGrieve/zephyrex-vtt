@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name = "rpg_table"
+version = "0.1.0"
+description = "Multiplayer tables: characters seated in a conversation, whispers and lines"
+entry_module = "EXT_RPGTable"
+minimum_framework_version = "0.0.1"
+# Where this extension's source is offered (AGPL-3.0 section 13).
+repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
+
+# A table and each whisper are framework conversations, with their live feeds
+[[extension_dependencies]]
+name = "conversations"
+optional = false
+
+# A table belongs to a campaign, and its seats are the campaign's characters
+[[extension_dependencies]]
+name = "rpg_core"
+optional = false
+
+# A seat holds one of genealogy's persons
+[[extension_dependencies]]
+name = "genealogy"
+optional = false

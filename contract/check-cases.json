@@ -1,0 +1,135 @@
+{
+  "$comment": "Stat resolution and checks (server/extensions/rpg_dice/Check.py, Check_test.py). `resolve` cases give a stat's base values and the contributions aimed at it, already looked up for the person; `check` cases roll a formula with resolved stats against a target. Draws are as in roll-cases.json.",
+  "resolve": [
+    {
+      "name": "a base value alone",
+      "base": [14],
+      "contributions": [],
+      "expect": { "base": 14, "value": 14, "steps": [] }
+    },
+    {
+      "name": "every live stack of the person's own value adds up",
+      "base": [3, 2],
+      "contributions": [],
+      "expect": { "base": 5, "value": 5, "steps": [] }
+    },
+    {
+      "name": "no value of their own starts at zero",
+      "base": [],
+      "contributions": [],
+      "expect": { "base": 0, "value": 0, "steps": [] }
+    },
+    {
+      "name": "additive, a stacking group's largest, multiplicative, then a ceiling",
+      "base": [10],
+      "contributions": [
+        { "id": "a1", "operation": "additive", "value": 2, "order_index": 1 },
+        { "id": "a2", "operation": "additive", "value": 3, "order_index": 2, "stacking_group": "enhancement" },
+        { "id": "a3", "operation": "additive", "value": 1, "order_index": 0, "stacking_group": "enhancement" },
+        { "id": "m1", "operation": "multiplicative", "value": 1.5 },
+        { "id": "c1", "operation": "clamp", "value": -20 }
+      ],
+      "expect": {
+        "base": 10,
+        "value": 20,
+        "steps": [
+          { "id": "a1", "operation": "additive", "size": 2, "result": 12 },
+          { "id": "a2", "operation": "additive", "size": 3, "result": 15 },
+          { "id": "m1", "operation": "multiplicative", "size": 1.5, "result": 22.5 },
+          { "id": "c1", "operation": "clamp", "size": -20, "result": 20 }
+        ]
+      }
+    },
+    {
+      "name": "the last override wins, and additions still follow it",
+      "base": [8],
+      "contributions": [
+        { "id": "o1", "operation": "override", "value": 12, "order_index": 0 },
+        { "id": "o2", "operation": "override", "value": 15, "order_index": 1 },
+        { "id": "p1", "operation": "additive", "value": 1 }
+      ],
+      "expect": {
+        "base": 8,
+        "value": 16,
+        "steps": [
+          { "id": "o1", "operation": "override", "size": 12, "result": 12 },
+          { "id": "o2", "operation": "override", "size": 15, "result": 15 },
+          { "id": "p1", "operation": "additive", "size": 1, "result": 16 }
+        ]
+      }
+    },
+    {
+      "name": "sources: a trait scales by the person's value of it, an item counts only while worn",
+      "base": [0],
+      "contributions": [
+        { "id": "t1", "operation": "additive", "value": 0.5, "source": "trait", "source_value": 4 },
+        { "id": "t2", "operation": "additive", "value": 2, "source": "trait" },
+        { "id": "i1", "operation": "additive", "value": 1, "source": "item", "item_active": false },
+        { "id": "i2", "operation": "additive", "value": 1, "source": "item", "item_active": true }
+      ],
+      "expect": {
+        "base": 0,
+        "value": 5,
+        "steps": [
+          { "id": "i2", "operation": "additive", "size": 1, "result": 1 },
+          { "id": "t1", "operation": "additive", "size": 2, "result": 3 },
+          { "id": "t2", "operation": "additive", "size": 2, "result": 5 }
+        ]
+      }
+    },
+    {
+      "name": "a qualified bonus is off until its qualifier is switched on",
+      "base": [5],
+      "contributions": [{ "id": "q1", "operation": "additive", "value": 2, "qualifier": "vs orcs" }],
+      "expect": { "base": 5, "value": 5, "steps": [] }
+    },
+    {
+      "name": "and on once it is",
+      "base": [5],
+      "contributions": [{ "id": "q1", "operation": "additive", "value": 2, "qualifier": "vs orcs" }],
+      "qualifiers": ["vs orcs"],
+      "expect": { "base": 5, "value": 7, "steps": [{ "id": "q1", "operation": "additive", "size": 2, "result": 7 }] }
+    },
+    {
+      "name": "a clamp of zero is a floor",
+      "base": [-3],
+      "contributions": [{ "id": "c0", "operation": "clamp", "value": 0 }],
+      "expect": { "base": -3, "value": 0, "steps": [{ "id": "c0", "operation": "clamp", "size": 0, "result": 0 }] }
+    },
+    {
+      "name": "a stacking group's tie keeps the earlier one",
+      "base": [0],
+      "contributions": [
+        { "id": "a", "operation": "additive", "value": 2, "order_index": 0, "stacking_group": "morale" },
+        { "id": "b", "operation": "additive", "value": -2, "order_index": 1, "stacking_group": "morale" }
+      ],
+      "expect": { "base": 0, "value": 2, "steps": [{ "id": "a", "operation": "additive", "size": 2, "result": 2 }] }
+    }
+  ],
+  "check": [
+    {
+      "name": "meeting the target succeeds by zero",
+      "formula": "1d20 + @dex",
+      "stats": { "dex": 3 },
+      "draws": [12],
+      "target": 15,
+      "expect": { "total": 15, "success": true, "margin": 0 }
+    },
+    {
+      "name": "rolling under: over the target fails",
+      "formula": "1d100",
+      "stats": {},
+      "draws": [45],
+      "target": 40,
+      "compare": "<=",
+      "expect": { "total": 45, "success": false, "margin": -5 }
+    },
+    {
+      "name": "no target: a roll with no verdict",
+      "formula": "2d6",
+      "stats": {},
+      "draws": [3, 4],
+      "expect": { "total": 7, "success": null, "margin": null }
+    }
+  ]
+}

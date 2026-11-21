@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name = "rpg_dice"
+version = "0.1.0"
+description = "Dice notation, roll tables, and rolls and checks made on the server"
+entry_module = "EXT_RPGDice"
+minimum_framework_version = "0.0.1"
+# Where this extension's source is offered (AGPL-3.0 section 13).
+repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
+
+# Checks resolve a character's stats from their traits
+[[extension_dependencies]]
+name = "rpg_traits"
+optional = false
+
+# A check's access rule reads the campaign's GM and the character's player
+[[extension_dependencies]]
+name = "rpg_core"
+optional = false
+
+# Items a character wears count toward their stats
+[[extension_dependencies]]
+name = "world_inventory"
+optional = false
+
+# A worn item sits in a character's equipment-slot or body-part location
+[[extension_dependencies]]
+name = "world_spatial"
+optional = false

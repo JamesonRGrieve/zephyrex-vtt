@@ -1,0 +1,270 @@
+{
+  "$comment": "Dice notation cases both twins answer the same way: server/extensions/rpg_dice/Dice.py (Dice_test.py) and client/src/features/dice/roll.ts (roll.test.ts). `draws` are the faces drawn, in order, each from 1 to the die's sides (a dF draws 1 to 3 and reads it as -1, 0, +1). `expect` is the whole result, or `error` the code a refused formula gives.",
+  "cases": [
+    {
+      "name": "one d20",
+      "formula": "1d20",
+      "draws": [13],
+      "expect": { "total": 13, "terms": [{ "notation": "1d20", "dice": [{ "value": 13, "kept": true }], "value": 13 }], "stats": {} }
+    },
+    {
+      "name": "dice plus a number",
+      "formula": "2d6+3",
+      "draws": [4, 2],
+      "expect": {
+        "total": 9,
+        "terms": [{ "notation": "2d6", "dice": [{ "value": 4, "kept": true }, { "value": 2, "kept": true }], "value": 6 }],
+        "stats": {}
+      }
+    },
+    {
+      "name": "four d6, drop the lowest",
+      "formula": "4d6dl1",
+      "draws": [3, 5, 1, 6],
+      "expect": {
+        "total": 14,
+        "terms": [
+          {
+            "notation": "4d6dl1",
+            "dice": [
+              { "value": 3, "kept": true },
+              { "value": 5, "kept": true },
+              { "value": 1, "kept": false, "note": "dropped" },
+              { "value": 6, "kept": true }
+            ],
+            "value": 14
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "advantage: two d20, keep the highest",
+      "formula": "2d20kh1",
+      "draws": [7, 15],
+      "expect": {
+        "total": 15,
+        "terms": [
+          { "notation": "2d20kh1", "dice": [{ "value": 7, "kept": false, "note": "dropped" }, { "value": 15, "kept": true }], "value": 15 }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "disadvantage: two d20, keep the lowest",
+      "formula": "2d20kl1",
+      "draws": [7, 15],
+      "expect": {
+        "total": 7,
+        "terms": [
+          { "notation": "2d20kl1", "dice": [{ "value": 7, "kept": true }, { "value": 15, "kept": false, "note": "dropped" }], "value": 7 }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "drop the highest, equal faces dropping the later one",
+      "formula": "3d6dh1",
+      "draws": [6, 6, 2],
+      "expect": {
+        "total": 8,
+        "terms": [
+          {
+            "notation": "3d6dh1",
+            "dice": [{ "value": 6, "kept": true }, { "value": 6, "kept": false, "note": "dropped" }, { "value": 2, "kept": true }],
+            "value": 8
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "exploding dice add a die for each highest face",
+      "formula": "3d6!",
+      "draws": [6, 2, 6, 1, 4],
+      "expect": {
+        "total": 19,
+        "terms": [
+          {
+            "notation": "3d6!",
+            "dice": [
+              { "value": 6, "kept": true },
+              { "value": 2, "kept": true },
+              { "value": 6, "kept": true },
+              { "value": 1, "kept": true, "note": "exploded" },
+              { "value": 4, "kept": true, "note": "exploded" }
+            ],
+            "value": 19
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "an exploded die that explodes again",
+      "formula": "1d6!",
+      "draws": [6, 6, 3],
+      "expect": {
+        "total": 15,
+        "terms": [
+          {
+            "notation": "1d6!",
+            "dice": [{ "value": 6, "kept": true }, { "value": 6, "kept": true, "note": "exploded" }, { "value": 3, "kept": true, "note": "exploded" }],
+            "value": 15
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "explosions stop at twenty",
+      "formula": "1d6!",
+      "draws": [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+      "expect": {
+        "total": 126,
+        "terms": [
+          {
+            "notation": "1d6!",
+            "dice": [
+              { "value": 6, "kept": true },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" },
+              { "value": 6, "kept": true, "note": "exploded" }
+            ],
+            "value": 126
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "reroll once a die under the floor",
+      "formula": "4d6r<2",
+      "draws": [1, 4, 1, 5, 3, 2],
+      "expect": {
+        "total": 14,
+        "terms": [
+          {
+            "notation": "4d6r<2",
+            "dice": [
+              { "value": 1, "kept": false, "note": "rerolled" },
+              { "value": 4, "kept": true, "note": "reroll" },
+              { "value": 1, "kept": false, "note": "rerolled" },
+              { "value": 5, "kept": true, "note": "reroll" },
+              { "value": 3, "kept": true },
+              { "value": 2, "kept": true }
+            ],
+            "value": 14
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "a dice pool counts successes, not the sum",
+      "formula": "5d10cs>=8",
+      "draws": [8, 3, 10, 7, 9],
+      "expect": {
+        "total": 3,
+        "terms": [
+          {
+            "notation": "5d10cs>=8",
+            "dice": [
+              { "value": 8, "kept": true },
+              { "value": 3, "kept": true },
+              { "value": 10, "kept": true },
+              { "value": 7, "kept": true },
+              { "value": 9, "kept": true }
+            ],
+            "value": 3
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "fate dice read -1, 0 and +1",
+      "formula": "4dF",
+      "draws": [1, 3, 2, 3],
+      "expect": {
+        "total": 1,
+        "terms": [
+          {
+            "notation": "4dF",
+            "dice": [
+              { "value": -1, "kept": true },
+              { "value": 1, "kept": true },
+              { "value": 0, "kept": true },
+              { "value": 1, "kept": true }
+            ],
+            "value": 1
+          }
+        ],
+        "stats": {}
+      }
+    },
+    {
+      "name": "percentile",
+      "formula": "d%",
+      "draws": [42],
+      "expect": { "total": 42, "terms": [{ "notation": "d%", "dice": [{ "value": 42, "kept": true }], "value": 42 }], "stats": {} }
+    },
+    {
+      "name": "a stat is rounded down",
+      "formula": "1d20 + @dex",
+      "stats": { "dex": 3.5 },
+      "draws": [10],
+      "expect": { "total": 13, "terms": [{ "notation": "1d20", "dice": [{ "value": 10, "kept": true }], "value": 10 }], "stats": { "dex": 3 } }
+    },
+    {
+      "name": "brackets and multiplication",
+      "formula": "(1d4+1)*2",
+      "draws": [3],
+      "expect": { "total": 8, "terms": [{ "notation": "1d4", "dice": [{ "value": 3, "kept": true }], "value": 3 }], "stats": {} }
+    },
+    {
+      "name": "division rounds down, below zero too",
+      "formula": "-7/2",
+      "draws": [],
+      "expect": { "total": -4, "terms": [], "stats": {} }
+    },
+    {
+      "name": "multiplication before subtraction",
+      "formula": "10-2*3",
+      "draws": [],
+      "expect": { "total": 4, "terms": [], "stats": {} }
+    },
+    { "name": "an empty formula", "formula": "  ", "draws": [], "error": "empty" },
+    { "name": "a stat that isn't there", "formula": "1d20+@str", "draws": [10], "error": "unknown_stat" },
+    { "name": "too many dice in a term", "formula": "101d6", "draws": [], "error": "too_many_dice" },
+    { "name": "a die with no sides", "formula": "1d0", "draws": [], "error": "bad_dice" },
+    { "name": "dividing by zero", "formula": "1d6/0", "draws": [3], "error": "division_by_zero" },
+    { "name": "something that isn't notation", "formula": "2d6x", "draws": [], "error": "bad_token" },
+    { "name": "keeping twice in one term", "formula": "2d20kh1kl1", "draws": [], "error": "bad_modifier" },
+    { "name": "a fate die can't explode", "formula": "1dF!", "draws": [], "error": "bad_modifier" },
+    { "name": "brackets eleven deep", "formula": "(((((((((((1)))))))))))", "draws": [], "error": "too_deep" },
+    {
+      "name": "a formula over 200 characters",
+      "formula": "1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1",
+      "draws": [],
+      "error": "too_long"
+    }
+  ]
+}
