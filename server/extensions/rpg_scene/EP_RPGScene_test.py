@@ -96,6 +96,39 @@ def test_anyone_else_gets_the_same_404_as_a_missing_token(server: TestClient, ro
     assert _snapshot(server, stranger, room["scene"]["id"], missing).status_code == 404
 
 
+def _view(server: TestClient, user: Any, scene_id: str, token_id: str | None = None) -> Any:
+    body = {"view": {"token_id": token_id} if token_id else {}}
+    return server.post(f"/v1/scene/{scene_id}/view", json=body, headers=_headers(user))
+
+
+def test_a_players_view_is_their_tokens_sight_with_positions(server: TestClient, room: dict[str, Any]) -> None:
+    response = _view(server, room["player"], room["scene"]["id"])
+    assert response.status_code == 200, response.text
+    view = response.json()["view"]
+    assert (view["gm"], view["viewer"], view["grid_size"], view["grid_units"]) == (False, room["viewer"]["id"], 100.0, "ft")
+    drawn = {one["name"]: one for one in view["tokens"]}
+    assert set(drawn) == {"Ada", "Orc"}, "not the goblin behind the wall, never the hidden assassin"
+    assert drawn["Ada"]["mine"] is True and drawn["Orc"]["mine"] is False
+    assert (drawn["Orc"]["x"], drawn["Orc"]["y"], drawn["Orc"]["disposition"]) == (300.0, 0.0, "hostile")
+    assert [wall["id"] for wall in view["walls"]] == [room["door"]["id"]], "only the doors the token sees"
+
+
+def test_the_gms_view_is_everything_hidden_flagged(server: TestClient, room: dict[str, Any]) -> None:
+    view = _view(server, room["gm"], room["scene"]["id"]).json()["view"]
+    assert view["gm"] is True and view["viewer"] is None
+    drawn = {one["name"]: one for one in view["tokens"]}
+    assert set(drawn) == {"Ada", "Orc", "Goblin", "Assassin"}
+    assert drawn["Assassin"]["is_hidden"] is True
+    assert len(view["walls"]) == 1
+    through = _view(server, room["gm"], room["scene"]["id"], room["orc"]["id"]).json()["view"]
+    assert through["viewer"] == room["orc"]["id"]
+
+
+def test_no_one_else_sees_the_scene(server: TestClient, room: dict[str, Any]) -> None:
+    assert _view(server, create_user(server), room["scene"]["id"]).status_code == 404
+    assert _view(server, room["player"], room["scene"]["id"], room["orc"]["id"]).status_code == 404
+
+
 def test_scene_snapshot_is_an_ability(room: dict[str, Any]) -> None:
     info = getattr(getattr(vars(RPGSceneExtension)["scene_snapshot"], "__func__", None), "_ability_info", None)
     assert info is not None and info["name"] == "scene_snapshot"
@@ -103,3 +136,34 @@ def test_scene_snapshot_is_an_ability(room: dict[str, Any]) -> None:
         RPGSceneExtension.scene_snapshot(str(room["player"].id), room["scene"]["id"], room["viewer"]["id"])
     )
     assert [one["name"] for one in snapshot["seen"]] == ["Orc"]
+
+
+def test_a_player_moves_their_own_token_but_not_through_a_closed_door(server: TestClient) -> None:
+    gm, player = create_user(server), create_user(server)
+    campaign = _create(server, gm, "campaign", name="The Vaults", user_id=gm.id)
+    hero = _create(server, gm, "person", name="Ada", campaign_id=campaign["id"], user_id=player.id, kind="pc")
+    scene = _create(server, gm, "scene", name="Cellar", campaign_id=campaign["id"])
+    ada = _create(server, gm, "scene_token", name="Ada", scene_id=scene["id"], person_id=hero["id"])
+    orc = _create(server, gm, "scene_token", name="Orc", scene_id=scene["id"], x=300, y=0)
+    door = _create(server, gm, "scene_wall", scene_id=scene["id"], points=[[-100, 250], [300, 250]], door_type="door")
+
+    def move(user: Any, token: dict[str, Any], x: float, y: float) -> Any:
+        body = {"move": {"x": x, "y": y}}
+        return server.post(f"/v1/scene_token/{token['id']}/move", json=body, headers=_headers(user))
+
+    east = move(player, ada, 100, 0)
+    assert east.status_code == 200, east.text
+    assert (east.json()["scene_token"]["x"], east.json()["scene_token"]["y"]) == (100.0, 0.0)
+    through = move(player, ada, 100, 400)
+    assert through.status_code == 422 and "wall" in through.text
+    assert move(player, orc, 0, 0).status_code == 404, "a player moves only their own character's token"
+    assert move(create_user(server), ada, 0, 0).status_code == 404
+    assert move(gm, orc, 300, 400).status_code == 200, "the GM moves any token anywhere"
+
+    current = server.get(f"/v1/scene_wall/{door['id']}", headers=_headers(gm))
+    server.put(
+        f"/v1/scene_wall/{door['id']}",
+        json={"scene_wall": {"door_state": "open"}},
+        headers={**_headers(gm), "If-Match": current.headers["ETag"]},
+    )
+    assert move(player, ada, 100, 400).status_code == 200, "an open door lets them through"

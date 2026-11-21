@@ -59,6 +59,7 @@ class Wall:
     door_state: str = "closed"
     sight_restriction: str = "normal"
     direction: str = "both"
+    move_restriction: str = "normal"
 
 
 @dataclass(frozen=True)
@@ -184,3 +185,22 @@ def perceive(scene: Scene, viewer: Token, tokens: Iterable[Token], walls: Sequen
             perception.doors.append(wall.id)
     perception.doors.sort()
     return perception
+
+
+def blocks_move(start: Point, end: Point, walls: Iterable[Wall]) -> str | None:
+    """The wall a move from ``start`` to ``end`` (token centres) would cross, or None. A wall that
+    doesn't restrict movement, an open door and the open side of a one-way wall let it through."""
+    for wall in walls:
+        if wall.move_restriction == "none":
+            continue
+        if wall.door_type != "none" and wall.door_state in OPEN_DOOR_STATES:
+            continue
+        for a, b in _segments(wall):
+            if not _cuts(start, end, a, b):
+                continue
+            if wall.direction == "both":
+                return wall.id
+            on_left = _cross(a, b, start) > 0
+            if on_left == (wall.direction == "left"):
+                return wall.id
+    return None

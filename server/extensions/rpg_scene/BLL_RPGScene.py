@@ -27,7 +27,7 @@ from pydantic import BaseModel as PlainModel
 from pydantic import Field
 from zephyrex.lib.Rooms import room_of
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager, PersonModel
-from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, perceive
+from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, blocks_move, perceive
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
 from zephyrex.lib.CustomRoute import ExposeIn, custom_route
 from zephyrex.lib.Environment import env
@@ -470,8 +470,74 @@ class SceneRegionModel(
         pass
 
 
+class MoveRequest(PlainModel):
+    x: float
+    y: float
+
+
+class MoveEnvelope(PlainModel):
+    move: MoveRequest
+
+
+class MovedEnvelope(PlainModel):
+    scene_token: dict[str, Any]
+
+
 class SceneTokenManager(AbstractBLLManager, RouterMixin):
     _model = SceneTokenModel
+
+    def _trusted(self, manager: type[Any]) -> Any:
+        return manager(requester_id=env("ROOT_ID"), model_registry=self.model_registry)
+
+    def move_for(self, token_id: str, body: MoveRequest) -> dict[str, Any]:
+        """Move a token: the campaign's GM moves any token anywhere; a player moves their own
+        character's token, never through a wall that blocks movement (a closed door, one-way from
+        its closed side). Everyone else gets the same 404 as a missing token."""
+        tokens = self._trusted(SceneTokenManager)
+        try:
+            token = tokens.get(id=token_id)
+            scene = self._trusted(SceneManager).get(id=token.scene_id)
+        except HTTPException:
+            raise _not_found("SceneTokenModel") from None
+        requester = str(self.requester.id)
+        campaign = None
+        if scene.campaign_id is not None:
+            try:
+                campaign = self._trusted(CampaignManager).get(id=scene.campaign_id)
+            except HTTPException:
+                campaign = None
+        gm = campaign is not None and requester == campaign.user_id
+        player = False
+        if not gm and token.person_id is not None:
+            try:
+                player = getattr(self._trusted(PersonManager).get(id=token.person_id), "user_id", None) == requester
+            except HTTPException:
+                player = False
+        if not (gm or player):
+            raise _not_found("SceneTokenModel")
+        if not gm:
+            grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+            half_w, half_h = float(token.width or 1) * grid / 2, float(token.height or 1) * grid / 2
+            start = (float(token.x or 0) + half_w, float(token.y or 0) + half_h)
+            end = (body.x + half_w, body.y + half_h)
+            walls = [_wall(row) for row in self._trusted(SceneWallManager).list(scene_id=scene.id)]
+            if blocks_move(start, end, walls) is not None:
+                raise HTTPException(status_code=422, detail={"message": "A wall is in the way"})
+        moved = tokens.update(id=token.id, x=body.x, y=body.y)
+        return moved.model_dump(mode="json") if hasattr(moved, "model_dump") else dict(moved)
+
+    @custom_route(
+        method="POST",
+        path="/{token_id}/move",
+        input_model=MoveEnvelope,
+        output_model=MovedEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Move a token: the GM's any token anywhere; a player's own, never through a wall",
+    )
+    async def move_route(self, token_id: str, body: MoveEnvelope) -> MovedEnvelope:
+        return MovedEnvelope(scene_token=self.move_for(token_id, body.move))
 
 
 class SceneWallManager(AbstractBLLManager, RouterMixin):
@@ -564,6 +630,56 @@ class SnapshotResultEnvelope(PlainModel):
     snapshot: SnapshotOut
 
 
+class ViewRequest(PlainModel):
+    # The token a player sees from; none for the GM's whole view, or a player's first own token.
+    token_id: Optional[str] = None
+
+
+class ViewEnvelope(PlainModel):
+    view: ViewRequest
+
+
+class ViewToken(PlainModel):
+    id: str
+    name: Optional[str]
+    person_id: Optional[str]
+    disposition: Optional[str]
+    x: float
+    y: float
+    width: float
+    height: float
+    rotation: float
+    is_hidden: bool = False
+    mine: bool = False
+
+
+class ViewWall(PlainModel):
+    id: str
+    points: list[list[float]]
+    door_type: Optional[str]
+    door_state: Optional[str]
+
+
+class ViewOut(PlainModel):
+    scene_id: str
+    name: Optional[str]
+    width: Optional[int]
+    height: Optional[int]
+    grid_size: float
+    grid_distance: float
+    grid_units: str
+    background_color: Optional[str]
+    gm: bool
+    viewer: Optional[str]
+    lit: bool
+    tokens: list[ViewToken]
+    walls: list[ViewWall]
+
+
+class ViewResultEnvelope(PlainModel):
+    view: ViewOut
+
+
 def _not_found(model: str) -> HTTPException:
     return HTTPException(
         status_code=404, detail={"message": f"Request searched {model} and could not find the required record."}
@@ -592,6 +708,7 @@ def _wall(row: Any) -> Wall:
         door_state=row.door_state or "closed",
         sight_restriction=row.sight_restriction or "normal",
         direction=row.direction or "both",
+        move_restriction=row.move_restriction or "normal",
     )
 
 
@@ -662,6 +779,111 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 for door in perceived.doors
             ],
         )
+
+    def view_for(self, scene_id: str, body: ViewRequest) -> ViewOut:
+        """What to draw of a scene for the requester, decided on the server (the scene view's data).
+
+        The campaign's GM sees everything: every token (hidden ones flagged) and every wall and
+        door. A player sees from one of their own tokens (the one named, or their first on the
+        scene): their own tokens, and what that token perceives (perceive: sight, walls, light),
+        with only the doors it sees. Hidden tokens and other walls never reach a player.
+        """
+        scene = self._get(SceneManager, scene_id)
+        if scene is None:
+            raise _not_found("SceneModel")
+        requester = str(self.requester.id)
+        campaign = None if scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        gm = campaign is not None and requester == campaign.user_id
+        rows = list(self._trusted(SceneTokenManager).list(scene_id=scene.id))
+        walls = list(self._trusted(SceneWallManager).list(scene_id=scene.id))
+        people: dict[str, Any] = {}
+
+        def owner(row: Any) -> Optional[str]:
+            if row.person_id is None:
+                return None
+            if row.person_id not in people:
+                people[row.person_id] = self._get(PersonManager, row.person_id)
+            person = people[row.person_id]
+            return None if person is None else getattr(person, "user_id", None)
+
+        mine = {row.id for row in rows if owner(row) == requester}
+        viewer = None
+        if body.token_id is not None:
+            viewer = next((row for row in rows if row.id == body.token_id), None)
+            if viewer is None or not (gm or viewer.id in mine):
+                raise _not_found("SceneTokenModel")
+        elif not gm:
+            viewer = next((row for row in rows if row.id in mine), None)
+            if viewer is None:
+                raise _not_found("SceneModel")
+
+        def drawn(row: Any) -> ViewToken:
+            return ViewToken(
+                id=row.id,
+                name=row.name,
+                person_id=row.person_id,
+                disposition=row.disposition,
+                x=float(row.x or 0),
+                y=float(row.y or 0),
+                width=float(row.width or 1),
+                height=float(row.height or 1),
+                rotation=float(row.rotation or 0),
+                is_hidden=bool(row.is_hidden),
+                mine=row.id in mine,
+            )
+
+        def wall(row: Any) -> ViewWall:
+            return ViewWall(id=row.id, points=row.points or [], door_type=row.door_type, door_state=row.door_state)
+
+        lit = True
+        if viewer is None:
+            tokens, shown = [drawn(row) for row in rows], [wall(row) for row in walls]
+        else:
+            perceived = perceive(
+                Scene(
+                    grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE),
+                    grid_distance=float(scene.grid_distance or DEFAULT_GRID_DISTANCE),
+                    global_illumination=bool(scene.global_illumination),
+                    darkness_level=float(scene.darkness_level or 0),
+                ),
+                _token(viewer),
+                [_token(row) for row in rows],
+                [_wall(row) for row in walls],
+            )
+            lit = perceived.lit
+            seen = {one["id"] for one in perceived.seen} | mine | {viewer.id}
+            hidden_ok = gm
+            tokens = [drawn(row) for row in rows if row.id in seen and (hidden_ok or not row.is_hidden or row.id in mine)]
+            doors = set(perceived.doors)
+            shown = [wall(row) for row in walls if row.id in doors] if not gm else [wall(row) for row in walls]
+        return ViewOut(
+            scene_id=scene.id,
+            name=scene.name,
+            width=scene.width,
+            height=scene.height,
+            grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE),
+            grid_distance=float(scene.grid_distance or DEFAULT_GRID_DISTANCE),
+            grid_units=scene.grid_units or "ft",
+            background_color=scene.background_color,
+            gm=gm,
+            viewer=None if viewer is None else viewer.id,
+            lit=lit,
+            tokens=tokens,
+            walls=shown,
+        )
+
+    @custom_route(
+        method="POST",
+        path="/{scene_id}/view",
+        input_model=ViewEnvelope,
+        output_model=ViewResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="What to draw of a scene for the requester: the GM's whole view, or a player's token's sight",
+    )
+    async def view_route(self, scene_id: str, body: ViewEnvelope) -> ViewResultEnvelope:
+        return ViewResultEnvelope(view=self.view_for(scene_id, body.view))
 
     @custom_route(
         method="POST",
