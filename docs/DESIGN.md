@@ -461,15 +461,17 @@ their combatants placed.
 - **The table is server-authoritative.** Clients send intents (move token, open door, roll)
   and the server validates, applies, writes and broadcasts. A late joiner gets a snapshot
   and then the stream.
-- **Transport:** a multi-user table channel with presence (who is here, GM or player) and
-  per-recipient filtering (vision, fog, whispers, hidden tokens).
-  **Framework gap:** `live_sync` is "between a user's own devices", so a multi-user,
-  per-recipient-filtered room is a new generic framework capability (table/room sync), not
-  VTT code. It is raised on card 253 before VTT play is built. The AI product needs it too.
-- **Rendering:** Pixi.js stage layers (background, tiles, drawings, walls (GM),
-  tokens, lighting/vision mask, fog, effects, UI overlay). Vision polygons are computed
-  per client from server-sent geometry for the viewer's own tokens. The server keeps the
-  authoritative explored fog.
+- **Transport: the framework's rooms** (operator-approved, server-framework `rooms` and
+  `@zephyrex/rooms`' `useRoom`, 2026-11-21). A room is a record: a scene (its tokens, walls,
+  lights, tiles, notes, regions), a table's conversation (seats, lines, whisper rows) and a
+  campaign (its scenes and tables, list-level only). A change carries `{record, op, etag}` and
+  never the record, so per-recipient filtering stays where it was: each viewer refetches through
+  the sight-checked routes (`/view`, `/snapshot`). Whisper messages live in the whisper's own
+  conversation room. Over SSE with Last-Event-ID, falling back to polling the room's changes.
+- **Rendering:** `SceneView` draws the server's sight-filtered view on a 2D canvas, redrawing
+  only on change (zero idle frames); pan, wheel and pinch zoom, drag to move with grid snap,
+  and a keyboard and screen-reader token list under it. WebGL2 layers (lighting, fog,
+  effects) come with V11/V12; the server keeps the authoritative explored fog.
 
 ## Data and contract
 
@@ -478,7 +480,16 @@ their combatants placed.
   `rpg_combat`, `rpg_cards` (ownership in [zephyrex-rpg-ai: docs/SUITE.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/SUITE.md)). Mechanical events
   are written to the wiki's `rpg_log`.
 - **It depends on the wiki** for locations, maps, persons, items and campaigns.
-- **The AI product calls these as tools,** under the caller's ACL:
+- **The AI product calls these as tools,** under the caller's ACL. Built (2026-11-21):
+  - `roll`, `check`, `test` (a test under the campaign's rules pack; `specialisation` for a
+    specialist skill), `test_options` (what a tray offers, with `has_sheet`), `character_sheet`;
+  - `roll_to_table(table_conversation_id, person_id, name|formula, …)`: a decided roll for a
+    seated character, rolled here and posted as their seat's out-of-character line;
+  - `scene_snapshot(scene, token)`, `scene_tokens(scene)` (who is on a scene; hidden tokens only
+    for the GM, flagged), `current_scene(campaign)`, `activate_scene(scene)`,
+    `pilot_token(person, location|scene+point, max_distance)` (see *Characters on the map*);
+  - `table_seats`, `seat_whispers`, `say`; `game_systems`; `check_requirements`.
+  Planned:
   - `roll(formula|stat)`;
   - `legal_actions(combatant)`: the enumerated actions the rules allow now, which feed the
     decision models;
@@ -487,6 +498,51 @@ their combatants placed.
   - `scene_snapshot(viewer)`: what a given character can perceive.
   Each is an ordinary endpoint plus an `@ability` so a framework agent can use it.
 - REST shape as the framework (ETag, `If-Match`, `412`/`428`), plus the table stream.
+
+## Characters on the map (operator, 2026-11-21)
+
+"Each character should have its own routine and motivations and the GM/decision agent should pilot
+them on the map as time advances." Routines and motivations are the AI product's; the VTT decides
+where a character can go and how far they get.
+
+- **Scenes know their places.** A scene carries the wiki location it shows (`location_id`), an
+  entry point where arrivals appear, and regions carry a sub-location's area (the Chapel on a
+  ship's deck).
+- **One current scene per campaign,** set by the GM (`activate_scene`, `current_scene`). A chat
+  stores its own scene only to override it, for a split party.
+- **`pilot_token`** moves a character to a wiki location (the region of it, else a scene of it,
+  else a parent's) or to a point on a scene. On the same scene the token walks a grid path round
+  walls (A*; every step checked by the player-move wall rule, inside the scene's bounds), at most
+  `max_distance` per tick (`{arrived, remaining}`); to another scene it moves, landing on the
+  nearest free cell; a place no map shows takes the character off the maps. No path: refused,
+  nothing moves. The GM's (agent's) account only.
+- **Position is presence.** After any move (piloted, the GM's drag, a player's move) the person's
+  wiki `location_id` becomes the location under the token (the smallest region with one, else the
+  scene's). The wiki and the AI product's presence read that one value.
+- Players move their own tokens, never across a closed door or a wall that blocks movement; the GM
+  moves any token anywhere.
+
+## Character building (operator, 2026-11-21)
+
+"Make sure vtt/wiki also handle both narrative and RAW character building with feature parity to the
+redacted foundry system, orcpub, etc." The VTT owns RAW building; the wiki owns the narrative side.
+
+- **At parity with** the redacted Foundry system ([redacted] homeworld, background, role, elite
+  advances; characteristics rolled or point-bought; aptitudes and XP costs by aptitude match;
+  skills with specialisations; talents with prerequisites; psychic powers; starting gear; wounds
+  and fate; [redacted]/RT/DW careers and ranks, BC, OW) and OrcPub / [redacted] for 5e (species, class
+  and subclass, background, ability scores by array, point buy or roll, level-up with HP, ASIs and
+  feats, spells, proficiencies, equipment, multiclassing, the derived sheet).
+- **Every rule comes from the pack, never restated:** [redacted] from the redacted system's own functions
+  through the bridge (origins via `normalizeOrigin`, cost tables, aptitudes, prerequisites, and the
+  generation rules it is exporting); 5e from the dnd5e system's 2024 SRD packs, with the
+  ability-score rules parsed from the SRD's text (`tools/foundry-bridge/dnd5e.py`). Illegal choices
+  are shown and refused, by the server too.
+- **Records link across the suite** by Foundry's compendium UUID, the wiki's `compendium_source`.
+- The result is a VTT actor linked to the wiki person. A `BuildCharacter` component in
+  `@zephyrex/vtt-play` lets rpg-ai offer it from Start and from a person's page.
+- Order: bridge rules, then the server's build session, then the [redacted] builder, the other [redacted] lines,
+  the 5e builder, and gear with the wiki's items.
 
 ## Editions
 
@@ -528,6 +584,9 @@ reason) ([zephyrex-rpg-ai: docs/DESIGN.md](https://github.com/JamesonRGrieve/zep
 
 | Scene awareness (A23 for the AI product) | `rpg_scene`: the scene, token and wall fields sight needs first (OBJECT_PLAN §4); `Vision.py`, pure line of sight held to `contract/vision-cases.json` (range, cone, normal, limited and one-way walls, open or broken doors, hidden tokens never perceived); `POST /v1/scene/{scene_id}/snapshot` and the ability `scene_snapshot`: the tokens a token sees, nearest first with their distance, and the doors. For the campaign's GM, or the player whose character the token is; anyone else gets the same 404 as a missing token. Not yet: lights (V11, so a dark scene shows nothing), elevation, fog memory, the map (the wiki's world_spatial). |
 | Settings, systems and the first system pack (operator, 2026-11-21) | Settings are the wiki's (S6); a game system carries `slug` and `setting_id` (a reference, no FK), and the `game_systems(setting_id)` ability lists the catalog. The systems the operator named are seeded by name as the framework's SYSTEM user, readable by all (`rpg_systems/game-systems.json`). **[redacted]** is the first system pack (`rpg_systems/packs/redacted.json`), every value cited to the core rulebook: d100 roll-under, natural 1 and 100, modifiers summed and held at ±60, untrained −20, skill ranks +0/+10/+20/+30, degrees of success and failure by tens digits; its 10 characteristics and 28 skills are seeded as trait templates. `rpg_dice`'s `test` ability and `POST /v1/dice/test` run a test under the campaign's pack (`Percentile.py`, held to `contract/[redacted]-test-cases.json`: the book's worked examples and its rules). Next per system: a pack each. |
+| The wiki, built in (operator, 2026-11-21) | The client composes `@zephyrex-rpg/wiki` at `/w`, built from the pinned wiki checkout (`deploy/compile-wiki.sh --no-lite`), injected; Worlds in the nav and a page per record. |
+| The play UI, `@zephyrex/vtt-play` (operator, 2026-11-21) | DiceTray (tests and formulas; 3D physics dice, three.js + cannon-es, landing on the server's roll; reduced motion respected); SeatList; SceneView; CharacterSheet (read-only); live over rooms. Without a sheet, the tray offers formulas ("No character sheet yet: roll a formula"), never an error. rpg-ai embeds them. |
+| [redacted] content (operator, 2026-11-21) | The Foundry bridge installs each [redacted] line as one account's private module (never instance-wide); characteristics, resources, skills with each line's untrained rule, talents and origins become that account's traits; tests read only modules enabled on the campaign. Pregens import from vault frontmatter (`tools/vault-import`). |
 
 **Clamp, as the VTT reads it.** rpg_state says only that a clamp's sign "selects min vs max". The VTT
 reads a value of 0 or more as a floor (the stat is at least it) and a negative value as a ceiling at
