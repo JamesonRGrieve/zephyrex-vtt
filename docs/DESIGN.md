@@ -3,7 +3,14 @@
 A virtual tabletop that competes with Foundry VTT and Roll20, with map authoring that
 competes with Inkarnate (and Dungeondraft for interiors). It is where a session is played:
 maps, scenes, tokens, sheets, dice, combat, live play. It reads the world from the wiki,
-and the AI product drives it. Suite context and ownership: [zephyrex-rpg-ai: docs/SUITE.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/SUITE.md).
+and the AI product drives it.
+
+**The wiki is built in** (operator, 2026-11-21: "The vtt should include the wiki out of the box as
+well, with wiki pages for actors, items, etc as a first class feature. ai-rpg imports both
+separately."). The server loads the wiki's extensions and the client composes the wiki's own
+package, `@zephyrex-rpg/wiki`, at `/w`: worlds, taxonomy, plot, and a page for every person
+(actor), item, place, organisation, journal and hook, linked from scenes, tokens, seats and sheets.
+`@zephyrex/vtt-play` doesn't re-export it; rpg-ai imports the two packages separately. Suite context and ownership: [zephyrex-rpg-ai: docs/SUITE.md](https://github.com/JamesonRGrieve/zephyrex-rpg-ai/blob/main/docs/SUITE.md).
 Entity fields: [OBJECT_PLAN](https://github.com/JamesonRGrieve/zephyrex-rpg-wiki/blob/main/server/OBJECT_PLAN.md) §4 (`world_spatial` map
 authoring, `rpg_core`, `rpg_traits`, `rpg_scene`, `rpg_dice`, `rpg_combat`, `rpg_cards`),
 §7 (UVTT and Foundry adapters) and §9 (MapEditor and SceneEditor components). Geometry
@@ -220,8 +227,8 @@ What vtt has today:
 | F43 | Roll tables: weighted draw, with or without replacement, nested, blind, embedded (`roll-tables`) | Partial: tables and entries stored (`rpg_dice`); no draw (V19) |
 | F44 | Active effects: change modes, durations, transfer from items, status (`active-effects`) | Partial: derived traits compute stats with a breakdown (`rpg_traits`, `/v1/dice/check`); effects with durations not built (V22) |
 | F45 | Cards: decks, hands, piles; deal, draw, pass, play, shuffle, reset; faces; presets (`cards`) | Planned (V23) |
-| F46 | Actors: sheets per system, ownership levels, prototype token, JSON import and export (`actors`) | Partial: characters are the Wiki's persons with vtt traits and checks; no sheet (V21, V26) |
-| F47 | Items: owned items on an actor (`items`) | Elsewhere: the Wiki's `world_inventory`; vtt counts worn items in checks |
+| F46 | Actors: sheets per system, ownership levels, prototype token, JSON import and export (`actors`) | Partial: characters are the Wiki's persons (their pages built in at /w) with vtt traits, checks and imported sheets; no sheet UI yet (V21, V26) |
+| F47 | Items: owned items on an actor (`items`) | The Wiki's `world_inventory`, its item pages built in at /w; vtt counts worn items in checks |
 | F48 | Journal entries: text, image, video and PDF pages; secrets; show to players; links (`journal`) | Elsewhere: the Wiki's `world_narrative` and `entity_posts`; showing to players is V24 and V54 |
 | F49 | Compendium packs (`compendium`) | Planned (V27) |
 | F50 | Adventures (`adventure`) | Planned (V43) |

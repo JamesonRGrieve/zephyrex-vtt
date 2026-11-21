@@ -32,6 +32,7 @@ deploy/     frameworks.env (the five framework pins), fetch-frameworks.sh, compi
 ```bash
 deploy/fetch-frameworks.sh <root>     # lay out a build workspace: this repo + the frameworks at their pins
 deploy/compile-frameworks.sh <root>   # compile the framework packages the client installs
+deploy/compile-wiki.sh <root>         # after the client's install: build the wiki's client package into it
 cd <root>/zephyrex-vtt/server && uv sync && uv run pytest
 cd <root>/zephyrex-vtt/client && pnpm install --frozen-lockfile && pnpm typecheck
 ```
