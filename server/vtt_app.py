@@ -51,10 +51,10 @@ EXTENSIONS = ",".join(
         "rpg_core",
         "rpg_systems",
         "rpg_traits",
+        "rpg_modules",
         "rpg_dice",
         "rpg_scene",
         "rpg_table",
-        "rpg_modules",
     ]
 )
 

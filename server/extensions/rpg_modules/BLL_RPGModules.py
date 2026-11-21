@@ -122,6 +122,8 @@ class ModuleRecordModel(
     class Search(ApplicationModel.Search, ContentModuleModel.Reference.ID.Search):
         source_id: Optional[StringSearchModel] = None
         source_type: Optional[StringSearchModel] = None
+        entity_type: Optional[StringSearchModel] = None
+        entity_id: Optional[StringSearchModel] = None
 
 
 class CampaignModuleModel(

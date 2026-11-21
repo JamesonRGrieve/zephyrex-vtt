@@ -17,6 +17,11 @@ optional = false
 name = "rpg_core"
 optional = false
 
+# A test names the traits of the content modules enabled on the campaign
+[[extension_dependencies]]
+name = "rpg_modules"
+optional = false
+
 # Items a character wears count toward their stats
 [[extension_dependencies]]
 name = "world_inventory"

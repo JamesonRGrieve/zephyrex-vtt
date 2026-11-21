@@ -28,6 +28,12 @@ class RPGDiceExtension(AbstractStaticExtension):
                 reason="A check's access rule reads the campaign's GM and the character's player",
             ),
             EXT_Dependency(
+                name="rpg_modules",
+                friendly_name="Rpg Modules",
+                optional=False,
+                reason="A test names the traits of the content modules enabled on the campaign",
+            ),
+            EXT_Dependency(
                 name="world_inventory",
                 friendly_name="World Inventory",
                 optional=False,

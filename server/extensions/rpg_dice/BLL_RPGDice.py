@@ -34,6 +34,7 @@ from zephyrex.extensions.rpg_dice.Percentile import test as percentile_test
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager, GameSystemModel  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.Packs import load_pack  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[import-not-found]
     DerivativeTraitManager,
     PersonTraitManager,
@@ -447,16 +448,35 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             if stat_name(trait.name or "") == name and (gm or self._readable(TraitManager, trait.id))
         ]
         if not named and campaign.game_system_id is not None:
-            named = [
-                trait
-                for trait in traits.list(game_system_id=campaign.game_system_id)
-                if trait.campaign_id is None and stat_name(trait.name or "") == name
-            ]
+            named = self._system_trait(name, campaign)
         if not named:
             raise _refused(DiceError("unknown_stat", f"There is no stat called @{name}"))
         if len(named) > 1:
             raise _refused(DiceError("ambiguous_stat", f"More than one trait is called @{name}"))
         return named[0]
+
+    def _system_trait(self, name: str, campaign: Any) -> list[Any]:
+        """The system-level traits (``campaign_id`` NULL) ``@name`` can mean in this campaign. A trait
+        installed by a content module (a [redacted] line: its owner's own) counts only when that module is
+        enabled on the campaign (CampaignModule), and then it wins over the system's templates;
+        another account's private module is never one of them, though a trusted read lists it."""
+        candidates = [
+            trait
+            for trait in self._trusted(TraitManager).list(game_system_id=campaign.game_system_id)
+            if trait.campaign_id is None and stat_name(trait.name or "") == name
+        ]
+        if not candidates:
+            return []
+        enabled = {row.content_module_id for row in self._trusted(CampaignModuleManager).list(campaign_id=campaign.id)}
+        records = self._trusted(ModuleRecordManager)
+        from_modules, templates = [], []
+        for trait in candidates:
+            modules = {row.content_module_id for row in records.list(entity_type="trait", entity_id=trait.id)}
+            if not modules:
+                templates.append(trait)
+            elif modules & enabled:
+                from_modules.append(trait)
+        return from_modules or templates
 
     def _worn_items(self, person_id: str) -> set[str]:
         """The items the person wears or wields: instances placed in one of their equipment slots or
