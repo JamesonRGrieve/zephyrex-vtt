@@ -74,6 +74,8 @@ def test_the_kinds_follow_the_foundry_types() -> None:
     assert trait_kind(_document(1)) == "talent"
     assert trait_kind(_document(1, type="originPath", system={"step": "homeWorld"})) == "homeworld"
     assert trait_kind(_document(1, type="weapon")) is None
+    assert trait_kind(_document(1, type="skill")) == "skill"
+    assert trait_kind(_document(1, type="skill", conversion=True)) is None
     assert trait_kind(_document(1, foundry_class="Actor", type="npc")) is None
 
 

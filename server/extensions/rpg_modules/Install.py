@@ -123,6 +123,10 @@ def trait_kind(document: Mapping[str, Any]) -> Optional[str]:
     if kind == "originPath":
         step = (document.get("system") or {}).get("step")
         return ORIGIN_STEPS.get(step) or (slugify(step) if isinstance(step, str) and step else "origin")
+    if kind == "skill" and document.get("conversion"):
+        # Another line's copy of a skill this line has itself (RT's [redacted] in a dh2 bundle):
+        # kept as a record, never a second trait a test's name would find twice.
+        return None
     return TRAIT_KINDS.get(kind or "")
 
 
