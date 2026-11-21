@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { wikiExtension } from '@zephyrex-rpg/wiki/extension';
+import { roomsExtension } from '@zephyrex/rooms';
 import type { ZephyrexConfig } from 'zephyrex';
 import { VttLogo } from './brand/VttLogo';
 import { genealogyExtension, rpgSystemsExtension } from './extensions/campaign';
@@ -58,7 +59,7 @@ const config: ZephyrexConfig = {
         privateRoutes: [...APP_ROUTES, ...(process.env.PRIVATE_ROUTES ?? '').split(',').filter(Boolean)],
       }
     : { enabled: false },
-  extensions: [rpgExtension, wikiExtension({ base: WIKI_BASE }), genealogyExtension, rpgSystemsExtension],
+  extensions: [rpgExtension, wikiExtension({ base: WIKI_BASE }), genealogyExtension, rpgSystemsExtension, roomsExtension],
 };
 
 export default config;

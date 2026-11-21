@@ -17,6 +17,7 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
+    "@zephyrex/rooms": "^0.0.1-alpha.1",
     "cannon-es": "^0.20.0",
     "react": "^19.2.8",
     "three": "^0.187.0",

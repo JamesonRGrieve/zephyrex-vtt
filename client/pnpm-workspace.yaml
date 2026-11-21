@@ -34,6 +34,7 @@ overrides:
   '@zephyrex/auth': file:../../auth
   '@zephyrex/lite': file:../../client-framework/packages/lite
   '@zephyrex/marketing': file:../../client-framework/packages/marketing
+  '@zephyrex/rooms': file:../../client-framework/packages/rooms
   '@jgrieve/forms': file:../../dynamic-form
   zod2gql: file:../../zod2gql
   # The wiki's pages (operator, 2026-11-21: the VTT includes the wiki out of the box), from the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +12,15 @@ vi.mock('zephyrex', () => ({
       () => null,
       () => fallback,
     ),
+}));
+
+const joined: { room?: unknown; onChange?: (change: unknown) => void } = {};
+vi.mock('@zephyrex/rooms', () => ({
+  useRoom: (room: unknown, onChange: (change: unknown) => void) => {
+    joined.room = room;
+    joined.onChange = onChange;
+    return 'live';
+  },
 }));
 
 const { SceneView } = await import('./SceneView');
@@ -94,6 +103,19 @@ describe('the scene view', () => {
     render(<SceneView sceneId='s1' />);
     await userEvent.click(await screen.findByRole('button', { name: 'Move Ada south' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("Ada didn't move");
+  });
+
+  it('reads the view again when the scene’s room hears a change', async () => {
+    let answer = view(false);
+    post.mockImplementation(() => Promise.resolve(answer));
+    render(<SceneView sceneId='s1' />);
+    await screen.findByText('Ada');
+    expect(joined.room).toEqual({ type: 'scene', id: 's1' });
+    answer = {
+      view: { ...answer.view, tokens: [...answer.view.tokens, { ...answer.view.tokens[1]!, id: 'gob', name: 'Goblin' }] },
+    };
+    act(() => joined.onChange?.({ op: 'updated', record: { type: 'scene_token', id: 'gob' } }));
+    expect(await screen.findByText('Goblin')).toBeInTheDocument();
   });
 
   it('says what failed to load', async () => {

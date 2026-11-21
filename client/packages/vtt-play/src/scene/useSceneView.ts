@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useCallback, useEffect, useState } from 'react';
+import { useRoom } from '@zephyrex/rooms';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useClient, writeProblem } from 'zephyrex';
 import { viewSchema, type SceneViewData, type ViewToken } from './schemas';
-
-/** How often a scene is read again while it's open, until live rooms reach the client. */
-export const SCENE_FEED_MS = 2000;
 
 export type ViewState = { state: 'loading' } | { state: 'failed'; error: Error } | { state: 'ready'; view: SceneViewData };
 
 /**
  * What to draw of a scene for this person (the server's view: the GM's whole scene, or a player's
- * token's sight), read again every SCENE_FEED_MS while visible, and token moves. A move shows at
+ * token's sight), read again whenever the scene's room says something changed, and token moves. A move shows at
  * once and is put back if the server refuses it (a wall in the way).
  */
 export function useSceneView(sceneId: string, tokenId?: string) {
@@ -29,16 +27,15 @@ export function useSceneView(sceneId: string, tokenId?: string) {
   }, [client, sceneId, tokenId]);
 
   useEffect(() => {
-    // The first read from a callback too: the effect subscribes, the reads set state.
+    // The first read from a callback: the effect subscribes, the reads set state.
     const first = window.setTimeout(() => void read(), 0);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void read();
-    }, SCENE_FEED_MS);
-    return () => {
-      window.clearTimeout(first);
-      window.clearInterval(timer);
-    };
+    return () => window.clearTimeout(first);
   }, [read]);
+
+  // Live: anything on the scene changes in its room (never its data, so a hidden token's move gives
+  // nothing away); each change reads the view again, where the server decides what this person sees.
+  const room = useMemo(() => ({ type: 'scene', id: sceneId }), [sceneId]);
+  const live = useRoom(room, () => void read(), { onReset: () => void read() });
 
   const move = async (token: ViewToken, x: number, y: number): Promise<void> => {
     setData((current) =>
@@ -62,6 +59,7 @@ export function useSceneView(sceneId: string, tokenId?: string) {
 
   return {
     data,
+    live,
     problem,
     move,
     retry: (): Promise<void> => {

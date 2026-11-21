@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useCallback, useEffect, useState } from 'react';
+import { useRoom } from '@zephyrex/rooms';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useClient, useUser, writeProblem } from 'zephyrex';
 import { personSchema, seatSchema, tableSchema, whisperSchema, type Person, type Seat, type Table } from './schemas';
-
-/** How often a table's seats are read again while it's open, until live rooms replace polling. */
-export const FEED_MS = 2000;
 
 export type SeatsState =
   | { state: 'loading' }
@@ -17,8 +15,7 @@ function asError(error: unknown): Error {
 
 /**
  * A table's seats, the campaign's characters who could take one, and the seat actions; read again
- * every FEED_MS while the page is visible (useTableFeed's polling, until the framework's live rooms
- * reach the client). The server decides every permission; `host` only decides which buttons show.
+ * whenever the table's room says something changed (useRoom). The server decides every permission; `host` only decides which buttons show.
  */
 export function useTableSeats(conversationId: string) {
   const client = useClient();
@@ -43,12 +40,15 @@ export function useTableSeats(conversationId: string) {
   }, [client, conversationId]);
 
   useEffect(() => {
-    void read();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void read();
-    }, FEED_MS);
-    return () => window.clearInterval(timer);
+    // The first read from a callback: the effect subscribes, the reads set state.
+    const first = window.setTimeout(() => void read(), 0);
+    return () => window.clearTimeout(first);
   }, [read]);
+
+  // Live: a seat taken or cleared, a whisper opened, a line spoken (the table's conversation room)
+  // reads the seats again; useRoom polls the room's changes itself when it can't keep a stream.
+  const room = useMemo(() => ({ type: 'conversation', id: conversationId }), [conversationId]);
+  const live = useRoom(room, () => void read(), { onReset: () => void read() });
 
   const me = user.data?.id ?? null;
   const host = data.state === 'ready' && (me === null ? !user.error : data.table.created_by_user_id === me);
@@ -66,6 +66,7 @@ export function useTableSeats(conversationId: string) {
 
   return {
     data,
+    live,
     me,
     host,
     busy,

@@ -14,7 +14,7 @@
     "prettier": "prettier .",
     "prettier-fix": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "refresh:zephyrex": "pnpm update --no-save zephyrex @zephyrex/auth @zephyrex/lite @zephyrex/marketing @jgrieve/forms zod2gql @zephyrex-rpg/wiki",
+    "refresh:zephyrex": "pnpm update --no-save zephyrex @zephyrex/auth @zephyrex/lite @zephyrex/marketing @zephyrex/rooms @jgrieve/forms zod2gql @zephyrex-rpg/wiki",
     "pretest": "prisma generate",
     "test": "vitest run",
     "storybook": "storybook dev -p 6006",
@@ -29,6 +29,7 @@
     "@zephyrex/auth": "^0.0.1-alpha.1",
     "@zephyrex/lite": "^0.0.1-alpha.1",
     "@zephyrex/marketing": "^0.0.1-alpha.1",
+    "@zephyrex/rooms": "^0.0.1-alpha.1",
     "cannon-es": "^0.20.0",
     "clsx": "^2.1.1",
     "cookies-next": "^6.1.1",
@@ -57,6 +58,9 @@
       "injected": true
     },
     "@zephyrex/marketing": {
+      "injected": true
+    },
+    "@zephyrex/rooms": {
       "injected": true
     },
     "zephyrex": {

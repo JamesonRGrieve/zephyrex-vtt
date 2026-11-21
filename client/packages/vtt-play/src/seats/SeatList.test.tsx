@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +16,15 @@ vi.mock('zephyrex', () => ({
       () => null,
       () => fallback,
     ),
+}));
+
+const joined: { room?: unknown; onChange?: (change: unknown) => void } = {};
+vi.mock('@zephyrex/rooms', () => ({
+  useRoom: (room: unknown, onChange: (change: unknown) => void) => {
+    joined.room = room;
+    joined.onChange = onChange;
+    return 'live';
+  },
 }));
 
 const { SeatList } = await import('./SeatList');
@@ -91,6 +100,21 @@ describe('the seat list', () => {
     list.mockRejectedValue(new Error('down'));
     render(<SeatList conversationId='c1' />);
     expect(await screen.findByRole('button', { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it('reads the seats again when the table’s room hears a change', async () => {
+    serve();
+    render(<SeatList conversationId='c1' />);
+    await screen.findByText('Osk Halleran');
+    expect(joined.room).toEqual({ type: 'conversation', id: 'c1' });
+    const before = list.mock.calls.filter(([path]) => path === '/v1/table_seat').length;
+    serve([
+      ...SEATS,
+      { id: 's3', person_id: 'wren', name: 'Wren Saltash', controller_id: 'bram', updated_at: '2026-11-21T11:00:00Z' },
+    ]);
+    act(() => joined.onChange?.({ op: 'created', record: { type: 'table_seat', id: 's3' } }));
+    expect(await screen.findByText('Wren Saltash', { selector: 'li span' })).toBeInTheDocument();
+    expect(list.mock.calls.filter(([path]) => path === '/v1/table_seat').length).toBeGreaterThan(before);
   });
 
   it('reports a seat the server refused', async () => {
