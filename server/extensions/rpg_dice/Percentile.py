@@ -13,6 +13,16 @@ rolls with its own random source and the tests (contract/[redacted]-test-cases.j
 - Success gives one degree, plus the target's tens digit minus the roll's; failure gives one, plus
   the roll's tens digit minus the target's (p. 24). An automatic success or failure still has at
   least one degree.
+
+The other [redacted] lines differ only in what a pack's spec says (the redacted system's rules, read by
+the Foundry bridge, 2026-11-21):
+- ``degrees``: "gen2" (dh2, bc, ow: the tens-digit rule above; "tens" is its old name) or "gen1"
+  (dh1, dw, rt: the margin's full tens, so a bare pass or fail scores 0 degrees);
+- ``untrained``: "penalty" (an aptitude line: the characteristic plus ``untrained_skill``, -20) or
+  "half" (a career line: half the characteristic, rounded down);
+- the skill ranks a pack lists (four on aptitude lines, three on career lines);
+- a skill that can't be attempted untrained: a [redacted] specialist skill, or a career line's Advanced
+  skill.
 """
 
 from __future__ import annotations
@@ -48,6 +58,13 @@ def capped(modifiers: Sequence[int], cap: int) -> int:
     return max(-cap, min(cap, sum(modifiers)))
 
 
+def _further(method: str, a: int, b: int) -> int:
+    """Degrees past the first between ``a`` and ``b`` (the larger first)."""
+    if method == "gen1":
+        return abs(a - b) // 10
+    return _tens(a) - _tens(b)
+
+
 def resolve(target: int, roll: int, spec: Mapping[str, Any]) -> tuple[bool, int, Natural]:
     """Whether a roll succeeds against a final target, by how many degrees, and whether it was a
     natural success or failure."""
@@ -60,11 +77,14 @@ def resolve(target: int, roll: int, spec: Mapping[str, Any]) -> tuple[bool, int,
         natural, success = "failure", False
     else:
         success = roll <= target
-    if success:
-        degrees = 1 + _tens(target) - _tens(roll)
-    else:
-        degrees = 1 + _tens(roll) - _tens(target)
-    return success, max(1, degrees), natural
+    method = spec.get("degrees", "gen2")
+    if method not in ("gen1", "gen2", "tens"):
+        raise TestError(f"no degrees method {method!r}")
+    further = _further(method, target, roll) if success else _further(method, roll, target)
+    if method == "gen1":
+        # A gen1 line prints the further degrees alone: a bare pass is 0 degrees of success.
+        return success, max(0, further), natural
+    return success, max(1, 1 + further), natural
 
 
 def test(
@@ -79,20 +99,27 @@ def test(
     modifiers: Sequence[int] = (),
 ) -> Outcome:
     """A characteristic or skill test under a pack. For a characteristic test leave ``skill_rank``
-    unset and ``trained`` true. For a skill test, ``skill_rank`` 1–4 is Known…Veteran; ``trained``
-    false is untrained (refused for a specialist skill, which can't be attempted untrained)."""
+    unset and ``trained`` true. For a skill test, ``skill_rank`` is the pack's rank (1–4 Known…
+    Veteran on an aptitude line, 1–3 on a career line); ``trained`` false is untrained, refused when
+    ``specialist`` says the skill can't be attempted untrained (a [redacted] specialist skill, a career
+    line's Advanced skill)."""
     spec = pack["test"]
     steps: list[dict[str, Any]] = [{"step": "characteristic", "value": characteristic}]
     base = characteristic
     if not trained:
         if specialist:
-            raise TestError("a specialist skill can't be attempted untrained")
-        steps.append({"step": "untrained", "value": spec["untrained_skill"]})
-        base += spec["untrained_skill"]
+            raise TestError("this skill can't be attempted untrained")
+        if spec.get("untrained", "penalty") == "half":
+            halved = characteristic // 2
+            steps.append({"step": "untrained", "value": halved - characteristic, "rule": "half"})
+            base = halved
+        else:
+            steps.append({"step": "untrained", "value": spec["untrained_skill"]})
+            base += spec["untrained_skill"]
     elif skill_rank is not None:
         bonus = pack["skill_ranks"]["by_rank"].get(str(skill_rank))
         if bonus is None:
-            raise TestError(f"a skill rank is 1 to 4, not {skill_rank}")
+            raise TestError(f"no skill rank {skill_rank} in this pack")
         steps.append({"step": "skill_rank", "rank": skill_rank, "value": bonus})
         base += bonus
     difficulties = pack["difficulties"]

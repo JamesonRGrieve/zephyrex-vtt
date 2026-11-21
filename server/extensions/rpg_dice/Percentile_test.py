@@ -51,3 +51,45 @@ def test_the_pack_holds_the_books_skills_and_characteristics() -> None:
     assert [one["slug"] for one in PACK["skills"] if one["specialist"]] == [
         "[redacted]", "[redacted]", "linguistics", "navigate", "operate", "scholastic-lore", "trade",
     ]
+
+
+# A career line's pack, as the Foundry bridge's rules step writes one (synthetic: no content): gen1
+# degrees, untrained at half the characteristic, three ranks, Advanced skills not untrained.
+CAREER = {
+    "test": {
+        "natural_success": 1,
+        "natural_failure": 100,
+        "modifier_cap": 60,
+        "degrees": "gen1",
+        "untrained": "half",
+        "untrained_skill": -20,
+    },
+    "skill_ranks": {"by_rank": {"1": 0, "2": 10, "3": 20}},
+    "difficulties": {"challenging": 0, "hard": -20, "default": "challenging"},
+}
+
+
+@pytest.mark.parametrize(
+    ("characteristic", "roll", "options", "expect"),
+    [
+        (40, 38, {}, (40, True, 0)),
+        (40, 15, {}, (40, True, 2)),
+        (40, 49, {}, (40, False, 0)),
+        (40, 72, {}, (40, False, 3)),
+        (41, 20, {"trained": False}, (20, True, 0)),
+        (41, 30, {"trained": False, "difficulty": "hard"}, (0, False, 3)),
+        (40, 55, {"skill_rank": 3}, (60, True, 0)),
+    ],
+)
+def test_a_career_line_scores_gen1_and_halves_untrained(
+    characteristic: int, roll: int, options: dict[str, Any], expect: tuple[int, bool, int]
+) -> None:
+    outcome = percentile_test(CAREER, characteristic=characteristic, roll=roll, **options)
+    assert (outcome.target, outcome.success, outcome.degrees) == expect
+
+
+def test_a_career_line_refuses_an_advanced_skill_untrained_and_a_fourth_rank() -> None:
+    with pytest.raises(PercentileError):
+        percentile_test(CAREER, characteristic=40, roll=10, trained=False, specialist=True)
+    with pytest.raises(PercentileError):
+        percentile_test(CAREER, characteristic=40, roll=10, skill_rank=4)
