@@ -12,8 +12,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import ClassVar, List, Literal, Optional, Type
 
-import re
-
 from pydantic import Field, model_validator
 
 from zephyrex.pydantic2.registry import BaseModel
@@ -32,7 +30,7 @@ from zephyrex.logic.AbstractLogicManager import (
 
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonModel
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignModel  # type: ignore[import-not-found]
-from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemModel  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_systems.BLL_RPGSystems import SLUG_PATTERN, GameSystemModel, slugify  # type: ignore[import-not-found]
 
 
 DerivativeOperation = Literal["override", "additive", "multiplicative", "clamp"]
@@ -46,14 +44,6 @@ multiplicative → clamp. Within each phase, ``order_index`` orders ties.
 # ---------------------------------------------------------------------------
 # 3. Trait — unified property catalog (incl. status effects)
 # ---------------------------------------------------------------------------
-
-
-SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
-
-
-def slugify(name: str) -> str:
-    """A name as a slug: lower case, words joined by hyphens ("[redacted]" → "[redacted]")."""
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "trait"
 
 
 class TraitModel(

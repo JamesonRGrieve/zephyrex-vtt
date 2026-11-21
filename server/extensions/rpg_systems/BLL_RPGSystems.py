@@ -3,13 +3,20 @@
 wiki's rpg_core keeps campaigns and the character fields). It also gives the wiki's campaigns and
 items the game system they belong to (``game_system_id``), which its migration adds to their tables.
 Split from rpg_state (operator, 2026-11-20).
+
+A game system belongs to a setting ([redacted], [redacted]…), which is the wiki's (rpg_core's
+SettingModel, the wiki's S6; docs/SUITE.md: the wiki owns campaigns, world and canon, vtt owns
+systems and mechanics). The wiki sits above vtt, so ``setting_id`` is a reference by id, not a
+foreign key. The systems the operator named are seeded by name (game-systems.json, migration 003);
+their mechanics come per system pack.
 """
 
 from __future__ import annotations
 
+import re
 from typing import ClassVar, List, Optional, Type
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from zephyrex.pydantic2.registry import BaseModel
 from zephyrex.pydantic2.fastapi import RouterMixin
@@ -33,6 +40,14 @@ from zephyrex.extensions.world_inventory.BLL_WorldInventory import ItemModel  # 
 # ---------------------------------------------------------------------------
 
 
+SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
+def slugify(name: str) -> str:
+    """A name as a slug: lower case, words joined by hyphens ("[redacted]" → "redacted")."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "unnamed"
+
+
 class GameSystemModel(
     ApplicationModel.Optional,
     UpdateMixinModel.Optional,
@@ -41,6 +56,8 @@ class GameSystemModel(
     metaclass=ModelMeta,
 ):
     Manager: ClassVar[Type["GameSystemManager"]] = None
+    slug: Optional[str] = Field(None, description="Stable name (redacted); from the name when not given")
+    setting_id: Optional[str] = Field(None, description="The wiki's setting it belongs to (a reference, no FK)")
     table_comment: ClassVar[str] = (
         "Reference catalog of supported RPG systems (DnD 5e, Pathfinder 2e, ...)"
     )
@@ -48,13 +65,25 @@ class GameSystemModel(
     class Create(BaseModel):
         name: str = Field(..., description="Display name of the system")
         description: Optional[str] = Field(None)
+        slug: Optional[str] = Field(None, pattern=SLUG_PATTERN)
+        setting_id: Optional[str] = None
+
+        @model_validator(mode="after")
+        def _slug_from_name(self) -> "GameSystemModel.Create":
+            if self.slug is None:
+                self.slug = slugify(self.name)
+            return self
 
     class Update(BaseModel):
         name: Optional[str] = None
         description: Optional[str] = None
+        slug: Optional[str] = Field(None, pattern=SLUG_PATTERN)
+        setting_id: Optional[str] = None
 
     class Search(ApplicationModel.Search):
         name: Optional[StringSearchModel] = None
+        slug: Optional[StringSearchModel] = None
+        setting_id: Optional[StringSearchModel] = None
 
 
 class GameSystemManager(AbstractBLLManager, RouterMixin):
