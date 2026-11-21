@@ -12,6 +12,11 @@ repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
 name = "rpg_core"
 optional = false
 
+# A scene and its regions are the wiki's locations on a map
+[[extension_dependencies]]
+name = "world_spatial"
+optional = false
+
 # A token stands for one of genealogy's persons
 [[extension_dependencies]]
 name = "genealogy"

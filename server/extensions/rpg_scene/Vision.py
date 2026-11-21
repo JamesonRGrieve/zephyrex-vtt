@@ -187,20 +187,148 @@ def perceive(scene: Scene, viewer: Token, tokens: Iterable[Token], walls: Sequen
     return perception
 
 
+def _touches(p: Point, q: Point, a: Point, b: Point) -> bool:
+    """Whether segment p→q meets segment a→b at all: crossing, touching an end, or lying along it."""
+    d1, d2 = _cross(a, b, p), _cross(a, b, q)
+    d3, d4 = _cross(p, q, a), _cross(p, q, b)
+    if ((d1 > 0 > d2) or (d1 < 0 < d2)) and ((d3 > 0 > d4) or (d3 < 0 < d4)):
+        return True
+
+    def on(o: Point, x: Point, y: Point) -> bool:
+        return min(o[0], y[0]) <= x[0] <= max(o[0], y[0]) and min(o[1], y[1]) <= x[1] <= max(o[1], y[1])
+
+    return (
+        (d1 == 0 and on(a, p, b)) or (d2 == 0 and on(a, q, b)) or (d3 == 0 and on(p, a, q)) or (d4 == 0 and on(p, b, q))
+    )
+
+
 def blocks_move(start: Point, end: Point, walls: Iterable[Wall]) -> str | None:
-    """The wall a move from ``start`` to ``end`` (token centres) would cross, or None. A wall that
-    doesn't restrict movement, an open door and the open side of a one-way wall let it through."""
+    """The wall a move from ``start`` to ``end`` (token centres) would cross or touch, or None. A
+    wall that doesn't restrict movement, an open door and the open side of a one-way wall let it
+    through. Touching counts: a wall through cell centres would otherwise let a token step onto it
+    and off the other side, never "crossing" it."""
     for wall in walls:
         if wall.move_restriction == "none":
             continue
         if wall.door_type != "none" and wall.door_state in OPEN_DOOR_STATES:
             continue
         for a, b in _segments(wall):
-            if not _cuts(start, end, a, b):
+            if not _touches(start, end, a, b):
                 continue
             if wall.direction == "both":
                 return wall.id
-            on_left = _cross(a, b, start) > 0
+            side = _cross(a, b, start)
+            if side == 0:
+                side = -_cross(a, b, end)
+            on_left = side > 0
             if on_left == (wall.direction == "left"):
                 return wall.id
+    return None
+
+
+def find_path(
+    start: Point, goal: Point, grid: float, bounds: tuple[float, float], walls: Sequence[Wall], limit: int = 20000
+) -> list[Point] | None:
+    """The cells from ``start`` to ``goal`` (both points snap to their cell centres) on a square grid,
+    each step to one of the eight neighbours, never across a wall that blocks movement
+    (blocks_move) and never outside the scene's bounds (width, height). A diagonal step needs both of
+    its orthogonal steps open too, so nothing slips through a corner. Every step counts one cell.
+    None when there is no way through, or the search passes ``limit`` cells."""
+    import heapq
+
+    width, height = bounds
+    columns, rows = max(1, int(width // grid)), max(1, int(height // grid))
+
+    def cell(point: Point) -> tuple[int, int]:
+        return (min(columns - 1, max(0, int(point[0] // grid))), min(rows - 1, max(0, int(point[1] // grid))))
+
+    def centre(at: tuple[int, int]) -> Point:
+        return ((at[0] + 0.5) * grid, (at[1] + 0.5) * grid)
+
+    def open_step(a: tuple[int, int], b: tuple[int, int]) -> bool:
+        return blocks_move(centre(a), centre(b), walls) is None
+
+    begin, end = cell(start), cell(goal)
+    frontier: list[tuple[int, int, tuple[int, int]]] = [(0, 0, begin)]
+    came: dict[tuple[int, int], tuple[int, int] | None] = {begin: None}
+    cost: dict[tuple[int, int], int] = {begin: 0}
+    order = 0
+    while frontier:
+        _, _, here = heapq.heappop(frontier)
+        if here == end:
+            path = [here]
+            while came[path[-1]] is not None:
+                path.append(came[path[-1]])  # type: ignore[arg-type]
+            return [centre(at) for at in reversed(path)]
+        if len(came) > limit:
+            return None
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                there = (here[0] + dx, here[1] + dy)
+                if not (0 <= there[0] < columns and 0 <= there[1] < rows):
+                    continue
+                if not open_step(here, there):
+                    continue
+                if dx and dy and not (open_step(here, (here[0] + dx, here[1])) and open_step(here, (here[0], here[1] + dy))):
+                    continue
+                step = cost[here] + 1
+                if step < cost.get(there, step + 1):
+                    cost[there] = step
+                    came[there] = here
+                    order += 1
+                    heapq.heappush(frontier, (step + max(abs(end[0] - there[0]), abs(end[1] - there[1])), order, there))
+    return None
+
+
+def _flat_points(points: Sequence[Any]) -> list[Point]:
+    if points and isinstance(points[0], (int, float)):
+        return [(float(points[index]), float(points[index + 1])) for index in range(0, len(points) - 1, 2)]
+    return [(float(one[0]), float(one[1])) for one in points]
+
+
+def in_shape(point: Point, shape: dict[str, Any]) -> bool:
+    """Whether a point lies inside a region shape (the cartography model's form): a polygon
+    ({points} as [x, y, …] or [[x, y], …]), a rectangle ({x, y, width, height}) or an ellipse or circle
+    ({x, y, radiusX, radiusY} or {x, y, radius}, centred on x, y)."""
+    x, y = point
+    kind = shape.get("type")
+    if kind == "polygon":
+        corners = _flat_points(shape.get("points") or [])
+        inside = False
+        for index, (ax, ay) in enumerate(corners):
+            bx, by = corners[index - 1]
+            if (ay > y) != (by > y) and x < (bx - ax) * (y - ay) / ((by - ay) or 1e-12) + ax:
+                inside = not inside
+        return inside
+    if kind == "rectangle":
+        left, top = float(shape.get("x", 0)), float(shape.get("y", 0))
+        return left <= x <= left + float(shape.get("width", 0)) and top <= y <= top + float(shape.get("height", 0))
+    if kind in ("ellipse", "circle"):
+        rx = float(shape.get("radiusX", shape.get("radius", 0)) or 0)
+        ry = float(shape.get("radiusY", shape.get("radius", 0)) or 0)
+        if rx <= 0 or ry <= 0:
+            return False
+        return ((x - float(shape.get("x", 0))) / rx) ** 2 + ((y - float(shape.get("y", 0))) / ry) ** 2 <= 1
+    return False
+
+
+def shape_box(shape: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    """A shape's bounding box (left, top, right, bottom), for its centre and its size."""
+    kind = shape.get("type")
+    if kind == "polygon":
+        corners = _flat_points(shape.get("points") or [])
+        if not corners:
+            return None
+        xs, ys = [one[0] for one in corners], [one[1] for one in corners]
+        return (min(xs), min(ys), max(xs), max(ys))
+    if kind == "rectangle":
+        left, top = float(shape.get("x", 0)), float(shape.get("y", 0))
+        return (left, top, left + float(shape.get("width", 0)), top + float(shape.get("height", 0)))
+    if kind in ("ellipse", "circle"):
+        rx = float(shape.get("radiusX", shape.get("radius", 0)) or 0)
+        ry = float(shape.get("radiusY", shape.get("radius", 0)) or 0)
+        cx, cy = float(shape.get("x", 0)), float(shape.get("y", 0))
+        return (cx - rx, cy - ry, cx + rx, cy + ry)
     return None

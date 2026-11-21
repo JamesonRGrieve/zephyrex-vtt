@@ -27,8 +27,9 @@ from pydantic import BaseModel as PlainModel
 from pydantic import Field
 from zephyrex.lib.Rooms import room_of
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager, PersonModel
-from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, blocks_move, perceive
+from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, blocks_move, find_path, in_shape, perceive, shape_box
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
+from zephyrex.extensions.world_spatial.BLL_WorldSpatial import LocationManager, LocationModel  # type: ignore[import-not-found]
 from zephyrex.lib.CustomRoute import ExposeIn, custom_route
 from zephyrex.lib.Environment import env
 from zephyrex.logic.AbstractLogicManager import (
@@ -61,6 +62,7 @@ class SceneModel(
     UpdateMixinModel.Optional,
     NameMixinModel.Optional,
     CampaignModel.Reference.Optional,
+    LocationModel.Reference.Optional,
     metaclass=ModelMeta,
 ):
     Manager: ClassVar[Type["SceneManager"]] = None
@@ -76,9 +78,12 @@ class SceneModel(
     padding: Optional[float] = Field(0.0, description="Share of width and height around the map")
     splats: Optional[list[dict[str, Any]]] = Field(None, description="Terrain paint layers (cartography); masks are attachments")
     flags: Optional[dict[str, Any]] = Field(None, description="Other systems' data about the place, kept as given")
+    entry_x: Optional[float] = Field(None, description="Where arrivals appear, pixels; none = the scene's centre")
+    entry_y: Optional[float] = Field(None, description="Where arrivals appear, pixels; none = the scene's centre")
+    is_active: Optional[bool] = Field(False, description="The campaign's current scene (one per campaign; activate)")
     table_comment: ClassVar[str] = "A playable area in a campaign: the battlemap a table plays on"
 
-    class Create(BaseModel, CampaignModel.Reference.ID.Optional):
+    class Create(BaseModel, CampaignModel.Reference.ID.Optional, LocationModel.Reference.ID.Optional):
         name: str = Field(...)
         width: Optional[int] = Field(None, ge=1)
         height: Optional[int] = Field(None, ge=1)
@@ -92,8 +97,13 @@ class SceneModel(
         padding: float = Field(0.0, ge=0, le=1)
         splats: Optional[list[dict[str, Any]]] = None
         flags: Optional[dict[str, Any]] = None
+        entry_x: Optional[float] = None
+        entry_y: Optional[float] = None
 
     class Update(BaseModel):
+        location_id: Optional[str] = None
+        # Set through activate (one per campaign), which clears the others.
+        is_active: Optional[bool] = None
         name: Optional[str] = None
         width: Optional[int] = Field(None, ge=1)
         height: Optional[int] = Field(None, ge=1)
@@ -107,8 +117,11 @@ class SceneModel(
         padding: Optional[float] = Field(None, ge=0, le=1)
         splats: Optional[list[dict[str, Any]]] = None
         flags: Optional[dict[str, Any]] = None
+        entry_x: Optional[float] = None
+        entry_y: Optional[float] = None
 
-    class Search(ApplicationModel.Search, CampaignModel.Reference.ID.Search):
+    class Search(ApplicationModel.Search, CampaignModel.Reference.ID.Search, LocationModel.Reference.ID.Search):
+        is_active: Optional[bool] = None
         name: Optional[StringSearchModel] = None
 
 
@@ -441,6 +454,7 @@ class SceneRegionModel(
     SceneModel.Reference.Optional,
     SceneLevelModel.Reference.Optional,
     SceneFeatureModel.Reference.Optional,
+    LocationModel.Reference.Optional,
     metaclass=ModelMeta,
 ):
     """An area with behaviours: a zone, a hazard, a trap, stairs between levels, a ceiling, terrain
@@ -453,7 +467,11 @@ class SceneRegionModel(
     table_comment: ClassVar[str] = "An area of a scene with behaviours"
 
     class Create(
-        BaseModel, SceneModel.Reference.ID, SceneLevelModel.Reference.ID.Optional, SceneFeatureModel.Reference.ID.Optional
+        BaseModel,
+        SceneModel.Reference.ID,
+        SceneLevelModel.Reference.ID.Optional,
+        SceneFeatureModel.Reference.ID.Optional,
+        LocationModel.Reference.ID.Optional,
     ):
         name: Optional[str] = None
         shapes: list[dict[str, Any]] = Field(..., min_length=1)
@@ -462,6 +480,7 @@ class SceneRegionModel(
 
     class Update(BaseModel):
         name: Optional[str] = None
+        location_id: Optional[str] = None
         shapes: Optional[list[dict[str, Any]]] = Field(None, min_length=1)
         behaviours: Optional[list[dict[str, Any]]] = None
         is_hidden: Optional[bool] = None
@@ -524,6 +543,8 @@ class SceneTokenManager(AbstractBLLManager, RouterMixin):
             if blocks_move(start, end, walls) is not None:
                 raise HTTPException(status_code=422, detail={"message": "A wall is in the way"})
         moved = tokens.update(id=token.id, x=body.x, y=body.y)
+        # The person's wiki location follows their token.
+        SceneManager(requester_id=str(self.requester.id), model_registry=self.model_registry).sync_location(moved, scene)
         return moved.model_dump(mode="json") if hasattr(moved, "model_dump") else dict(moved)
 
     @custom_route(
@@ -691,6 +712,66 @@ class SceneTokensOut(PlainModel):
     scene_tokens: list[SceneTokenOut]
 
 
+class PilotOut(PlainModel):
+    person_id: str
+    # The token, where it stands (its top-left, pixels) and on which scene; none when the target
+    # place is on no map, so the character left the maps (its tokens removed).
+    token_id: Optional[str] = None
+    scene_id: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    arrived: bool = True
+    # Cells still to walk, in scene units, when max_distance stopped it short.
+    remaining: float = 0.0
+    removed: int = 0
+    location_id: Optional[str] = None
+
+
+class ActivateEnvelope(PlainModel):
+    # Nothing to say beyond the scene in the path; a POST's typed body all the same.
+    activate: dict[str, Any] = Field(default_factory=dict)
+
+
+class CurrentRequest(PlainModel):
+    campaign_id: str
+
+
+class CurrentEnvelope(PlainModel):
+    current: CurrentRequest
+
+
+class SceneSummary(PlainModel):
+    id: str
+    name: Optional[str]
+    campaign_id: Optional[str]
+    location_id: Optional[str]
+    width: Optional[int]
+    height: Optional[int]
+    grid_size: float
+
+
+class CurrentOut(PlainModel):
+    scene: Optional[SceneSummary]
+
+
+def _summary(scene: Any) -> SceneSummary:
+    return SceneSummary(
+        id=scene.id,
+        name=scene.name,
+        campaign_id=scene.campaign_id,
+        location_id=getattr(scene, "location_id", None),
+        width=scene.width,
+        height=scene.height,
+        grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE),
+    )
+
+
+def _live(manager: Any, **filters: Any) -> list[Any]:
+    """A trusted manager's rows, without soft-deleted ones. The framework surfaces tombstones to
+    ROOT (an audit read), and the rows don't carry deleted_at, so the filter goes in the query."""
+    return list(manager.list(filters=[manager.DB.deleted_at.is_(None)], **filters))
+
+
 def _not_found(model: str) -> HTTPException:
     return HTTPException(
         status_code=404, detail={"message": f"Request searched {model} and could not find the required record."}
@@ -751,7 +832,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         if not (gm or player):
             # The same answer as a scene or token that isn't there.
             raise _not_found("SceneTokenModel")
-        rows = list(self._trusted(SceneTokenManager).list(scene_id=scene.id))
+        rows = list(_live(self._trusted(SceneTokenManager), scene_id=scene.id))
         walls = list(self._trusted(SceneWallManager).list(scene_id=scene.id))
         perceived = perceive(
             Scene(
@@ -805,7 +886,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         requester = str(self.requester.id)
         campaign = None if scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
         gm = campaign is not None and requester == campaign.user_id
-        rows = list(self._trusted(SceneTokenManager).list(scene_id=scene.id))
+        rows = list(_live(self._trusted(SceneTokenManager), scene_id=scene.id))
         walls = list(self._trusted(SceneWallManager).list(scene_id=scene.id))
         people: dict[str, Any] = {}
 
@@ -883,6 +964,204 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             walls=shown,
         )
 
+    def _gms_of(self, campaign: Any) -> set[str]:
+        """Who is a campaign's GM: its owner, or its creator for a campaign made without one."""
+        if campaign is None:
+            return set()
+        return {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}
+
+    def activate_scene_for(self, scene_id: str) -> SceneSummary:
+        """Make a scene its campaign's current scene, and no other: the campaign's GM only."""
+        scene = self._get(SceneManager, scene_id)
+        campaign = None if scene is None or scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        if scene is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("SceneModel")
+        scenes = self._trusted(SceneManager)
+        for other in scenes.list(campaign_id=scene.campaign_id):
+            if other.id != scene.id and other.is_active:
+                scenes.update(id=other.id, is_active=False)
+        return _summary(scenes.update(id=scene.id, is_active=True))
+
+    def current_scene_for(self, campaign_id: str) -> Optional[SceneSummary]:
+        """A campaign's current scene, for anyone who may read it; none when none is active."""
+        for scene in self._trusted(SceneManager).list(campaign_id=campaign_id):
+            if scene.is_active:
+                try:
+                    return _summary(self.get(id=scene.id))
+                except HTTPException:
+                    return None
+        return None
+
+    def _arrival_point(self, scene: Any) -> tuple[float, float]:
+        """Where arrivals appear: the scene's entry point, else its centre."""
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        width = float(scene.width or 40 * grid)
+        height = float(scene.height or 30 * grid)
+        x = scene.entry_x if getattr(scene, "entry_x", None) is not None else width / 2
+        y = scene.entry_y if getattr(scene, "entry_y", None) is not None else height / 2
+        return (float(x), float(y))
+
+    def _place_of(self, campaign_id: str, location_id: str) -> tuple[Any, tuple[float, float]] | None:
+        """The scene and point a wiki location is on: a region of a campaign scene whose location it
+        is (its centre), else a campaign scene whose location it is (its entry), else the same for the
+        location's parents, nearest first. None when no map shows it."""
+        scenes = list(self._trusted(SceneManager).list(campaign_id=campaign_id))
+        by_id = {scene.id: scene for scene in scenes}
+        regions = self._trusted(SceneRegionManager)
+        locations = self._trusted(LocationManager)
+        seen: set[str] = set()
+        current: Optional[str] = location_id
+        while current and current not in seen:
+            seen.add(current)
+            for region in regions.list(location_id=current):
+                scene = by_id.get(region.scene_id)
+                boxes = [box for box in (shape_box(shape) for shape in region.shapes or []) if box]
+                if scene is not None and boxes:
+                    left, top, right, bottom = boxes[0]
+                    return scene, ((left + right) / 2, (top + bottom) / 2)
+            for scene in scenes:
+                if getattr(scene, "location_id", None) == current:
+                    return scene, self._arrival_point(scene)
+            try:
+                current = getattr(locations.get(id=current), "parent_id", None)
+            except HTTPException:
+                current = None
+        return None
+
+    def location_at(self, scene: Any, x: float, y: float) -> Optional[str]:
+        """The wiki location a point on a scene stands in: the smallest region with a location that
+        holds it, else the scene's own location."""
+        best: tuple[float, str] | None = None
+        for region in self._trusted(SceneRegionManager).list(scene_id=scene.id):
+            if not getattr(region, "location_id", None):
+                continue
+            for shape in region.shapes or []:
+                box = shape_box(shape)
+                if box and in_shape((x, y), shape):
+                    area = (box[2] - box[0]) * (box[3] - box[1])
+                    if best is None or area < best[0]:
+                        best = (area, region.location_id)
+        return best[1] if best else getattr(scene, "location_id", None)
+
+    def sync_location(self, token: Any, scene: Any) -> Optional[str]:
+        """The person's wiki location follows their token: the location under its centre. Written as
+        the system once the move itself was allowed (a player may move their token without being
+        allowed to edit their person record)."""
+        if token.person_id is None:
+            return None
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        centre_x = float(token.x or 0) + float(token.width or 1) * grid / 2
+        centre_y = float(token.y or 0) + float(token.height or 1) * grid / 2
+        location = self.location_at(scene, centre_x, centre_y)
+        if location:
+            person = self._get(PersonManager, token.person_id)
+            if person is not None and getattr(person, "location_id", None) != location:
+                self._trusted(PersonManager).update(
+                    id=token.person_id, location_id=location
+                )
+        return location
+
+    def _free_cell(self, scene: Any, point: tuple[float, float], taken: set[tuple[int, int]]) -> tuple[float, float]:
+        """The top-left of the free cell nearest a point, inside the scene, spiralling outward."""
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        columns = max(1, int(float(scene.width or 40 * grid) // grid))
+        rows = max(1, int(float(scene.height or 30 * grid) // grid))
+        cx = min(columns - 1, max(0, int(point[0] // grid)))
+        cy = min(rows - 1, max(0, int(point[1] // grid)))
+        for ring in range(max(columns, rows)):
+            for dx in range(-ring, ring + 1):
+                for dy in range(-ring, ring + 1):
+                    if max(abs(dx), abs(dy)) != ring:
+                        continue
+                    at = (cx + dx, cy + dy)
+                    if 0 <= at[0] < columns and 0 <= at[1] < rows and at not in taken:
+                        return (at[0] * grid, at[1] * grid)
+        return (cx * grid, cy * grid)
+
+    def pilot_for(
+        self,
+        person_id: str,
+        location_id: Optional[str] = None,
+        scene_id: Optional[str] = None,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+        max_distance: Optional[float] = None,
+    ) -> PilotOut:
+        """The GM (agent) moves a character to a wiki location, or to a point on a scene. On the
+        same scene the token walks a path round walls (find_path: the player-move wall rule, within
+        the scene), at most ``max_distance`` scene units when given; on another scene it leaves its
+        old one and appears at the target's region centre or entry, on the nearest free cell. A place
+        on no map takes the character off the maps (their tokens removed). The person's location
+        follows. The campaign's GM only."""
+        person = self._get(PersonManager, person_id)
+        campaign_id = None if person is None else getattr(person, "campaign_id", None)
+        campaign = None if campaign_id is None else self._get(CampaignManager, campaign_id)
+        if person is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("PersonModel")
+        if (location_id is None) == (scene_id is None):
+            raise HTTPException(status_code=422, detail={"message": "Give either a location or a scene"})
+        tokens = self._trusted(SceneTokenManager)
+        scenes = {scene.id: scene for scene in self._trusted(SceneManager).list(campaign_id=campaign_id)}
+        held = [token for token in _live(tokens, person_id=person_id) if token.scene_id in scenes]
+        if scene_id is not None:
+            scene = scenes.get(scene_id)
+            if scene is None:
+                raise _not_found("SceneModel")
+            point = (float(x), float(y)) if x is not None and y is not None else self._arrival_point(scene)
+        else:
+            found = self._place_of(campaign_id, location_id or "")
+            if found is None:
+                for token in held:
+                    tokens.delete(id=token.id)
+                if location_id and getattr(person, "location_id", None) != location_id:
+                    self._trusted(PersonManager).update(
+                        id=person_id, location_id=location_id
+                    )
+                return PilotOut(person_id=person_id, removed=len(held), location_id=location_id)
+            scene, point = found
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        here = next((token for token in held if token.scene_id == scene.id), None)
+        removed = 0
+        for token in held:
+            if token is not here:
+                tokens.delete(id=token.id)
+                removed += 1
+        others = {
+            (int(float(token.x or 0) // grid), int(float(token.y or 0) // grid))
+            for token in _live(tokens, scene_id=scene.id)
+            if token.person_id != person_id
+        }
+        if here is None:
+            spot = self._free_cell(scene, point, others)
+            token = tokens.create(name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person_id, x=spot[0], y=spot[1])
+            location = self.sync_location(token, scene)
+            return PilotOut(person_id=person_id, token_id=token.id, scene_id=scene.id, x=spot[0], y=spot[1], removed=removed, location_id=location)
+        start = (float(here.x or 0) + grid / 2, float(here.y or 0) + grid / 2)
+        bounds = (float(scene.width or 40 * grid), float(scene.height or 30 * grid))
+        walls = [_wall(row) for row in self._trusted(SceneWallManager).list(scene_id=scene.id)]
+        path = find_path(start, point, grid, bounds, walls)
+        if path is None:
+            raise HTTPException(status_code=422, detail={"message": "There's no way through to there"})
+        steps = len(path) - 1
+        allowed = steps
+        if max_distance is not None:
+            allowed = min(steps, int(max(0.0, max_distance) // float(scene.grid_distance or DEFAULT_GRID_DISTANCE)))
+        stop = path[allowed]
+        target = (stop[0] - grid / 2, stop[1] - grid / 2)
+        moved = tokens.update(id=here.id, x=target[0], y=target[1])
+        location = self.sync_location(moved, scene)
+        return PilotOut(
+            person_id=person_id,
+            token_id=here.id,
+            scene_id=scene.id,
+            x=target[0],
+            y=target[1],
+            arrived=allowed == steps,
+            remaining=(steps - allowed) * float(scene.grid_distance or DEFAULT_GRID_DISTANCE),
+            removed=removed,
+            location_id=location,
+        )
+
     def tokens_for(self, scene_id: str) -> list[SceneTokenOut]:
         """Who is on a scene: each token and the wiki person it stands for. The campaign's GM gets
         every token, hidden ones flagged (a GM-side decision may count them); a member of the
@@ -896,7 +1175,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner
         }
         gm = requester in owners
-        rows = list(self._trusted(SceneTokenManager).list(scene_id=scene.id))
+        rows = list(_live(self._trusted(SceneTokenManager), scene_id=scene.id))
         if not gm:
             member = False
             for row in rows:
@@ -911,6 +1190,32 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             for row in rows
             if gm or not row.is_hidden
         ]
+
+    @custom_route(
+        method="POST",
+        path="/{scene_id}/activate",
+        input_model=ActivateEnvelope,
+        output_model=SceneSummary,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Make a scene its campaign's current scene (the campaign's GM)",
+    )
+    async def activate_route(self, scene_id: str, body: ActivateEnvelope) -> SceneSummary:
+        return self.activate_scene_for(scene_id)
+
+    @custom_route(
+        method="POST",
+        path="/current",
+        input_model=CurrentEnvelope,
+        output_model=CurrentOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="A campaign's current scene, or none",
+    )
+    async def current_route(self, body: CurrentEnvelope) -> CurrentOut:
+        return CurrentOut(scene=self.current_scene_for(body.current.campaign_id))
 
     @custom_route(
         method="GET",

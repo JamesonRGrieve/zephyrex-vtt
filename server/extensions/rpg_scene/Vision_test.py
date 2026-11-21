@@ -34,3 +34,28 @@ def test_a_move_is_blocked_by_walls_that_restrict_movement() -> None:
     one_way = [Wall(id="o", points=[[0, 100], [200, 100]], direction="left")]
     blocked = [blocks_move((50, 50), (50, 150), one_way), blocks_move((50, 150), (50, 50), one_way)]
     assert sorted(blocked, key=str) == sorted(["o", None], key=str), "one side only"
+
+
+def test_a_path_goes_round_a_wall_and_never_through_it() -> None:
+    from zephyrex.extensions.rpg_scene.Vision import blocks_move, find_path
+
+    wall = Wall(id="w", points=[[250, 0], [250, 200]])
+    path = find_path((50, 50), (450, 50), 100, (500, 300), [wall])
+    assert path is not None and path[0] == (50.0, 50.0) and path[-1] == (450.0, 50.0)
+    assert all(blocks_move(a, b, [wall]) is None for a, b in zip(path, path[1:]))
+    assert any(point[1] > 200 for point in path), "round the end of the wall"
+    closed = Wall(id="c", points=[[250, 0], [250, 300]])
+    assert find_path((50, 50), (450, 50), 100, (500, 300), [closed]) is None
+    assert find_path((50, 50), (450, 50), 100, (500, 300), []) == [(50.0, 50.0), (150.0, 50.0), (250.0, 50.0), (350.0, 50.0), (450.0, 50.0)]
+
+
+def test_points_in_region_shapes() -> None:
+    from zephyrex.extensions.rpg_scene.Vision import in_shape, shape_box
+
+    square = {"type": "polygon", "points": [0, 0, 100, 0, 100, 100, 0, 100]}
+    assert in_shape((50, 50), square) and not in_shape((150, 50), square)
+    assert in_shape((5, 5), {"type": "polygon", "points": [[0, 0], [10, 0], [10, 10], [0, 10]]})
+    assert in_shape((10, 10), {"type": "rectangle", "x": 0, "y": 0, "width": 20, "height": 20})
+    assert in_shape((3, 4), {"type": "circle", "x": 0, "y": 0, "radius": 5})
+    assert not in_shape((4, 4), {"type": "circle", "x": 0, "y": 0, "radius": 5})
+    assert shape_box(square) == (0, 0, 100, 100)

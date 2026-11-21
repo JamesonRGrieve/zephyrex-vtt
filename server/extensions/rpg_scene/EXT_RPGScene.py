@@ -22,6 +22,12 @@ class RPGSceneExtension(AbstractStaticExtension):
                 reason="A scene belongs to a campaign, and a token stands for one of its characters",
             ),
             EXT_Dependency(
+                name="world_spatial",
+                friendly_name="World Spatial",
+                optional=False,
+                reason="A scene and its regions are the wiki's locations on a map",
+            ),
+            EXT_Dependency(
                 name="genealogy",
                 friendly_name="Genealogy",
                 optional=False,
@@ -50,3 +56,40 @@ class RPGSceneExtension(AbstractStaticExtension):
         (entity_id, or none). The campaign's GM gets every token, hidden ones flagged (hidden: true);
         a player of the campaign gets only the ones not hidden."""
         return [one.model_dump() for one in cls.scenes(requester_id).tokens_for(scene_id)]
+
+    @classmethod
+    @ability("current_scene")
+    async def current_scene(cls, requester_id: str, campaign_id: str) -> dict[str, Any] | None:
+        """A campaign's current scene ({id, name, campaign_id, location_id, width, height,
+        grid_size}), or None when none is active. A chat on a split party may override it with its
+        own scene; otherwise the table plays here."""
+        found = cls.scenes(requester_id).current_scene_for(campaign_id)
+        return None if found is None else found.model_dump()
+
+    @classmethod
+    @ability("activate_scene")
+    async def activate_scene(cls, requester_id: str, scene_id: str) -> dict[str, Any]:
+        """Make a scene its campaign's current scene, and no other (the campaign's GM)."""
+        return cls.scenes(requester_id).activate_scene_for(scene_id).model_dump()
+
+    @classmethod
+    @ability("pilot_token")
+    async def pilot_token(
+        cls,
+        requester_id: str,
+        person_id: str,
+        location_id: str | None = None,
+        scene_id: str | None = None,
+        x: float | None = None,
+        y: float | None = None,
+        max_distance: float | None = None,
+    ) -> dict[str, Any]:
+        """The GM moves a character, for routines as time advances: to a wiki ``location_id`` (vtt
+        finds the map: a region of that place, a scene of it, or a parent's), or to ``scene_id`` at
+        (x, y) or its entry point. On the same scene the token walks round walls within the scene,
+        at most ``max_distance`` scene units if given ({arrived: false, remaining} when stopped short);
+        on another scene it moves there, on the nearest free cell. A place no map shows takes the
+        character off the maps (tokens removed, {removed}). The person's wiki location follows.
+        422 when there's no way through. Returns {person_id, token_id, scene_id, x, y, arrived,
+        remaining, removed, location_id}. The campaign's GM only."""
+        return cls.scenes(requester_id).pilot_for(person_id, location_id, scene_id, x, y, max_distance).model_dump()
