@@ -18,3 +18,4 @@ export { campaignPath, scenePath, sheetPath, systemsPath, vttRoot } from './path
 export { CampaignSeats, CurrentSceneTokens, SceneList } from './table/TablePanel';
 export { TokenList } from './scene/SceneView';
 export { Inventory, type InventoryProps } from './inventory/Inventory';
+export { CombatOrder, type CombatOrderProps, type EncounterOrder } from './combat/CombatOrder';
