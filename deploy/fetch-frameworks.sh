@@ -3,6 +3,7 @@
 # Lays out a build workspace the way Zephyrex VTT's path dependencies expect:
 #   <root>/zephyrex-vtt  this repository (copied)
 #   <root>/<framework>    each framework at the commit deploy/frameworks.env pins
+#   <root>/zephyrex-rpg-wiki  the wiki, at its pinned commit too
 # Usage: deploy/fetch-frameworks.sh <root>
 set -euo pipefail
 
@@ -40,3 +41,6 @@ fetch client-framework https://github.com/JamesonRGrieve/ClientFramework.git "$C
 fetch auth https://github.com/JamesonRGrieve/auth.git "$AUTH_REF"
 fetch dynamic-form https://github.com/JamesonRGrieve/dynamic-form.git "$DYNAMIC_FORM_REF"
 fetch zod2gql https://github.com/JamesonRGrieve/zod2gql.git "$ZOD2GQL_REF"
+# The wiki is a pinned path source too: the server reads its extensions beside its own
+# (server/vtt_app.py EXTENSIONS_ROOTS), and they read the wiki's contract/ from the checkout's root.
+fetch zephyrex-rpg-wiki https://github.com/JamesonRGrieve/zephyrex-rpg-wiki.git "$WIKI_REF"

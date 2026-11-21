@@ -13,6 +13,10 @@ export default defineConfig({
     maxWorkers: '100%',
     globals: true,
     exclude: ['**/node_modules/**', '.next/**', 'e2e/**', 'tests/**', '**/*.stories.{ts,tsx}'],
+    // Inline the compiled framework, so this app's module mocks (next/navigation, cookies-next) reach
+    // the framework's own imports too (Zephyrex Framework App Standards, Testing). Vitest tests a
+    // RegExp against the module's full path, so the scoped packages match on their node_modules path.
+    server: { deps: { inline: ['zephyrex', /\/node_modules\/@zephyrex\//] } },
   },
   resolve: {
     alias: {
