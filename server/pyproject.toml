@@ -9,7 +9,7 @@ description = "Zephyrex VTT: maps, scenes, tokens, sheets, dice, combat, live pl
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
-    # auth_session holds signed-in sessions; rpg_state widens the framework's genealogy extension.
+    # auth_session holds signed-in sessions; the wiki's rpg_core widens the framework's genealogy extension.
     "zephyrex[auth-session,genealogy]",
     # zephyrex passes FastAPI(openapi_version=...), which FastAPI 0.162 rejects;
     # hold the version the framework's own requirements.lock vets.

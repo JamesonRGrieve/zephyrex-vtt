@@ -1761,6 +1761,7 @@ requires-dist = [
     { name = "aiosmtplib", marker = "extra == 'email'", specifier = ">=3.0.0" },
     { name = "aiosqlite" },
     { name = "alembic" },
+    { name = "asyncpg", marker = "extra == 'postgresql'", specifier = ">=0.29.0" },
     { name = "azure-core", marker = "extra == 'cloud'", specifier = ">=1.29.0" },
     { name = "azure-storage-blob", marker = "extra == 'cloud'", specifier = ">=12.19.0" },
     { name = "bcrypt" },
@@ -1820,6 +1821,7 @@ requires-dist = [
     { name = "prometheus-client", marker = "extra == 'observability'", specifier = ">=0.20.0" },
     { name = "psutil", marker = "extra == 'fileio'", specifier = ">=5.9.0" },
     { name = "psutil", marker = "extra == 'local-ai'", specifier = ">=5.9.0" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgresql'", specifier = ">=3.2.0" },
     { name = "psycopg2-binary", marker = "extra == 'database'", specifier = ">=2.9.0" },
     { name = "pyasn1", marker = "extra == 'ldap-provider'", specifier = ">=0.6.1" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.0" },
@@ -1961,7 +1963,7 @@ requires-dist = [
     { name = "zephyrex", extras = ["x509-consumer"], marker = "extra == 'all'" },
     { name = "zephyrex", extras = ["x509-provider"], marker = "extra == 'all'" },
 ]
-provides-extras = ["cache", "mcp-server", "acl-rbac", "agreements", "ai", "ai-agents", "ai-chains", "ai-memories", "ai-prompts", "ai-tuning", "audit-retention", "auth-api-keys", "auth-device-pairing", "auth-invitations", "auth-lockout", "auth-magic-link", "auth-marketplace", "auth-merge", "auth-mfa", "auth-notifications", "auth-privacy", "auth-recovery-questions", "auth-session", "automotive", "backup-restore", "billing", "book", "cad", "calendar", "cloud", "contacts", "conversations", "crypto", "database", "database-memory", "ecommerce", "email", "entitlements", "erp", "fdm-sla-printing", "federation", "fileio", "forward-auth-consumer", "forward-auth-provider", "genealogy", "gifts", "health", "kerberos-consumer", "kerberos-provider", "ldap-consumer", "ldap-provider", "live-sync", "local-ai", "local-ai-gguf", "local-ai-torch", "maps", "math", "mcp-client", "media", "messaging", "meta-labels", "meta-logging", "meta-sdk-py", "meta-sdk-rs", "meta-sdk-ts", "metadata", "oauth-consumer", "oauth-provider", "observability", "payment", "privacy", "proxy-auth-consumer", "proxy-auth-provider", "quota", "radius-consumer", "radius-provider", "rota", "saml-consumer", "saml-provider", "scim-consumer", "scim-provider", "secret-vault", "sms", "social", "source", "wearable", "webauthn-consumer", "webauthn-provider", "webhooks", "websearch", "wiki", "x509-consumer", "x509-provider", "all", "dev"]
+provides-extras = ["cache", "mcp-server", "postgresql", "acl-rbac", "agreements", "ai", "ai-agents", "ai-chains", "ai-memories", "ai-prompts", "ai-tuning", "audit-retention", "auth-api-keys", "auth-device-pairing", "auth-invitations", "auth-lockout", "auth-magic-link", "auth-marketplace", "auth-merge", "auth-mfa", "auth-notifications", "auth-privacy", "auth-recovery-questions", "auth-session", "automotive", "backup-restore", "billing", "book", "cad", "calendar", "cloud", "contacts", "conversations", "crypto", "database", "database-memory", "ecommerce", "email", "entitlements", "erp", "fdm-sla-printing", "federation", "fileio", "forward-auth-consumer", "forward-auth-provider", "genealogy", "gifts", "health", "kerberos-consumer", "kerberos-provider", "ldap-consumer", "ldap-provider", "live-sync", "local-ai", "local-ai-gguf", "local-ai-torch", "maps", "math", "mcp-client", "media", "messaging", "meta-labels", "meta-logging", "meta-sdk-py", "meta-sdk-rs", "meta-sdk-ts", "metadata", "oauth-consumer", "oauth-provider", "observability", "payment", "privacy", "proxy-auth-consumer", "proxy-auth-provider", "quota", "radius-consumer", "radius-provider", "rota", "saml-consumer", "saml-provider", "scim-consumer", "scim-provider", "secret-vault", "sms", "social", "source", "wearable", "webauthn-consumer", "webauthn-provider", "webhooks", "websearch", "wiki", "x509-consumer", "x509-provider", "all", "dev"]
 
 [[package]]
 name = "zephyrex-vtt"

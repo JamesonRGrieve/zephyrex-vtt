@@ -4,4 +4,4 @@
 import { createExtension } from 'zephyrex/extensions';
 
 export const genealogyExtension = createExtension('genealogy');
-export const rpgStateExtension = createExtension('rpg_state');
+export const rpgSystemsExtension = createExtension('rpg_systems');

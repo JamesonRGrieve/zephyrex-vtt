@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 name = "rpg_traits"
 version = "0.1.0"
-description = "Traits, how they derive from one another, and each character's values"
+description = "Traits, how they derive from one another, each character's values, and plot hooks' character checks"
 entry_module = "EXT_RPGTraits"
 minimum_framework_version = "0.0.1"
 # Where this extension's source is offered (AGPL-3.0 section 13).
@@ -20,4 +20,9 @@ optional = false
 # A character's values are on genealogy's persons
 [[extension_dependencies]]
 name = "genealogy"
+optional = false
+
+# Plot hooks, whose character checks the party's traits decide
+[[extension_dependencies]]
+name = "world_narrative"
 optional = false

@@ -12,7 +12,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import ClassVar, List, Literal, Optional, Type
 
-from pydantic import Field
+import re
+
+from pydantic import Field, model_validator
 
 from zephyrex.pydantic2.registry import BaseModel
 from zephyrex.pydantic2.fastapi import RouterMixin
@@ -44,6 +46,14 @@ multiplicative → clamp. Within each phase, ``order_index`` orders ties.
 # ---------------------------------------------------------------------------
 # 3. Trait — unified property catalog (incl. status effects)
 # ---------------------------------------------------------------------------
+
+
+SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
+def slugify(name: str) -> str:
+    """A name as a slug: lower case, words joined by hyphens ("[redacted]" → "[redacted]")."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "trait"
 
 
 class TraitModel(
@@ -84,6 +94,13 @@ class TraitModel(
             "kind='status_effect'; NULL = persists until manually removed."
         ),
     )
+    slug: Optional[str] = Field(
+        None,
+        description=(
+            "The option's stable name within its kind ([redacted], [redacted]): what a plot hook's "
+            "character check names (contract/requirement-cases.json). From the name when not given."
+        ),
+    )
     table_comment: ClassVar[str] = (
         "Unified property catalog: stats, skills, spells, talents, feats, "
         "abilities, languages, resources, progression, and status effects. "
@@ -101,12 +118,20 @@ class TraitModel(
         description: Optional[str] = None
         kind: Optional[str] = None
         default_duration_seconds: Optional[int] = None
+        slug: Optional[str] = Field(None, pattern=SLUG_PATTERN)
+
+        @model_validator(mode="after")
+        def _slug_from_name(self) -> "TraitModel.Create":
+            if self.slug is None:
+                self.slug = slugify(self.name)
+            return self
 
     class Update(BaseModel):
         name: Optional[str] = None
         description: Optional[str] = None
         kind: Optional[str] = None
         default_duration_seconds: Optional[int] = None
+        slug: Optional[str] = Field(None, pattern=SLUG_PATTERN)
 
     class Search(
         ApplicationModel.Search,
@@ -115,6 +140,7 @@ class TraitModel(
     ):
         name: Optional[StringSearchModel] = None
         kind: Optional[StringSearchModel] = None
+        slug: Optional[StringSearchModel] = None
 
 
 class TraitManager(AbstractBLLManager, RouterMixin):

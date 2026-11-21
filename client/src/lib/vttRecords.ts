@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * The lite edition's rpg_state records: game systems and campaigns, with the same fields and rules
- * as the SaaS server's GameSystemModel and CampaignModel (server/extensions/rpg_state). Both
+ * The lite edition's game systems and campaigns, with the same fields and rules as the SaaS
+ * server's GameSystemModel (server/extensions/rpg_systems) and the wiki's CampaignModel (rpg_core). Both
  * editions answer contract/api-cases.json.
  */
 import type { Prisma } from '@prisma/client';

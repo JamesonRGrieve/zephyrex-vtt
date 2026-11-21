@@ -52,11 +52,11 @@ class TestUnifiedTraitContract:
     No separate StatusEffectModel exists."""
 
     def test_no_status_effect_model(self):
-        from zephyrex.extensions.rpg_state import BLL_RPGState
+        from zephyrex.extensions.rpg_traits import BLL_RPGTraits
 
-        assert not hasattr(BLL_RPGState, "StatusEffectModel")
-        assert not hasattr(BLL_RPGState, "StatusEffectTraitModel")
-        assert not hasattr(BLL_RPGState, "PersonStatusEffectModel")
+        assert not hasattr(BLL_RPGTraits, "StatusEffectModel")
+        assert not hasattr(BLL_RPGTraits, "StatusEffectTraitModel")
+        assert not hasattr(BLL_RPGTraits, "PersonStatusEffectModel")
 
     def test_status_effect_is_a_trait_kind(self):
         bs = TraitModel.Create(

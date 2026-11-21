@@ -3,7 +3,8 @@
 the wiki's rpg_core adds (``@extension_model(PersonModel)``, its migration adding the columns), and
 they round-trip through the API. They were once silently dropped (server-framework skipped
 ModelMeta-only extensions), so a character's campaign and player were lost, and the dice check could
-not tell who may roll. Kept here, in what was rpg_state, as the VTT's guard on that contract."""
+not tell who may roll. Kept in rpg_systems (moved from rpg_state when it retired) as the VTT's guard
+on that contract."""
 
 from collections.abc import Iterator
 from typing import Any

@@ -30,10 +30,11 @@ EXTENSIONS_ROOTS = [
 
 # From the framework: auth_session (signed-in sessions; the hosted edition has accounts), genealogy
 # (persons, the character table), acl_rbac (conversations requires it: it grants participants their
-# access) and conversations (tables and whispers). From the wiki: places,
-# factions, items and rpg_core (campaigns, the character fields). The VTT's own: rpg_systems (game
-# systems), rpg_traits, rpg_state (hooks, until the wiki takes them), rpg_dice (A21), rpg_scene
-# (A23) and rpg_table (multiplayer tables).
+# access) and conversations (tables and whispers). From the wiki: places, factions and
+# relationships, items, journals and plot hooks (world_narrative), tags and statuses
+# (world_taxonomy), posts on any record (entity_posts) and rpg_core (campaigns, the character
+# fields). The VTT's own: rpg_systems (game systems, and hooks' character checks), rpg_traits,
+# rpg_dice (A21), rpg_scene (A23) and rpg_table (multiplayer tables).
 EXTENSIONS = ",".join(
     [
         "auth_session",
@@ -43,10 +44,12 @@ EXTENSIONS = ",".join(
         "world_spatial",
         "world_social",
         "world_inventory",
+        "world_narrative",
+        "world_taxonomy",
+        "entity_posts",
         "rpg_core",
         "rpg_systems",
         "rpg_traits",
-        "rpg_state",
         "rpg_dice",
         "rpg_scene",
         "rpg_table",

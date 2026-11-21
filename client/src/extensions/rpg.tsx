@@ -33,7 +33,7 @@ export const rpgExtension: ZephyrexClientExtension = {
   name: 'rpg',
   displayName: 'Zephyrex VTT',
   description: 'Campaigns and game systems today; maps, scenes, dice and the live table on the way.',
-  serverExtension: 'rpg_state',
+  serverExtension: 'rpg_systems',
   pages: [{ path: 'rpg', component: RPGDashboard }],
   navItems: [{ title: 'Home', url: '/rpg' }],
 };

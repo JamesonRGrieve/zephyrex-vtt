@@ -14,9 +14,9 @@ It is one of three products in the Zephyrex RPG suite:
 The VTT reads the wiki (a scene sits on a location's map, and a token is a person).
 The AI product drives the VTT.
 
-Status: early alpha. The design is in [docs/DESIGN.md](docs/DESIGN.md). The server
-currently carries the `rpg_state` extension, which OBJECT_PLAN §6 (in zephyrex-rpg-wiki)
-splits into the VTT's `rpg_core`/`rpg_traits` and the wiki's `world_*` extensions.
+Status: early alpha. The design is in [docs/DESIGN.md](docs/DESIGN.md). The server loads the
+wiki's extensions (its `rpg_core` campaigns and characters, and its `world_*` places, factions,
+items, journals and plot hooks) from a second extensions root, and adds the VTT's own below.
 
 ## Layout
 
@@ -28,9 +28,13 @@ docs/     DESIGN.md
 
 ## Server extensions
 
-| Extension   | Depends on                         | Provides |
-|-------------|------------------------------------|----------|
-| `rpg_state` | `genealogy`, `acl_rbac` (optional) | Campaign state: characters, factions, items, quests, locations, traits |
+| Extension | Depends on | Provides |
+|---|---|---|
+| `rpg_systems` | `rpg_core`, `world_inventory` | Game systems (on the wiki's campaigns and items) |
+| `rpg_traits` | `rpg_systems`, `rpg_core`, `genealogy`, `world_narrative` | Traits, derived traits, the traits a character holds, and plot hooks' character checks (`check_requirements`) |
+| `rpg_dice` | `rpg_traits`, `rpg_core`, `world_inventory`, `world_spatial` | Dice and checks, rolled on the server |
+| `rpg_scene` | `rpg_core`, `genealogy` | Scenes and maps (zephyr-cartography's model), tokens, walls, lights, what a token sees |
+| `rpg_table` | `conversations`, `rpg_core`, `genealogy` | Multiplayer tables: seats, whispers, lines |
 
 ## Running
 
@@ -57,7 +61,7 @@ cd <root>/zephyrex-vtt/client && pnpm test
 
 `contract/api-cases.json` holds the HTTP cases both back ends answer the same way; the client's
 `src/contract.test.ts` runs them against the lite handlers and the server's
-`extensions/rpg_state/EP_Contract_test.py` against the server.
+`extensions/rpg_systems/EP_Contract_test.py` against the server.
 
 ## License
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { ZephyrexConfig } from 'zephyrex';
-import { genealogyExtension, rpgStateExtension } from './extensions/campaign';
+import { genealogyExtension, rpgSystemsExtension } from './extensions/campaign';
 import { rpgExtension } from './extensions/rpg';
 
 /** Where a person works. `/` is the landing page for visitors. */
@@ -48,7 +48,7 @@ const config: ZephyrexConfig = {
         privateRoutes: [...APP_ROUTES, ...(process.env.PRIVATE_ROUTES ?? '').split(',').filter(Boolean)],
       }
     : { enabled: false },
-  extensions: [rpgExtension, genealogyExtension, rpgStateExtension],
+  extensions: [rpgExtension, genealogyExtension, rpgSystemsExtension],
 };
 
 export default config;

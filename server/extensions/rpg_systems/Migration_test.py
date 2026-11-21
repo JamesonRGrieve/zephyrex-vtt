@@ -29,7 +29,7 @@ FOREIGN_KEYS = {
 }
 
 
-# The extensions this repo owns (the wiki's are its own repo's concern; rpg_state is retiring).
+# The extensions this repo owns (the wiki's are its own repo's concern).
 VTT_EXTENSIONS = ("rpg_systems", "rpg_traits", "rpg_dice", "rpg_scene", "rpg_table")
 EXTENSIONS_DIR = Path(__file__).resolve().parent.parent
 

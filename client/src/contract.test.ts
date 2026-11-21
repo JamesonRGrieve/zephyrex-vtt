@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * The lite route handlers against contract/api-cases.json, the cases the SaaS server answers too
- * (server/extensions/rpg_state/EP_Contract_test.py), on a real database.
+ * (server/extensions/rpg_systems/EP_Contract_test.py), on a real database.
  */
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it } from 'vitest';

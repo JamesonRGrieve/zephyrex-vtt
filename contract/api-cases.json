@@ -1,5 +1,5 @@
 {
-  "$comment": "HTTP cases both back ends answer the same way: the lite route handlers (client/src/contract.test.ts) and the SaaS server (server/extensions/rpg_state/EP_Contract_test.py). Each case is a sequence of requests by one signed-in person. `save` keeps a response under a name; a string '{name.id}' or '{name.etag}' in a later path, header or body is that record's id or ETag. `expect.body` is matched as a subset: every key it names must be there with that value.",
+  "$comment": "HTTP cases both back ends answer the same way: the lite route handlers (client/src/contract.test.ts) and the SaaS server (server/extensions/rpg_systems/EP_Contract_test.py). Each case is a sequence of requests by one signed-in person. `save` keeps a response under a name; a string '{name.id}' or '{name.etag}' in a later path, header or body is that record's id or ETag. `expect.body` is matched as a subset: every key it names must be there with that value.",
   "cases": [
     {
       "name": "a game system is created with its description defaulting to null, read and listed",
