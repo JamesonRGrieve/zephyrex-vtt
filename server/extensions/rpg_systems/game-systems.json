@@ -1,16 +1,65 @@
 {
-  "$comment": "The game systems vtt seeds by name (operator, 2026-11-21, rpg-ai DESIGN b73eb13 'Settings and systems'; listed via Zephyrex RPG). Names only: each system's mechanics come with its system pack. `setting` is the slug of the wiki's setting it belongs to (rpg_core SettingModel, the wiki's S6; the wiki seeds its settings with these slugs, S6b), which migration 004_attach_settings matches to set setting_id. Read by migration 003_seed_game_systems; seeding skips a slug already present, so it is safe to re-run. The starter systems for [redacted], [redacted] and [redacted] are vtt's pick, pending the operator's word; Modern has none for now (operator, 2026-11-21).",
+  "$comment": "The game systems vtt seeds by name (operator, 2026-11-21, rpg-ai DESIGN b73eb13 'Settings and systems'; listed via Zephyrex RPG). Names only: each system's mechanics come with its system pack. `setting` is the slug of the wiki's setting it belongs to (rpg_core SettingModel, the wiki's S6; the wiki seeds its settings with these slugs, S6b), which migration 004_attach_settings matches to set setting_id. Read by migrations 003_seed_game_systems and 005_seed_added_systems (which adds entries added here later, such as redacted for the [redacted] bridge); seeding skips a slug already present, so it is safe to re-run. The starter systems for [redacted], [redacted] and [redacted] are vtt's pick, pending the operator's word; Modern has none for now (operator, 2026-11-21).",
   "systems": [
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "redacted" },
-    { "slug": "dnd-5e", "name": "[redacted]", "setting": "dnd" },
-    { "slug": "redacted", "name": "[redacted]", "setting": "fallout" }
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "redacted"
+    },
+    {
+      "slug": "dnd-5e",
+      "name": "[redacted]",
+      "setting": "dnd"
+    },
+    {
+      "slug": "redacted",
+      "name": "[redacted]",
+      "setting": "fallout"
+    }
   ]
 }

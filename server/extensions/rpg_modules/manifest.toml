@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name = "rpg_modules"
+version = "0.1.0"
+description = "Private rules and content modules (the [redacted] lines from the Foundry bridge), owned by the account that installs them"
+entry_module = "EXT_RPGModules"
+minimum_framework_version = "0.0.1"
+# Where this extension's source is offered (AGPL-3.0 section 13). Its modules' content is private.
+repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
+
+# A module is a game system's rules and content
+[[extension_dependencies]]
+name = "rpg_systems"
+optional = false
+
+# A module's characteristics, skills, talents and the like are traits
+[[extension_dependencies]]
+name = "rpg_traits"
+optional = false
+
+# A campaign enables the modules it plays with
+[[extension_dependencies]]
+name = "rpg_core"
+optional = false

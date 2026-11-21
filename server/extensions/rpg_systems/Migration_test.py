@@ -30,7 +30,7 @@ FOREIGN_KEYS = {
 
 
 # The extensions this repo owns (the wiki's are its own repo's concern).
-VTT_EXTENSIONS = ("rpg_systems", "rpg_traits", "rpg_dice", "rpg_scene", "rpg_table")
+VTT_EXTENSIONS = ("rpg_systems", "rpg_traits", "rpg_dice", "rpg_scene", "rpg_table", "rpg_modules")
 EXTENSIONS_DIR = Path(__file__).resolve().parent.parent
 
 
