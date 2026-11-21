@@ -15,7 +15,7 @@ import { Label } from 'zephyrex/ui/label';
 import { LoadProblem } from 'zephyrex/ui/load-problem';
 import { SkeletonRows } from 'zephyrex/ui/skeleton';
 import type { RollResult, TestOptions, TestResult } from './schemas';
-import { canDrawDice } from '../dice3d/DiceStage';
+import { canDrawDice } from '../dice3d/canDraw';
 import { useDiceAnimation } from '../dice3d/useDiceAnimation';
 import { useDiceTray, type TestInput } from './useDiceTray';
 
@@ -49,7 +49,8 @@ function isTest(result: TestResult | RollResult): result is TestResult {
   return 'degrees' in result;
 }
 
-function Result({ result }: { result: TestResult | RollResult }): ReactNode {
+/** A roll's result card: a test's outcome, degrees and the steps that made its target, or a formula's total. */
+export function DiceResult({ result }: { result: TestResult | RollResult }): ReactNode {
   if (!isTest(result)) {
     return (
       <p role='status' className='text-lg'>
@@ -232,7 +233,7 @@ export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactN
           {tray.problem}
         </p>
       )}
-      {result !== null && <Result result={result} />}
+      {result !== null && <DiceResult result={result} />}
       {result !== null && canDrawDice() && (
         <Suspense fallback={null}>
           <DiceStage result={result} seed={tray.seed} animate={motion.animate} />

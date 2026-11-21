@@ -22,9 +22,7 @@ export interface DiceStageProps {
   animate: boolean;
 }
 
-export function canDrawDice(): boolean {
-  return typeof window !== 'undefined' && typeof window.WebGL2RenderingContext !== 'undefined';
-}
+export { canDrawDice } from './canDraw';
 
 function thrownOffThread(kinds: DieKind[], seed: number): Promise<Throw> {
   if (typeof Worker === 'undefined') return Promise.resolve(simulateThrow(kinds, seed));
