@@ -4,12 +4,16 @@ module, server-side. Run on the server host, with the app's environment (its dat
 through a route: the content is on the server's disk, and the module belongs to --owner alone.
 
     python tools/foundry-bridge/install.py --bundle dh2.json --owner <user id> \
-        [--system-ref <sha>] [--content-ref <sha>] [--rules rules.json]
+        [--system-ref <sha>] [--content-ref <sha>] [--rules rules.json] [--app module:factory]
+
+--app boots a composing app instead of vtt's own (rpg-ai's server, which loads vtt's extensions);
+run it from that app's server directory with its environment, so the module lands in its database.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
 from dataclasses import asdict
@@ -26,13 +30,15 @@ def main() -> int:
     parser.add_argument("--system-ref")
     parser.add_argument("--content-ref")
     parser.add_argument("--rules", type=Path)
+    parser.add_argument("--app", default="vtt_app:create", help="The app factory to boot, module:function")
     args = parser.parse_args()
 
     from fastapi.testclient import TestClient
-    from vtt_app import create
     from zephyrex.extensions.rpg_modules.Install import install
 
-    app = create()
+    module, _, factory = args.app.partition(":")
+    sys.path.insert(0, str(Path.cwd()))
+    app = getattr(importlib.import_module(module), factory or "create")()
     with TestClient(app):
         summary = install(
             app.state.model_registry,
