@@ -74,3 +74,20 @@ def test_a_seat_is_heard_in_its_tables_conversation_room(server: TestClient) -> 
     )
     heard = _changes(server, gm, room, cursor).json()["changes"]
     assert any(one["record"]["id"] == seat["id"] and one["op"] == "created" for one in heard)
+
+
+def test_scenes_and_tables_are_news_in_their_campaigns_room_but_token_moves_are_not(server: TestClient) -> None:
+    gm = create_user(server)
+    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id)
+    room = f"campaign/{campaign['id']}"
+    assert _changes(server, gm, room).status_code == 200
+    # A cursor needs a change in the room to point at (an empty room's `next` is null).
+    _create(server, gm, "scene", name="Hold", campaign_id=campaign["id"])
+    cursor = _changes(server, gm, room).json()["next"]
+    assert cursor
+    scene = _create(server, gm, "scene", name="Bridge", campaign_id=campaign["id"])
+    table = _create(server, gm, "table", name="Session 1", campaign_id=campaign["id"])
+    token = _create(server, gm, "scene_token", name="Osk", scene_id=scene["id"])
+    heard = {one["record"]["id"] for one in _changes(server, gm, room, cursor).json()["changes"]}
+    assert {scene["id"], table["id"]} <= heard
+    assert token["id"] not in heard, "a token's changes stay in its scene's room"

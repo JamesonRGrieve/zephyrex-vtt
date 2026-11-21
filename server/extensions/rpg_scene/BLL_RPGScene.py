@@ -904,7 +904,12 @@ SceneModel.Manager = SceneManager
 # Live rooms (server-framework `rooms`; inert when the app doesn't load it): everything on a scene
 # changes in that scene's room. Changes carry no record data, so a hidden token's move never leaks;
 # viewers refetch through scene_snapshot, the one place sight is decided.
-room_of(SceneManager, lambda scene: ("scene", scene.id))
+# A scene is also news in its campaign's room (list-level: a scene added, renamed, removed); what's
+# on it stays in the scene's own room, so a campaign page doesn't hear every token move.
+room_of(
+    SceneManager,
+    lambda scene: [("scene", scene.id)] + ([("campaign", scene.campaign_id)] if scene.campaign_id else []),
+)
 for _part in (
     SceneLevelManager,
     SceneFeatureManager,
