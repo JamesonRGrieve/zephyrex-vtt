@@ -103,3 +103,22 @@ def test_a_sealed_room_has_no_way_through(server: TestClient) -> None:
     with pytest.raises(HTTPException) as sealed:
         asyncio.run(RPGSceneExtension.pilot_token(str(gm.id), vell["id"], scene_id=scene["id"], x=450, y=50))
     assert sealed.value.status_code == 422
+
+
+def test_only_activate_makes_a_scene_current(server: TestClient) -> None:
+    gm = create_user(server)
+    campaign = _create(server, gm, "campaign", name="Vault", user_id=gm.id)
+    first = _create(server, gm, "scene", name="One", campaign_id=campaign["id"])
+    second = _create(server, gm, "scene", name="Two", campaign_id=campaign["id"])
+    current = server.get(f"/v1/scene/{first['id']}", headers=_headers(gm))
+    put = server.put(
+        f"/v1/scene/{first['id']}",
+        json={"scene": {"is_active": True}},
+        headers={**_headers(gm), "If-Match": current.headers["ETag"]},
+    )
+    assert put.status_code in (200, 422)
+    assert asyncio.run(RPGSceneExtension.current_scene(str(gm.id), campaign["id"])) is None, "not through a PUT"
+    asyncio.run(RPGSceneExtension.activate_scene(str(gm.id), first["id"]))
+    asyncio.run(RPGSceneExtension.activate_scene(str(gm.id), second["id"]))
+    found = asyncio.run(RPGSceneExtension.current_scene(str(gm.id), campaign["id"]))
+    assert found is not None and found["id"] == second["id"], "one current scene per campaign"

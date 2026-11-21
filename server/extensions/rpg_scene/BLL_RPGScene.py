@@ -102,8 +102,6 @@ class SceneModel(
 
     class Update(BaseModel):
         location_id: Optional[str] = None
-        # Set through activate (one per campaign), which clears the others.
-        is_active: Optional[bool] = None
         name: Optional[str] = None
         width: Optional[int] = Field(None, ge=1)
         height: Optional[int] = Field(None, ge=1)
@@ -979,8 +977,9 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         scenes = self._trusted(SceneManager)
         for other in scenes.list(campaign_id=scene.campaign_id):
             if other.id != scene.id and other.is_active:
-                scenes.update(id=other.id, is_active=False)
-        return _summary(scenes.update(id=scene.id, is_active=True))
+                # is_active is server-written (activate only): out of the client's Update schema.
+                scenes.update_trusted(id=other.id, is_active=False)
+        return _summary(scenes.update_trusted(id=scene.id, is_active=True))
 
     def current_scene_for(self, campaign_id: str) -> Optional[SceneSummary]:
         """A campaign's current scene, for anyone who may read it; none when none is active."""
