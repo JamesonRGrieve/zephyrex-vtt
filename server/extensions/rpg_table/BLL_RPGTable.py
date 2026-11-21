@@ -26,6 +26,7 @@ from typing import Any, ClassVar, Literal, Optional, Type
 
 from fastapi import HTTPException
 from pydantic import Field
+from zephyrex.lib.Rooms import room_of
 from zephyrex.extensions.conversations.BLL_Conversations import (  # type: ignore[attr-defined]
     ConversationManager,
     ConversationModel,
@@ -375,3 +376,14 @@ TableWhisperModel.Manager = TableWhisperManager
 TableLineModel.Manager = TableLineManager
 
 ALL_MODELS: list[type] = [TableModel, TableSeatModel, TableWhisperModel, TableLineModel]
+
+# Live rooms (server-framework `rooms`; inert when the app doesn't load it): a table's records change
+# in its conversation's room. A whisper's row (who whispers to whom) is the table's news; its
+# messages belong to the whisper's own conversation, which the conversations extension maps.
+room_of(TableManager, lambda table: ("conversation", table.conversation_id) if table.conversation_id else None)
+room_of(TableSeatManager, lambda seat: ("conversation", seat.conversation_id) if seat.conversation_id else None)
+room_of(TableLineManager, lambda line: ("conversation", line.conversation_id) if line.conversation_id else None)
+room_of(
+    TableWhisperManager,
+    lambda whisper: ("conversation", whisper.table_conversation_id) if whisper.table_conversation_id else None,
+)

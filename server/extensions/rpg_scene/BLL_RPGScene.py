@@ -25,6 +25,7 @@ from typing import Any, ClassVar, Literal, Optional, Type
 from fastapi import HTTPException
 from pydantic import BaseModel as PlainModel
 from pydantic import Field
+from zephyrex.lib.Rooms import room_of
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager, PersonModel
 from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, perceive
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
@@ -677,3 +678,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
 
 
 SceneModel.Manager = SceneManager
+
+# Live rooms (server-framework `rooms`; inert when the app doesn't load it): everything on a scene
+# changes in that scene's room. Changes carry no record data, so a hidden token's move never leaks;
+# viewers refetch through scene_snapshot, the one place sight is decided.
+room_of(SceneManager, lambda scene: ("scene", scene.id))
+for _part in (
+    SceneLevelManager,
+    SceneFeatureManager,
+    SceneTokenManager,
+    SceneWallManager,
+    SceneLightManager,
+    SceneTileManager,
+    SceneNoteManager,
+    SceneRegionManager,
+):
+    room_of(_part, lambda record: ("scene", record.scene_id) if record.scene_id else None)

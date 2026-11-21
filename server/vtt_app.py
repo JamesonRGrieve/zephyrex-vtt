@@ -42,6 +42,7 @@ EXTENSIONS = ",".join(
         "genealogy",
         "acl_rbac",
         "conversations",
+        "rooms",
         "world_spatial",
         "world_social",
         "world_inventory",
