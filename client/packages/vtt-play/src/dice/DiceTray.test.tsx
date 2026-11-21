@@ -110,6 +110,23 @@ describe('the dice tray', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('9 (2d6)');
   });
 
+  it('offers formulas only, saying so, when the character has no sheet yet', async () => {
+    post.mockImplementation((path: string) =>
+      Promise.resolve(path === '/v1/dice/test-options' ? { options: { ...OPTIONS.options, has_sheet: false } } : {}),
+    );
+    render(<DiceTray personId='p1' />);
+    expect(await screen.findByText('No character sheet yet: roll a formula')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Test')).toBeNull();
+    expect(screen.getByLabelText('Dice')).toBeInTheDocument();
+  });
+
+  it('offers formulas only when the character can’t be read (404), not an error', async () => {
+    post.mockRejectedValueOnce(problem(404));
+    render(<DiceTray personId='p1' />);
+    expect(await screen.findByText('No character sheet yet: roll a formula')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
+  });
+
   it('says what failed to load, with a way to try again', async () => {
     post.mockRejectedValueOnce(problem(500)).mockResolvedValueOnce(OPTIONS);
     render(<DiceTray personId='p1' />);

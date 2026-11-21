@@ -9,3 +9,6 @@ export type { Person, Seat, Table } from './seats/schemas';
 export { SceneView, type SceneViewProps } from './scene/SceneView';
 export { useSceneView, type ViewState } from './scene/useSceneView';
 export type { SceneViewData, ViewToken } from './scene/schemas';
+export { CharacterSheet, type CharacterSheetProps } from './sheet/CharacterSheet';
+export { useCharacterSheet, type SheetState } from './sheet/useCharacterSheet';
+export type { Sheet, SheetEntry } from './sheet/schemas';

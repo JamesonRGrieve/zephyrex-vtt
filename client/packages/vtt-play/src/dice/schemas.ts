@@ -22,6 +22,7 @@ export const testOptionsSchema = z.object({
     skills: z.array(option),
     difficulties: z.array(z.object({ slug: z.string(), modifier: z.number() })),
     default_difficulty: z.string(),
+    has_sheet: z.boolean().default(true),
   }),
 });
 export type TestOptions = z.infer<typeof testOptionsSchema>['options'];

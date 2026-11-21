@@ -218,7 +218,9 @@ export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactN
       )}
       {tray.options.state === 'formula-only' && (
         <p className='text-muted-foreground text-sm'>
-          This campaign’s game system has no rules pack yet, so roll the dice yourself.
+          {tray.options.reason === 'no-sheet'
+            ? 'No character sheet yet: roll a formula'
+            : 'This campaign’s game system has no rules pack yet, so roll the dice yourself.'}
         </p>
       )}
       {tray.options.state === 'ready' && (

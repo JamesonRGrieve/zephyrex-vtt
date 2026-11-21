@@ -14,7 +14,7 @@ import {
 export type OptionsState =
   | { state: 'loading' }
   | { state: 'failed'; error: Error }
-  | { state: 'formula-only' }
+  | { state: 'formula-only'; reason: 'no-pack' | 'no-sheet' }
   | { state: 'ready'; options: TestOptions };
 
 export interface TestInput {
@@ -52,12 +52,19 @@ export function useDiceTray(personId: string) {
     (): Promise<void> =>
       client
         .post('/v1/dice/test-options', { options: { person_id: personId } })
-        .then((answer: unknown) => setOptions({ state: 'ready', options: testOptionsSchema.parse(answer).options }))
+        .then((answer: unknown) => {
+          const parsed = testOptionsSchema.parse(answer).options;
+          setOptions(parsed.has_sheet ? { state: 'ready', options: parsed } : { state: 'formula-only', reason: 'no-sheet' });
+        })
         .catch((error: unknown) =>
           setOptions(
+            // 422: no rules pack for the campaign's system; 404: no character this person may roll for
+            // (a pregen without a sheet yet). Either way the dice still roll.
             status(error) === 422
-              ? { state: 'formula-only' }
-              : { state: 'failed', error: error instanceof Error ? error : new Error(String(error)) },
+              ? { state: 'formula-only', reason: 'no-pack' }
+              : status(error) === 404
+                ? { state: 'formula-only', reason: 'no-sheet' }
+                : { state: 'failed', error: error instanceof Error ? error : new Error(String(error)) },
           ),
         ),
     [client, personId],
