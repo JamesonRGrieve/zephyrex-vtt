@@ -12,3 +12,5 @@ export type { SceneViewData, ViewToken } from './scene/schemas';
 export { CharacterSheet, type CharacterSheetProps } from './sheet/CharacterSheet';
 export { useCharacterSheet, type SheetState } from './sheet/useCharacterSheet';
 export type { Sheet, SheetEntry } from './sheet/schemas';
+export { vttExtension, type VttExtensionOptions } from './extension';
+export { campaignPath, scenePath, sheetPath, systemsPath, vttRoot } from './paths';
