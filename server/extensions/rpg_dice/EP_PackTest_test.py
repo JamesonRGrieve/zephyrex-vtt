@@ -119,3 +119,17 @@ def test_the_route_answers_like_the_ability(server: TestClient, table: dict[str,
     response = server.post("/v1/dice/test", json=body, headers=_headers(table["player"]))
     assert response.status_code == 200, response.text
     assert response.json()["test"]["target"] == 65
+
+
+def test_a_dice_tray_reads_what_a_test_can_name(server: TestClient, table: dict[str, Any]) -> None:
+    body = {"options": {"person_id": table["acolyte"]["id"]}}
+    response = server.post("/v1/dice/test-options", json=body, headers=_headers(table["player"]))
+    assert response.status_code == 200, response.text
+    options = response.json()["options"]
+    assert options["system"] == "redacted" and options["default_difficulty"] == "challenging"
+    assert {one["slug"] for one in options["characteristics"]} >= {"[redacted]", "fellowship"}
+    lore = next(one for one in options["skills"] if one["slug"] == "[redacted]")
+    assert lore["untrainable"] is True and lore["characteristic"] == "intelligence"
+    assert {"slug": "hellish", "modifier": -60} in options["difficulties"]
+    stranger = server.post("/v1/dice/test-options", json=body, headers=_headers(create_user(server)))
+    assert stranger.status_code == 404

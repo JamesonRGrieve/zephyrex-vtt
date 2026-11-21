@@ -303,6 +303,40 @@ class TestResultEnvelope(PlainModel):
     test: TestOut
 
 
+class TestOptionsRequest(PlainModel):
+    person_id: str
+
+
+class TestOptionsEnvelope(PlainModel):
+    options: TestOptionsRequest
+
+
+class TestOptionOut(PlainModel):
+    slug: str
+    name: str
+    short: Optional[str] = None
+    characteristic: Optional[str] = None
+    untrainable: bool = False
+
+
+class DifficultyOut(PlainModel):
+    slug: str
+    modifier: int
+
+
+class TestOptionsOut(PlainModel):
+    person_id: str
+    system: str
+    characteristics: list[TestOptionOut]
+    skills: list[TestOptionOut]
+    difficulties: list[DifficultyOut]
+    default_difficulty: str
+
+
+class TestOptionsResultEnvelope(PlainModel):
+    options: TestOptionsOut
+
+
 def _refused(error: DiceError) -> HTTPException:
     return HTTPException(
         status_code=422,
@@ -510,11 +544,8 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         ranks = [int(row.rank) for row in rows if row.rank is not None and _live(row)]
         return max(ranks) if ranks else None
 
-    def test_for(self, body: TestRequest) -> TestOut:
-        """A test under the campaign's system pack ([redacted]: d100 roll-under with degrees),
-        rolled on the server: the characteristic resolved as a check resolves a stat, plus the
-        skill's rank, the difficulty and the modifiers."""
-        person, campaign, gm = self._character(body.person_id)
+    def _pack_for(self, campaign: Any) -> dict[str, Any]:
+        """The rules pack of the campaign's game system, or a 422 saying it has none."""
         system_id = getattr(campaign, "game_system_id", None)
         system = None if system_id is None else self._get(GameSystemManager, "GameSystemModel", system_id)
         pack = None if system is None or not system.slug else load_pack(system.slug)
@@ -523,6 +554,44 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
                 status_code=422,
                 detail={"message": "This campaign's game system has no rules pack yet; use a check instead"},
             )
+        return pack
+
+    def test_options_for(self, body: TestOptionsRequest) -> TestOptionsOut:
+        """What a test can name for this character: the pack's characteristics, skills (with
+        whether each can be attempted untrained) and difficulties, for a dice tray to offer."""
+        person, campaign, _gm = self._character(body.person_id)
+        pack = self._pack_for(campaign)
+        difficulties = pack["difficulties"]
+        return TestOptionsOut(
+            person_id=person.id,
+            system=pack["system"],
+            characteristics=[
+                TestOptionOut(slug=one["slug"], name=one["name"], short=one.get("short"))
+                for one in pack["characteristics"]
+            ],
+            skills=[
+                TestOptionOut(
+                    slug=one["slug"],
+                    name=one["name"],
+                    characteristic=one["characteristic"],
+                    untrainable=bool(one.get("specialist")),
+                )
+                for one in pack["skills"]
+            ],
+            difficulties=[
+                DifficultyOut(slug=slug, modifier=modifier)
+                for slug, modifier in difficulties.items()
+                if slug not in ("default", "cite")
+            ],
+            default_difficulty=difficulties["default"],
+        )
+
+    def test_for(self, body: TestRequest) -> TestOut:
+        """A test under the campaign's system pack ([redacted]: d100 roll-under with degrees),
+        rolled on the server: the characteristic resolved as a check resolves a stat, plus the
+        skill's rank, the difficulty and the modifiers."""
+        person, campaign, gm = self._character(body.person_id)
+        pack = self._pack_for(campaign)
         skills = {one["slug"]: one for one in pack["skills"]}
         characteristics = {one["slug"]: one for one in pack["characteristics"]}
         skill = skills.get(body.name)
@@ -602,3 +671,16 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
     )
     async def test_route(self, body: TestEnvelope) -> TestResultEnvelope:
         return TestResultEnvelope(test=self.test_for(body.test))
+
+    @custom_route(
+        method="POST",
+        path="/test-options",
+        input_model=TestOptionsEnvelope,
+        output_model=TestOptionsResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Dice",),
+        summary="What a test can name for a character under the campaign's system pack (a dice tray's choices)",
+    )
+    async def test_options_route(self, body: TestOptionsEnvelope) -> TestOptionsResultEnvelope:
+        return TestOptionsResultEnvelope(options=self.test_options_for(body.options))
