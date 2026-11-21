@@ -129,6 +129,20 @@ def test_no_one_else_sees_the_scene(server: TestClient, room: dict[str, Any]) ->
     assert _view(server, room["player"], room["scene"]["id"], room["orc"]["id"]).status_code == 404
 
 
+def test_who_is_on_a_scene_hidden_only_for_the_gm(server: TestClient, room: dict[str, Any]) -> None:
+    def tokens(user: Any) -> Any:
+        return server.get(f"/v1/scene/{room['scene']['id']}/tokens", headers=_headers(user))
+
+    gm = {one["name"]: one for one in tokens(room["gm"]).json()["scene_tokens"]}
+    assert set(gm) == {"Ada", "Orc", "Goblin", "Assassin"}
+    assert gm["Assassin"]["hidden"] is True and gm["Ada"]["entity_id"] == room["viewer"]["person_id"]
+    player = {one["name"] for one in tokens(room["player"]).json()["scene_tokens"]}
+    assert player == {"Ada", "Orc", "Goblin"}, "a player never learns of a hidden token"
+    assert tokens(create_user(server)).status_code == 404
+    listed = asyncio.run(RPGSceneExtension.scene_tokens(str(room["gm"].id), room["scene"]["id"]))
+    assert {one["name"] for one in listed} == set(gm)
+
+
 def test_scene_snapshot_is_an_ability(room: dict[str, Any]) -> None:
     info = getattr(getattr(vars(RPGSceneExtension)["scene_snapshot"], "__func__", None), "_ability_info", None)
     assert info is not None and info["name"] == "scene_snapshot"

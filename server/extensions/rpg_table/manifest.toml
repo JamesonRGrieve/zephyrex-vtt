@@ -19,5 +19,9 @@ optional = false
 
 # A seat holds one of genealogy's persons
 [[extension_dependencies]]
+name = "rpg_dice"
+optional = false
+
+[[extension_dependencies]]
 name = "genealogy"
 optional = false

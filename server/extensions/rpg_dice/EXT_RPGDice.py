@@ -5,7 +5,7 @@ calls (the AI GM's ``roll`` and ``check``, A21): mechanics come from here, never
 from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_dice.BLL_RPGDice import TestOptionsRequest, TestRequest, CheckRequest, DiceManager
+from zephyrex.extensions.rpg_dice.BLL_RPGDice import SheetRequest, TestOptionsRequest, TestRequest, CheckRequest, DiceManager
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -111,3 +111,11 @@ class RPGDiceExtension(AbstractStaticExtension):
         characteristics, its skills (and which can't be attempted untrained) and its difficulties.
         For the campaign's GM or the character's own player."""
         return cls.dice(requester_id).test_options_for(TestOptionsRequest(person_id=person_id)).model_dump()
+
+    @classmethod
+    @ability("character_sheet")
+    async def character_sheet(cls, requester_id: str, person_id: str) -> dict[str, Any]:
+        """A character's sheet, read-only: characteristics, skills (rank and specialisation),
+        resources (wounds, fate…), origin steps, other abilities and owned gear, with has_sheet false
+        when they have no characteristics yet. For the campaign's GM or the character's own player."""
+        return cls.dice(requester_id).sheet_for(SheetRequest(person_id=person_id)).model_dump()

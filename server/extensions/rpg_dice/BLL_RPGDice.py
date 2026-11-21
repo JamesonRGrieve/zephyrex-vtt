@@ -42,6 +42,7 @@ from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[impor
 )
 from zephyrex.extensions.world_inventory.BLL_WorldInventory import (  # type: ignore[import-not-found]
     ItemInstanceManager,
+    ItemManager,
 )
 from zephyrex.extensions.world_spatial.BLL_WorldSpatial import LocationManager  # type: ignore[import-not-found]
 from zephyrex.lib.CustomRoute import ExposeIn, custom_route
@@ -338,10 +339,60 @@ class TestOptionsOut(PlainModel):
     skills: list[TestOptionOut]
     difficulties: list[DifficultyOut]
     default_difficulty: str
+    # Whether the character has a sheet under this pack (any of its characteristics set); without one
+    # a tray offers formulas only.
+    has_sheet: bool = True
 
 
 class TestOptionsResultEnvelope(PlainModel):
     options: TestOptionsOut
+
+
+class SheetRequest(PlainModel):
+    person_id: str
+
+
+class SheetEnvelope(PlainModel):
+    sheet: SheetRequest
+
+
+class SheetEntry(PlainModel):
+    trait_id: str
+    slug: Optional[str]
+    name: str
+    kind: Optional[str]
+    value: Optional[float] = None
+    rank: Optional[int] = None
+    specialisation: Optional[str] = None
+
+
+class SheetItem(PlainModel):
+    id: str
+    item_id: Optional[str]
+    name: Optional[str]
+    quantity: int = 1
+
+
+class SheetOut(PlainModel):
+    person_id: str
+    name: Optional[str]
+    system: Optional[str]
+    has_sheet: bool
+    characteristics: list[SheetEntry]
+    skills: list[SheetEntry]
+    resources: list[SheetEntry]
+    origins: list[SheetEntry]
+    abilities: list[SheetEntry]
+    gear: list[SheetItem]
+
+
+class SheetResultEnvelope(PlainModel):
+    sheet: SheetOut
+
+
+# A sheet's sections by trait kind; any other kind is an ability (talents, traits, powers, feats…).
+SHEET_CHARACTERISTICS = frozenset({"characteristic", "attribute"})
+SHEET_ORIGINS = frozenset({"homeworld", "background", "role", "elite-advance", "divination", "origin", "class", "subclass", "species"})
 
 
 def _refused(error: DiceError) -> HTTPException:
@@ -541,7 +592,10 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         requester = str(self.requester.id)
         campaign_id = getattr(person, "campaign_id", None)
         campaign = None if campaign_id is None else self._get(CampaignManager, "CampaignModel", campaign_id)
-        gm = campaign is not None and requester == campaign.user_id
+        # The campaign's owner (user_id) or, for a campaign created without one (an import), its creator.
+        gm = campaign is not None and requester in {
+            str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner
+        }
         if not gm and requester != getattr(person, "user_id", None):
             raise _not_found("PersonModel")
         if campaign is None:
@@ -638,7 +692,80 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
                 if slug not in ("default", "cite")
             ],
             default_difficulty=difficulties["default"],
+            has_sheet=self._has_sheet(person.id, pack, campaign, gm),
         )
+
+    def sheet_for(self, body: SheetRequest) -> SheetOut:
+        """A character's sheet, read-only: their characteristics, skills (rank and specialisation),
+        resources (wounds, fate…), origin steps, other abilities (talents, traits, powers, feats) and
+        owned gear. For the campaign's GM or the character's own player; a player never sees a trait
+        they couldn't read themselves (a GM's secret)."""
+        person, campaign, gm = self._character(body.person_id)
+        system_id = getattr(campaign, "game_system_id", None)
+        system = None if system_id is None else self._get(GameSystemManager, "GameSystemModel", system_id)
+        traits = self._trusted(TraitManager)
+        sections: dict[str, list[SheetEntry]] = {"characteristics": [], "skills": [], "resources": [], "origins": [], "abilities": []}
+        for row in self._trusted(PersonTraitManager).list(person_id=person.id):
+            if not _live(row) or row.trait_id is None:
+                continue
+            try:
+                trait = traits.get(id=row.trait_id)
+            except HTTPException:
+                continue
+            if not gm and getattr(trait, "campaign_id", None) is not None and not self._readable(TraitManager, trait.id):
+                continue
+            kind = trait.kind or ""
+            entry = SheetEntry(
+                trait_id=trait.id,
+                slug=trait.slug,
+                name=trait.name or "",
+                kind=kind or None,
+                value=None if row.value is None else float(row.value),
+                rank=None if row.rank is None else int(row.rank),
+                specialisation=getattr(row, "specialisation", None),
+            )
+            section = (
+                "characteristics"
+                if kind in SHEET_CHARACTERISTICS
+                else "skills"
+                if kind == "skill"
+                else "resources"
+                if kind == "resource"
+                else "origins"
+                if kind in SHEET_ORIGINS
+                else "abilities"
+            )
+            sections[section].append(entry)
+        for entries in sections.values():
+            entries.sort(key=lambda one: (one.name.casefold(), (one.specialisation or "").casefold()))
+        items = self._trusted(ItemManager)
+        gear = []
+        for instance in self._trusted(ItemInstanceManager).list(owner_person_id=person.id):
+            try:
+                item_name = None if instance.item_id is None else items.get(id=instance.item_id).name
+            except HTTPException:
+                item_name = None
+            gear.append(SheetItem(id=instance.id, item_id=instance.item_id, name=item_name, quantity=int(instance.quantity or 1)))
+        return SheetOut(
+            person_id=person.id,
+            name=getattr(person, "name", None),
+            system=None if system is None else system.slug,
+            has_sheet=any(one.value is not None for one in sections["characteristics"]),
+            gear=gear,
+            **sections,
+        )
+
+    def _has_sheet(self, person_id: str, pack: dict[str, Any], campaign: Any, gm: bool) -> bool:
+        """Whether the character holds a value for any of the pack's characteristics."""
+        rows = self._trusted(PersonTraitManager)
+        for one in pack["characteristics"]:
+            try:
+                trait = self._trait_for(stat_name(one["name"]), campaign, gm)
+            except HTTPException:
+                continue
+            if any(row.value is not None and _live(row) for row in rows.list(person_id=person_id, trait_id=trait.id)):
+                return True
+        return False
 
     def test_for(self, body: TestRequest) -> TestOut:
         """A test under the campaign's system pack ([redacted]: d100 roll-under with degrees),
@@ -734,6 +861,19 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
     )
     async def test_route(self, body: TestEnvelope) -> TestResultEnvelope:
         return TestResultEnvelope(test=self.test_for(body.test))
+
+    @custom_route(
+        method="POST",
+        path="/sheet",
+        input_model=SheetEnvelope,
+        output_model=SheetResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Dice",),
+        summary="A character's sheet, read-only: characteristics, skills, resources, origins, abilities and gear",
+    )
+    async def sheet_route(self, body: SheetEnvelope) -> SheetResultEnvelope:
+        return SheetResultEnvelope(sheet=self.sheet_for(body.sheet))
 
     @custom_route(
         method="POST",

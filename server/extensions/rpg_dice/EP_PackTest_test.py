@@ -155,3 +155,38 @@ def test_a_dice_tray_reads_what_a_test_can_name(server: TestClient, table: dict[
     common = next(one for one in options["skills"] if one["slug"] == "[redacted]")
     assert common["specialisations"] == ["[redacted]", "[redacted]"]
     assert next(one for one in options["skills"] if one["slug"] == "[redacted]")["specialisations"] == []
+
+
+def test_a_tray_knows_when_there_is_no_sheet_and_an_imported_campaigns_creator_is_its_gm(server: TestClient) -> None:
+    gm = create_user(server)
+    systems = asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))
+    heresy = next(one for one in systems if one["slug"] == "redacted")
+    # A campaign made without an owner (as a vault import makes one): its creator is its GM.
+    campaign = _create(server, gm, "campaign", name="[redacted]", game_system_id=heresy["id"])
+    pregen = _create(server, gm, "person", name="Wren", kind="pc", campaign_id=campaign["id"])
+    body = {"options": {"person_id": pregen["id"]}}
+    blank = server.post("/v1/dice/test-options", json=body, headers=_headers(gm))
+    assert blank.status_code == 200, blank.text
+    assert blank.json()["options"]["has_sheet"] is False
+    trait_id = _template(server, gm, heresy["id"], "agility")
+    _create(server, gm, "person_trait", person_id=pregen["id"], trait_id=trait_id, value=45)
+    sheet = server.post("/v1/dice/test-options", json=body, headers=_headers(gm)).json()["options"]
+    assert sheet["has_sheet"] is True
+
+
+def test_a_characters_sheet_reads_back_in_sections(server: TestClient, table: dict[str, Any]) -> None:
+    body = {"sheet": {"person_id": table["acolyte"]["id"]}}
+    response = server.post("/v1/dice/sheet", json=body, headers=_headers(table["player"]))
+    assert response.status_code == 200, response.text
+    sheet = response.json()["sheet"]
+    assert sheet["has_sheet"] is True and sheet["system"] == "redacted"
+    assert {one["name"]: one["value"] for one in sheet["characteristics"]} == {
+        "Fellowship": 30.0,
+        "Intelligence": 35.0,
+        "[redacted]": 40.0,
+    }
+    lore = [(one["specialisation"], one["rank"]) for one in sheet["skills"] if one["slug"] == "[redacted]"]
+    assert lore == [("[redacted]", 1), ("[redacted]", 3)]
+    assert sheet["gear"] == []
+    stranger = server.post("/v1/dice/sheet", json=body, headers=_headers(create_user(server)))
+    assert stranger.status_code == 404

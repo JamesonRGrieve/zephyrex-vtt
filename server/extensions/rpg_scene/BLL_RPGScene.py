@@ -680,6 +680,17 @@ class ViewResultEnvelope(PlainModel):
     view: ViewOut
 
 
+class SceneTokenOut(PlainModel):
+    token_id: str
+    name: Optional[str]
+    entity_id: Optional[str]
+    hidden: bool
+
+
+class SceneTokensOut(PlainModel):
+    scene_tokens: list[SceneTokenOut]
+
+
 def _not_found(model: str) -> HTTPException:
     return HTTPException(
         status_code=404, detail={"message": f"Request searched {model} and could not find the required record."}
@@ -871,6 +882,47 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             tokens=tokens,
             walls=shown,
         )
+
+    def tokens_for(self, scene_id: str) -> list[SceneTokenOut]:
+        """Who is on a scene: each token and the wiki person it stands for. The campaign's GM gets
+        every token, hidden ones flagged (a GM-side decision may count them); a member of the
+        campaign gets the ones not hidden; anyone else the same 404 as a missing scene."""
+        scene = self._get(SceneManager, scene_id)
+        if scene is None:
+            raise _not_found("SceneModel")
+        requester = str(self.requester.id)
+        campaign = None if scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        owners = set() if campaign is None else {
+            str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner
+        }
+        gm = requester in owners
+        rows = list(self._trusted(SceneTokenManager).list(scene_id=scene.id))
+        if not gm:
+            member = False
+            for row in rows:
+                person = None if row.person_id is None else self._get(PersonManager, row.person_id)
+                if person is not None and getattr(person, "user_id", None) == requester:
+                    member = True
+                    break
+            if not member:
+                raise _not_found("SceneModel")
+        return [
+            SceneTokenOut(token_id=row.id, name=row.name, entity_id=row.person_id, hidden=bool(row.is_hidden))
+            for row in rows
+            if gm or not row.is_hidden
+        ]
+
+    @custom_route(
+        method="GET",
+        path="/{scene_id}/tokens",
+        output_model=SceneTokensOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Who is on a scene: tokens and the wiki persons they stand for (hidden ones for the GM, flagged)",
+    )
+    async def tokens_route(self, scene_id: str) -> SceneTokensOut:
+        return SceneTokensOut(scene_tokens=self.tokens_for(scene_id))
 
     @custom_route(
         method="POST",

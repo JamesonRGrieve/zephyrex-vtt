@@ -42,3 +42,11 @@ class RPGSceneExtension(AbstractStaticExtension):
         first, with their distance in the scene's units) and the doors. Hidden tokens and what walls
         cut off are never included."""
         return cls.scenes(requester_id).snapshot_for(scene_id, SnapshotRequest(token_id=token_id)).model_dump()
+
+    @classmethod
+    @ability("scene_tokens")
+    async def scene_tokens(cls, requester_id: str, scene_id: str) -> list[dict[str, Any]]:
+        """Who is on a scene: each token (token_id, name) and the wiki person it stands for
+        (entity_id, or none). The campaign's GM gets every token, hidden ones flagged (hidden: true);
+        a player of the campaign gets only the ones not hidden."""
+        return [one.model_dump() for one in cls.scenes(requester_id).tokens_for(scene_id)]
