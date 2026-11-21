@@ -5,7 +5,7 @@ calls (the AI GM's ``roll`` and ``check``, A21): mechanics come from here, never
 from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_dice.BLL_RPGDice import CheckRequest, DiceManager
+from zephyrex.extensions.rpg_dice.BLL_RPGDice import TestRequest, CheckRequest, DiceManager
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -71,3 +71,21 @@ class RPGDiceExtension(AbstractStaticExtension):
             person_id=person_id, formula=formula, target=target, compare=compare, qualifiers=qualifiers or []
         )
         return cls.dice(requester_id).check_for(body).model_dump()
+
+    @classmethod
+    @ability("test")
+    async def test(
+        cls,
+        requester_id: str,
+        person_id: str,
+        name: str,
+        difficulty: Optional[str] = None,
+        modifiers: Optional[list[int]] = None,
+    ) -> dict[str, Any]:
+        """Roll a test under the campaign's system pack, on the server. For [redacted]: ``name``
+        is a characteristic or skill slug ([redacted], [redacted]), ``difficulty`` one of trivial …
+        hellish (default challenging), ``modifiers`` extra +/- numbers. The result has the target,
+        the roll, success, the degrees of success or failure, a natural 1 or 100, and how the target
+        was reached. For the campaign's GM or the character's own player."""
+        body = TestRequest(person_id=person_id, name=name, difficulty=difficulty, modifiers=modifiers or [])
+        return cls.dice(requester_id).test_for(body).model_dump()

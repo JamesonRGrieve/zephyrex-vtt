@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The game system catalog against a real server: the systems the operator named are seeded once by
 slug, the game_systems ability lists them (and filters by the wiki's setting), and a system made
-without a slug gets one from its name. The seeded catalog is read through the ability: over REST a
-person sees the systems they made (the seeded rows have no owner to grant them)."""
+without a slug gets one from its name. The seeded catalog is the SYSTEM user's, so anyone signed in
+reads it over REST too."""
 
 import asyncio
 import json
@@ -59,3 +59,10 @@ def test_systems_filter_by_the_wikis_setting(server: TestClient) -> None:
     )
     assert made.status_code == 201, made.text
     assert [one["slug"] for one in _systems(gm, setting)] == ["hollow-stars"]
+
+
+def test_the_catalog_is_readable_over_rest(server: TestClient) -> None:
+    reader = create_user(server)
+    response = server.get("/v1/game_system", params={"slug": "redacted"}, headers=_headers(reader))
+    assert response.status_code == 200, response.text
+    assert [one["slug"] for one in response.json()["game_systems"]] == ["redacted"]

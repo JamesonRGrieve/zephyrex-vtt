@@ -29,8 +29,11 @@ from pydantic import Field
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
 from zephyrex.extensions.rpg_dice.Check import Contribution, Step, check, resolve
 from zephyrex.extensions.rpg_dice.Dice import MAX_FORMULA_LENGTH, DiceError, roll
+from zephyrex.extensions.rpg_dice.Percentile import TestError
+from zephyrex.extensions.rpg_dice.Percentile import test as percentile_test
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager  # type: ignore[import-not-found]
-from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemModel  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager, GameSystemModel  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_systems.Packs import load_pack  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[import-not-found]
     DerivativeTraitManager,
     PersonTraitManager,
@@ -264,6 +267,42 @@ class CheckResultEnvelope(PlainModel):
     check: CheckOut
 
 
+MAX_MODIFIERS = 20
+
+
+class TestRequest(PlainModel):
+    person_id: str
+    # A characteristic or skill of the campaign's system pack, by slug ([redacted], [redacted]).
+    name: str = Field(..., max_length=100)
+    # A difficulty of the pack (redacted: trivial … hellish); none is the pack's default.
+    difficulty: Optional[str] = Field(None, max_length=40)
+    modifiers: list[int] = Field(default_factory=list, max_length=MAX_MODIFIERS)
+
+
+class TestEnvelope(PlainModel):
+    test: TestRequest
+
+
+class TestOut(PlainModel):
+    person_id: str
+    system: str
+    name: str
+    kind: Literal["characteristic", "skill"]
+    characteristic: StatOut
+    skill_rank: Optional[int]
+    trained: bool
+    target: int
+    roll: int
+    success: bool
+    degrees: int
+    natural: Optional[Literal["success", "failure"]]
+    steps: list[dict[str, Any]]
+
+
+class TestResultEnvelope(PlainModel):
+    test: TestOut
+
+
 def _refused(error: DiceError) -> HTTPException:
     return HTTPException(
         status_code=422,
@@ -429,20 +468,26 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             steps=fold_hidden(resolved.base, list(resolved.steps), visible),
         )
 
-    def check_for(self, body: CheckRequest) -> CheckOut:
-        person = self._get(PersonManager, "PersonModel", body.person_id)
+    def _character(self, person_id: str) -> tuple[Any, Any, bool]:
+        """The character, their campaign, and whether the requester is its GM. Only the campaign's
+        GM and the character's own player get past; anyone else gets the same answer as a
+        character that isn't there, so nobody learns which ids exist."""
+        person = self._get(PersonManager, "PersonModel", person_id)
         requester = str(self.requester.id)
         campaign_id = getattr(person, "campaign_id", None)
         campaign = None if campaign_id is None else self._get(CampaignManager, "CampaignModel", campaign_id)
         gm = campaign is not None and requester == campaign.user_id
         if not gm and requester != getattr(person, "user_id", None):
-            # The same answer as a character that isn't there: nobody learns which ids exist.
             raise _not_found("PersonModel")
         if campaign is None:
             raise HTTPException(
                 status_code=422,
                 detail={"message": "This character isn't in a campaign, so they have no stats to check"},
             )
+        return person, campaign, gm
+
+    def check_for(self, body: CheckRequest) -> CheckOut:
+        person, campaign, gm = self._character(body.person_id)
         worn = self._worn_items(person.id)
         names = list(dict.fromkeys(_STAT_REFERENCE.findall(body.formula)))
         traits = [self._trait_for(name, campaign, gm) for name in names]
@@ -454,6 +499,70 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         except DiceError as error:
             raise _refused(error) from error
         return CheckOut(**checked.as_dict(), person_id=person.id, resolved=resolved)
+
+    def _skill_rank(self, person_id: str, skill: Any, campaign: Any, gm: bool) -> Optional[int]:
+        """The rank (1–4) the character holds in a skill, or None when they hold it untrained."""
+        try:
+            trait = self._trait_for(stat_name(skill["name"]), campaign, gm)
+        except HTTPException:
+            return None
+        rows = self._trusted(PersonTraitManager).list(person_id=person_id, trait_id=trait.id)
+        ranks = [int(row.rank) for row in rows if row.rank is not None and _live(row)]
+        return max(ranks) if ranks else None
+
+    def test_for(self, body: TestRequest) -> TestOut:
+        """A test under the campaign's system pack ([redacted]: d100 roll-under with degrees),
+        rolled on the server: the characteristic resolved as a check resolves a stat, plus the
+        skill's rank, the difficulty and the modifiers."""
+        person, campaign, gm = self._character(body.person_id)
+        system_id = getattr(campaign, "game_system_id", None)
+        system = None if system_id is None else self._get(GameSystemManager, "GameSystemModel", system_id)
+        pack = None if system is None or not system.slug else load_pack(system.slug)
+        if pack is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"message": "This campaign's game system has no rules pack yet; use a check instead"},
+            )
+        skills = {one["slug"]: one for one in pack["skills"]}
+        characteristics = {one["slug"]: one for one in pack["characteristics"]}
+        skill = skills.get(body.name)
+        characteristic = characteristics.get(skill["characteristic"] if skill else body.name)
+        if characteristic is None:
+            raise HTTPException(
+                status_code=422, detail={"message": f"{pack['system']} has no characteristic or skill {body.name!r}"}
+            )
+        trait = self._trait_for(stat_name(characteristic["name"]), campaign, gm)
+        stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
+        rank = None if skill is None else self._skill_rank(person.id, skill, campaign, gm)
+        trained = skill is None or rank is not None
+        try:
+            outcome = percentile_test(
+                pack,
+                characteristic=round(stat.value),
+                roll=live_draw(100),
+                skill_rank=rank,
+                trained=trained,
+                specialist=bool(skill and skill["specialist"]),
+                difficulty=body.difficulty,
+                modifiers=body.modifiers,
+            )
+        except TestError as error:
+            raise HTTPException(status_code=422, detail={"message": str(error)}) from error
+        return TestOut(
+            person_id=person.id,
+            system=pack["system"],
+            name=body.name,
+            kind="skill" if skill else "characteristic",
+            characteristic=stat,
+            skill_rank=rank,
+            trained=trained,
+            target=outcome.target,
+            roll=outcome.roll,
+            success=outcome.success,
+            degrees=outcome.degrees,
+            natural=outcome.natural,
+            steps=outcome.steps,
+        )
 
     @custom_route(
         method="POST",
@@ -480,3 +589,16 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
     )
     async def check_route(self, body: CheckEnvelope) -> CheckResultEnvelope:
         return CheckResultEnvelope(check=self.check_for(body.check))
+
+    @custom_route(
+        method="POST",
+        path="/test",
+        input_model=TestEnvelope,
+        output_model=TestResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Dice",),
+        summary="Roll a test under the campaign's system pack ([redacted]: d100 with degrees)",
+    )
+    async def test_route(self, body: TestEnvelope) -> TestResultEnvelope:
+        return TestResultEnvelope(test=self.test_for(body.test))
