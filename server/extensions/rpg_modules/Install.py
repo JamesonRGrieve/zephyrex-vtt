@@ -82,34 +82,41 @@ class Summary:
     kinds: dict[str, int] = field(default_factory=dict)
 
 
-def characteristic_documents(rules: Optional[Mapping[str, Any]], line: str) -> list[dict[str, Any]]:
-    """The line's characteristics (the bridge's rules step, from the system's CHARACTERISTICS) as
-    documents to install like any other: keyed ``characteristic:<slug>`` (the system has no _id for
-    them), so they're recorded, updated and removed the same way."""
+# What the bridge's rules step lists that has no Foundry document: (rules key, document class, trait kind).
+RULE_DOCUMENTS = (("characteristics", "Characteristic", "characteristic"), ("resources", "Resource", "resource"))
+
+
+def rule_documents(rules: Optional[Mapping[str, Any]], line: str) -> list[dict[str, Any]]:
+    """The line's characteristics (the system's CHARACTERISTICS) and resources (wounds, fate, fatigue,
+    insanity, corruption: the actor's tracks), from the bridge's rules step, as documents to install
+    like any other: keyed ``<kind>:<slug>`` (the system has no _id for them), so they're recorded,
+    updated and removed the same way."""
     found = []
-    for one in (rules or {}).get("characteristics") or []:
-        body = {"name": one["name"], "short": one.get("short"), "key": one.get("key")}
-        found.append(
-            {
-                "line": line,
-                "id": f"characteristic:{one['slug']}",
-                "name": one["name"],
-                "foundry_class": "Characteristic",
-                "type": "characteristic",
-                "homebrew": False,
-                "conversion": False,
-                "source": None,
-                "system": body,
-                "hash": hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()[:16],
-            }
-        )
+    for key, foundry_class, kind in RULE_DOCUMENTS:
+        for one in (rules or {}).get(key) or []:
+            body = {name: one.get(name) for name in ("name", "short", "key", "max") if one.get(name) is not None}
+            found.append(
+                {
+                    "line": line,
+                    "id": f"{kind}:{one['slug']}",
+                    "name": one["name"],
+                    "foundry_class": foundry_class,
+                    "type": kind,
+                    "homebrew": False,
+                    "conversion": False,
+                    "source": None,
+                    "system": body,
+                    "hash": hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()[:16],
+                }
+            )
     return found
 
 
 def trait_kind(document: Mapping[str, Any]) -> Optional[str]:
     """The trait kind a source document becomes, or None when it isn't a trait in vtt (yet)."""
-    if document.get("foundry_class") == "Characteristic":
-        return "characteristic"
+    for _key, foundry_class, kind in RULE_DOCUMENTS:
+        if document.get("foundry_class") == foundry_class:
+            return kind
     if document.get("foundry_class") != "Item":
         return None
     kind = document.get("type")
@@ -153,7 +160,7 @@ def install(
     slug = f"redacted-{line}"
     modules = as_owner(ContentModuleManager)
     found = [one for one in modules.list(slug=slug) if str(one.created_by_user_id) == str(owner_id)]
-    documents = characteristic_documents(rules, line) + list(bundle["documents"])
+    documents = rule_documents(rules, line) + list(bundle["documents"])
     fields = {
         "system_ref": system_ref,
         "content_ref": content_ref,
