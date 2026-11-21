@@ -52,11 +52,11 @@ BUNDLE = {
     "packs": [],
     "problems": [],
     "documents": [
-        _document("SRCSkill00000007", "[redacted]", "skill"),
-        _document("RTSkill000000007", "[redacted]", "skill", conversion=True, homebrew=True),
-        _document("SRCSkill00000003", "Charm", "skill"),
-        _document("SRCaTlnt00000026", "Weapon Training", "talent"),
-        _document("j7K8l9M0n1O2p3Q4", "[redacted]", "weapon"),
+        _document("Compendium.redacted.dh2-core-items-skills.Item.SRCSkill00000007", "[redacted]", "skill"),
+        _document("Compendium.redacted.rt-core-items-skills.Item.RTSkill000000007", "[redacted]", "skill", conversion=True, homebrew=True),
+        _document("Compendium.redacted.dh2-core-items-skills.Item.SRCSkill00000003", "Charm", "skill"),
+        _document("Compendium.redacted.dh2-core-items-talents.Item.SRCaTlnt00000026", "Weapon Training", "talent"),
+        _document("Compendium.redacted.dh2-core-items-weapons.Item.j7K8l9M0n1O2p3Q4", "[redacted]", "weapon"),
     ],
 }
 
@@ -138,7 +138,10 @@ def test_a_sheet_imports_through_the_module_and_a_test_rolls_on_it(app: Any) -> 
 
     first = import_sheet(registry, str(gm.id), osk["id"], "dh2", SHEET)
     assert (first.written, first.removed) == (8, 0)
-    assert sorted(first.skipped) == ["characteristic Xyz", "weapon j7K8l9M0n1O2p3Q4"]
+    assert sorted(first.skipped) == [
+        "characteristic Xyz",
+        "weapon Compendium.redacted.dh2-core-items-weapons.Item.j7K8l9M0n1O2p3Q4",
+    ]
 
     lore = asyncio.run(
         RPGDiceExtension.test(str(gm.id), osk["id"], "[redacted]", specialisation="[redacted]", difficulty="challenging")

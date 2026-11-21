@@ -141,6 +141,17 @@ def _text(value: Any) -> Optional[str]:
     return None if value is None else re.sub(r"\s+", " ", html.unescape(str(value))).strip() or None
 
 
+def _data(document: Mapping[str, Any]) -> Any:
+    """A record's data: the document's materialized system, and for an origin-path step the system's
+    own normalized reading of it (normalizeOrigin: grants, choices, modifiers, requirements) under
+    `_origin`, which the character builder reads."""
+    system = document.get("system")
+    origin = document.get("origin")
+    if origin is None or not isinstance(system, Mapping):
+        return system
+    return {**system, "_origin": origin}
+
+
 def install(
     model_registry: Any,
     owner_id: str,
@@ -194,7 +205,7 @@ def install(
             "provenance": source.get("provenance"),
             "book": _text(source.get("book")),
             "page": _text(source.get("page")),
-            "data": document.get("system"),
+            "data": _data(document),
         }
         trait_fields = {
             "name": document["name"],

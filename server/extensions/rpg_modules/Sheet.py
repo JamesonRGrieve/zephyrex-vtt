@@ -58,11 +58,15 @@ def kebab(key: str) -> str:
 
 def foundry_id(reference: Any) -> Optional[str]:
     """A document's _id from a compendium UUID (Compendium.redacted.<pack>.Item.<id>) or a bare id."""
+    uuid = compendium_uuid(reference)
+    return None if uuid is None else uuid.rsplit(".", 1)[-1]
+
+
+def compendium_uuid(reference: Any) -> Optional[str]:
+    """The reference as given: a sheet's item (a UUID string, or {uuid, specialisation})."""
     if isinstance(reference, Mapping):
         reference = reference.get("uuid") or reference.get("source_id")
-    if not isinstance(reference, str) or not reference:
-        return None
-    return reference.rsplit(".", 1)[-1]
+    return reference if isinstance(reference, str) and reference else None
 
 
 def sheet_from_frontmatter(frontmatter: Mapping[str, Any]) -> Optional[dict[str, Any]]:
@@ -106,6 +110,10 @@ def import_sheet(
         raise ValueError(f"the {line} module isn't installed for this account; install it first")
     module = modules[0]
     records = {row.source_id: row for row in as_owner(ModuleRecordManager).list(content_module_id=module.id)}
+    # Records are keyed by Foundry's compendium UUID (the wiki's compendium_source); a sheet may name
+    # the same document under another pack's UUID (one document shared by several packs), so its
+    # bare _id is the fallback.
+    by_foundry_id = {source_id.rsplit(".", 1)[-1]: source_id for source_id in records if source_id.startswith("Compendium.")}
     module_traits = {row.entity_id for row in records.values() if row.entity_type == "trait" and row.entity_id}
     skills = {
         trait.slug: trait.id
@@ -145,7 +153,9 @@ def import_sheet(
             continue
         wanted[(trait_id, specialisation)] = {"rank": int(one["rank"]), "specialisation": specialisation or None}
     for reference in sheet.get("items") or []:
-        source_id = foundry_id(reference)
+        source_id = compendium_uuid(reference)
+        if source_id is not None and source_id not in records:
+            source_id = by_foundry_id.get(foundry_id(reference) or "", source_id)
         trait_id = trait_of(source_id) if source_id else None
         if trait_id is None:
             record = records.get(source_id or "")

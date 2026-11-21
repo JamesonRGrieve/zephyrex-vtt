@@ -126,3 +126,11 @@ def test_a_module_is_its_owners_alone_and_reinstalls_incrementally(app: Any) -> 
     assert len(renamed) == 1
     gone = client.get("/v1/trait", params={"slug": "talent-1"}, headers=_headers(owner)).json()["traits"]
     assert gone == []
+
+
+def test_an_origin_steps_record_keeps_the_systems_normalized_reading() -> None:
+    from zephyrex.extensions.rpg_modules.Install import _data
+
+    origin = {"step": "homeWorld", "grants": {"aptitudes": ["Toughness"]}}
+    assert _data({"system": {"step": "homeWorld"}, "origin": origin}) == {"step": "homeWorld", "_origin": origin}
+    assert _data({"system": {"tier": 1}}) == {"tier": 1}

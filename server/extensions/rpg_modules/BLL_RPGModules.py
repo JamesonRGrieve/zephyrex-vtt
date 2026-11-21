@@ -95,7 +95,9 @@ class ModuleRecordModel(
     table_comment: ClassVar[str] = "A source document of a module, and the vtt record it became"
 
     class Create(BaseModel, ContentModuleModel.Reference.ID):
-        source_id: str = Field(..., max_length=64)
+        # Foundry's compendium UUID (Compendium.<package>.<pack>.<Type>.<_id>, up to ~100 characters),
+        # or a rules key (characteristic:[redacted]).
+        source_id: str = Field(..., max_length=255)
         source_type: Optional[str] = None
         entity_type: Optional[str] = None
         entity_id: Optional[str] = None
