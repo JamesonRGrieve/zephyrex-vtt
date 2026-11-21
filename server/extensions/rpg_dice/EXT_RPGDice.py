@@ -5,7 +5,7 @@ calls (the AI GM's ``roll`` and ``check``, A21): mechanics come from here, never
 from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_dice.BLL_RPGDice import SheetRequest, TestOptionsRequest, TestRequest, CheckRequest, DiceManager
+from zephyrex.extensions.rpg_dice.BLL_RPGDice import InitiativeRequest, SheetRequest, TestOptionsRequest, TestRequest, CheckRequest, DiceManager
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -103,6 +103,13 @@ class RPGDiceExtension(AbstractStaticExtension):
             specialisation=specialisation,
         )
         return cls.dice(requester_id).test_for(body).model_dump()
+
+    @classmethod
+    @ability("initiative")
+    async def initiative(cls, requester_id: str, person_id: str) -> dict[str, Any]:
+        """Roll a character's initiative under the campaign's system pack, on the server ([redacted]: 1d10 + Agility bonus): the roll, the bonus, the total, and the characteristic's
+        value, which breaks ties. For the campaign's GM or the character's own player."""
+        return cls.dice(requester_id).initiative_for(InitiativeRequest(person_id=person_id)).model_dump()
 
     @classmethod
     @ability("test_options")

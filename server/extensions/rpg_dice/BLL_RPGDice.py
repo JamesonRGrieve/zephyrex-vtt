@@ -390,6 +390,39 @@ class SheetResultEnvelope(PlainModel):
     sheet: SheetOut
 
 
+class InitiativeRequest(PlainModel):
+    person_id: str
+
+
+class InitiativeEnvelope(PlainModel):
+    initiative: InitiativeRequest
+
+
+class InitiativeOut(PlainModel):
+    person_id: str
+    system: str
+    dice: str
+    roll: int
+    characteristic: str
+    value: float
+    bonus: int
+    total: int
+
+
+class InitiativeResultEnvelope(PlainModel):
+    initiative: InitiativeOut
+
+
+def initiative_bonus(value: float, kind: str) -> int:
+    """A characteristic's initiative bonus by the pack's rule: ``tens``, its tens digit (the [redacted]
+    lines' characteristic bonus); ``modifier``, (value − 10) / 2 rounded down (d20 ability modifiers)."""
+    if kind == "tens":
+        return int(value) // 10
+    if kind == "modifier":
+        return (int(value) - 10) // 2
+    raise ValueError(f"unknown initiative bonus {kind!r}")
+
+
 # A sheet's sections by trait kind; any other kind is an ability (talents, traits, powers, feats…).
 SHEET_CHARACTERISTICS = frozenset({"characteristic", "attribute"})
 SHEET_ORIGINS = frozenset({"homeworld", "background", "role", "elite-advance", "divination", "origin", "class", "subclass", "species"})
@@ -823,6 +856,39 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             steps=outcome.steps,
         )
 
+    def initiative_for(self, body: InitiativeRequest) -> InitiativeOut:
+        """A character's initiative under the campaign's system pack, rolled on the server: the
+        pack's dice plus the bonus of its characteristic ([redacted]: 1d10 + Agility bonus,
+        p. 218). ``value`` is the characteristic itself, which breaks ties."""
+        person, campaign, gm = self._character(body.person_id)
+        pack = self._pack_for(campaign)
+        rule = pack.get("initiative")
+        if rule is None:
+            raise HTTPException(
+                status_code=422, detail={"message": f"{pack['system']}'s pack has no initiative rule yet"}
+            )
+        names = {one["slug"]: one["name"] for one in pack["characteristics"]}
+        trait = self._trait_for(stat_name(names[rule["characteristic"]]), campaign, gm)
+        if not self._person_values(person.id, trait.id):
+            # No value to read a bonus from (an NPC without a sheet): the GM sets their initiative.
+            raise HTTPException(
+                status_code=422,
+                detail={"message": f"{person.name or 'This character'} has no {names[rule['characteristic']]} to roll initiative with"},
+            )
+        stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
+        rolled = self.roll_formula(rule["dice"])
+        bonus = initiative_bonus(stat.value, rule["bonus"])
+        return InitiativeOut(
+            person_id=person.id,
+            system=pack["system"],
+            dice=rule["dice"],
+            roll=int(rolled.total),
+            characteristic=rule["characteristic"],
+            value=stat.value,
+            bonus=bonus,
+            total=int(rolled.total) + bonus,
+        )
+
     @custom_route(
         method="POST",
         path="/roll",
@@ -887,3 +953,16 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
     )
     async def test_options_route(self, body: TestOptionsEnvelope) -> TestOptionsResultEnvelope:
         return TestOptionsResultEnvelope(options=self.test_options_for(body.options))
+
+    @custom_route(
+        method="POST",
+        path="/initiative",
+        input_model=InitiativeEnvelope,
+        output_model=InitiativeResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Dice",),
+        summary="Roll a character's initiative under the campaign's system pack ([redacted]: 1d10 + Agility bonus)",
+    )
+    async def initiative_route(self, body: InitiativeEnvelope) -> InitiativeResultEnvelope:
+        return InitiativeResultEnvelope(initiative=self.initiative_for(body.initiative))

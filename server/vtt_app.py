@@ -34,8 +34,8 @@ EXTENSIONS_ROOTS = [
 # relationships, items, journals and plot hooks (world_narrative), tags and statuses
 # (world_taxonomy), posts on any record (entity_posts) and rpg_core (campaigns, the character
 # fields). The VTT's own: rpg_systems (game systems, and hooks' character checks), rpg_traits,
-# rpg_dice (A21), rpg_scene (A23), rpg_table (multiplayer tables) and rpg_modules (private rules
-# and content modules from the Foundry bridge).
+# rpg_dice (A21), rpg_scene (A23), rpg_table (multiplayer tables), rpg_modules (private rules
+# and content modules from the Foundry bridge) and rpg_combat (encounters, initiative, turns).
 EXTENSIONS = ",".join(
     [
         "auth_session",
@@ -56,6 +56,7 @@ EXTENSIONS = ",".join(
         "rpg_dice",
         "rpg_scene",
         "rpg_table",
+        "rpg_combat",
     ]
 )
 

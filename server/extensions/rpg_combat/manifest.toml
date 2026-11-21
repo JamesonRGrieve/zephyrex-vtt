@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name = "rpg_combat"
+version = "0.1.0"
+description = "Encounters: combatants in initiative order, rounds and turns, run by the campaign's GM"
+entry_module = "EXT_RPGCombat"
+minimum_framework_version = "0.0.1"
+# Where this extension's source is offered (AGPL-3.0 section 13).
+repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
+
+# An encounter belongs to a campaign, whose GM runs it
+[[extension_dependencies]]
+name = "rpg_core"
+optional = false
+
+# Initiative is rolled under the campaign's rules pack
+[[extension_dependencies]]
+name = "rpg_dice"
+optional = false
+
+# An encounter may be fought on a scene, its combatants the scene's tokens
+[[extension_dependencies]]
+name = "rpg_scene"
+optional = false
+
+# A combatant is one of genealogy's persons
+[[extension_dependencies]]
+name = "genealogy"
+optional = false
