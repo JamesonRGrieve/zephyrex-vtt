@@ -21,7 +21,10 @@ if [ -e "$wiki/node_modules" ] && [ ! -L "$wiki/node_modules" ]; then
   exit 1
 fi
 ln -sfn "$client/node_modules" "$wiki/node_modules"
-(cd "$package" && node scripts/compile.mjs)
+# --no-lite: vtt doesn't mount the wiki's lite API (rpg-ai lite does), and src/lite types against a
+# Prisma client generated with the wiki's models, which this app doesn't have. Older compile scripts
+# ignore the flag (they have no src/lite).
+(cd "$package" && node scripts/compile.mjs --no-lite)
 installed=$(realpath "$client/node_modules/@zephyrex-rpg/wiki")
 rm -rf "$installed/dist"
 cp -a "$package/dist" "$installed/dist"

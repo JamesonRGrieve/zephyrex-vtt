@@ -64,7 +64,10 @@ function problem(status: number): Error {
   return Object.assign(new Error(`status ${status}`), { status });
 }
 
-beforeEach(() => post.mockReset());
+// A block body: a function returned from beforeEach is a cleanup hook vitest would call.
+beforeEach(() => {
+  post.mockReset();
+});
 
 describe('modifiers typed as text', () => {
   it('reads signed whole numbers separated by commas or spaces', () => {

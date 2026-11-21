@@ -6,3 +6,6 @@ export type { RollResult, TestOptions, TestResult } from './dice/schemas';
 export { SeatList, type SeatListProps } from './seats/SeatList';
 export { useTableSeats, FEED_MS, type SeatsState } from './seats/useTableSeats';
 export type { Person, Seat, Table } from './seats/schemas';
+export { SceneView, type SceneViewProps } from './scene/SceneView';
+export { useSceneView, SCENE_FEED_MS, type ViewState } from './scene/useSceneView';
+export type { SceneViewData, ViewToken } from './scene/schemas';
