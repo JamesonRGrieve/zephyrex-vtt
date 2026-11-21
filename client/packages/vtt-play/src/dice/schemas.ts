@@ -11,6 +11,7 @@ const option = z.object({
   short: z.string().nullish(),
   characteristic: z.string().nullish(),
   untrainable: z.boolean().default(false),
+  specialisations: z.array(z.string()).default([]),
 });
 
 export const testOptionsSchema = z.object({
@@ -32,6 +33,7 @@ export const testResultSchema = z.object({
     person_id: z.string(),
     system: z.string(),
     name: z.string(),
+    specialisation: z.string().nullish(),
     kind: z.enum(['characteristic', 'skill']),
     skill_rank: z.number().nullable(),
     trained: z.boolean(),

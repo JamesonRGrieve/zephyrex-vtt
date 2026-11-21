@@ -21,6 +21,8 @@ export interface TestInput {
   name: string;
   difficulty?: string;
   modifiers?: number[];
+  /** Which one of a specialist skill ([redacted]: "[redacted]"). */
+  specialisation?: string;
 }
 
 function status(error: unknown): number | undefined {

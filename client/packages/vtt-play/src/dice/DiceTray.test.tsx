@@ -23,7 +23,13 @@ const OPTIONS = {
     characteristics: [{ slug: '[redacted]', name: '[redacted]', short: 'WS' }],
     skills: [
       { slug: 'awareness', name: 'Awareness', characteristic: 'perception', untrainable: false },
-      { slug: '[redacted]', name: '[redacted]', characteristic: 'intelligence', untrainable: true },
+      {
+        slug: '[redacted]',
+        name: '[redacted]',
+        characteristic: 'intelligence',
+        untrainable: true,
+        specialisations: ['[redacted]'],
+      },
     ],
     difficulties: [
       { slug: 'challenging', modifier: 0 },
@@ -106,6 +112,20 @@ describe('the dice tray', () => {
     render(<DiceTray personId='p1' />);
     await userEvent.click(await screen.findByRole('button', { name: /try again/i }));
     await waitFor(() => expect(screen.getByLabelText('Test')).toBeInTheDocument());
+  });
+
+  it('asks which specialisation of a specialist skill, offering the character’s own', async () => {
+    post.mockImplementation((path: string) => Promise.resolve(path === '/v1/dice/test-options' ? OPTIONS : RESULT));
+    render(<DiceTray personId='p1' />);
+    await userEvent.selectOptions(await screen.findByLabelText('Test'), '[redacted]');
+    const which = screen.getByLabelText('Which [redacted]');
+    expect(screen.getByRole('button', { name: 'Roll the test' })).toBeDisabled();
+    expect(document.querySelector('#dice-tray-specialisations option[value="[redacted]"]')).not.toBeNull();
+    await userEvent.type(which, '[redacted]');
+    await userEvent.click(screen.getByRole('button', { name: 'Roll the test' }));
+    expect(post).toHaveBeenLastCalledWith('/v1/dice/test', {
+      test: { person_id: 'p1', modifiers: [], name: '[redacted]', difficulty: 'challenging', specialisation: '[redacted]' },
+    });
   });
 
   it('refuses modifiers that are not whole numbers', async () => {

@@ -86,12 +86,16 @@ function TestForm({
   const [name, setName] = useState(prefill?.name ?? options.characteristics[0]?.slug ?? '');
   const [difficulty, setDifficulty] = useState(prefill?.difficulty ?? options.default_difficulty);
   const [modifiers, setModifiers] = useState((prefill?.modifiers ?? []).map(signed).join(', '));
+  const [specialisation, setSpecialisation] = useState(prefill?.specialisation ?? '');
+  const skill = options.skills.find((one) => one.slug === name);
+  const specialist = skill?.untrainable === true;
   const chips = useRef<HTMLDivElement>(null);
   useEffect(() => chipGroup(chips.current), []);
   const parsed = parseModifiers(modifiers);
   const submit = (event: FormEvent): void => {
     event.preventDefault();
-    if (parsed !== null && name) onTest({ name, difficulty, modifiers: parsed });
+    if (parsed === null || !name || (specialist && !specialisation.trim())) return;
+    onTest({ name, difficulty, modifiers: parsed, ...(specialist ? { specialisation: specialisation.trim() } : {}) });
   };
   return (
     <form onSubmit={submit} className='space-y-3'>
@@ -120,6 +124,23 @@ function TestForm({
           </optgroup>
         </select>
       </div>
+      {specialist && skill && (
+        <div className='space-y-1'>
+          <Label htmlFor='dice-tray-specialisation'>Which {skill.name}</Label>
+          <Input
+            id='dice-tray-specialisation'
+            list='dice-tray-specialisations'
+            value={specialisation}
+            placeholder={skill.specialisations[0] ?? '[redacted]'}
+            onChange={(event) => setSpecialisation(event.target.value)}
+          />
+          <datalist id='dice-tray-specialisations'>
+            {skill.specialisations.map((one) => (
+              <option key={one} value={one} />
+            ))}
+          </datalist>
+        </div>
+      )}
       <fieldset className='space-y-1'>
         <legend className='text-sm font-medium'>Difficulty</legend>
         <div ref={chips} role='radiogroup' aria-label='Difficulty' className='flex flex-wrap gap-2'>
@@ -145,7 +166,11 @@ function TestForm({
           {parsed === null ? 'Whole numbers only, separated by commas.' : 'Added together, then held within ±60.'}
         </p>
       </div>
-      <Button type='submit' disabled={busy || parsed === null || !name} className='min-h-11'>
+      <Button
+        type='submit'
+        disabled={busy || parsed === null || !name || (specialist && !specialisation.trim())}
+        className='min-h-11'
+      >
         Roll the test
       </Button>
     </form>
