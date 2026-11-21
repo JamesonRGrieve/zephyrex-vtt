@@ -28,3 +28,14 @@ describe('the VTT as an extension', () => {
     expect(systemsPath('vtt')).toBe('/vtt/systems');
   });
 });
+
+describe('the extension module', () => {
+  it('pulls in none of the play UI until a page renders', async () => {
+    // vitest runs from the client directory; jsdom gives import.meta.url no file scheme.
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const source = fs.readFileSync(path.join(process.cwd(), 'packages/vtt-play/src/extension.tsx'), 'utf8');
+    const staticImports = [...source.matchAll(/^import (?!type)[^;]*from '([^']+)'/gm)].map((match) => match[1]);
+    expect(staticImports).toEqual(['react', './paths']);
+  });
+});

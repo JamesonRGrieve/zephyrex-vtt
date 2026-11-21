@@ -3,18 +3,28 @@
  * The VTT as a client extension, for any app that composes it (rpg-ai, beside the wiki's
  * wikiExtension): its pages under `base` ("vtt" by default) and nav entries. Each section shows only
  * when GET /v1/extension lists the server extension that serves it. Not a client module: an app's
- * config, which builds this, is read on the server too; the pages are client ones.
+ * config, which builds this, is read on the server too (and by its proxy), so the pages load lazily
+ * and this module pulls in nothing of the play UI. Import it as `@zephyrex/vtt-play/extension`.
  */
-import type { ComponentType, ReactElement } from 'react';
+import { lazy, Suspense, type ComponentType, type ReactElement } from 'react';
 import type { ZephyrexClientExtension } from 'zephyrex';
-import { CampaignsPage, CampaignTablePage, ScenePage, SheetPage, SystemsPage, type PersonHref } from './pages/VttPages';
+import type { PersonHref } from './pages/VttPages';
 import { systemsPath, vttRoot } from './paths';
+
+export { campaignPath, scenePath, sheetPath, systemsPath, vttRoot } from './paths';
+
+const pages = () => import('./pages/VttPages');
+const CampaignsPage = lazy(() => pages().then((module) => ({ default: module.CampaignsPage })));
+const CampaignTablePage = lazy(() => pages().then((module) => ({ default: module.CampaignTablePage })));
+const ScenePage = lazy(() => pages().then((module) => ({ default: module.ScenePage })));
+const SheetPage = lazy(() => pages().then((module) => ({ default: module.SheetPage })));
+const SystemsPage = lazy(() => pages().then((module) => ({ default: module.SystemsPage })));
 
 type RoutedProps = { params: Record<string, string>; searchParams: Record<string, string> };
 
 function routed(render: (params: Record<string, string>) => ReactElement): ComponentType<RoutedProps> {
   function VttRoute({ params }: RoutedProps): ReactElement {
-    return render(params);
+    return <Suspense fallback={null}>{render(params)}</Suspense>;
   }
   return VttRoute;
 }
