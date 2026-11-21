@@ -1,42 +1,39 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 'use client';
 
+import type { ReactNode } from 'react';
 import type { ZephyrexClientExtension } from 'zephyrex';
+import { SidebarHeader, SidebarHeaderTitle } from 'zephyrex/components/appwrapper/src/SidebarHeader';
+import { PageHeader } from 'zephyrex/ui/page-header';
+import { SidebarInset } from 'zephyrex/ui/sidebar';
 
-function RPGDashboard() {
+/**
+ * The app's home. It says what the app holds today and nothing it doesn't: the campaign and game
+ * system screens are the next items in docs/DESIGN.md, and this page lists them once they land.
+ * It sits in the framework's inset (a column: the top bar, with the phone's menu button, above
+ * the page), as rpg-ai's AppPage does.
+ */
+function RPGDashboard(): ReactNode {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Zephyrex VTT</h1>
-      <p>Virtual tabletop on the Zephyrex framework: maps, scenes, tokens, sheets, dice, combat, live play.</p>
-    </div>
-  );
-}
-
-function RPGSettings() {
-  return (
-    <div className="p-4">
-      <h2 className="text-lg font-semibold mb-2">RPG Settings</h2>
-      <p>Configure your campaign extensions.</p>
-    </div>
+    <SidebarInset className='min-h-svh min-w-0'>
+      <SidebarHeader>
+        <SidebarHeaderTitle>Home</SidebarHeaderTitle>
+      </SidebarHeader>
+      <div className='mx-auto grid w-full min-w-0 max-w-3xl gap-6 px-4 pb-8 pt-2'>
+        <PageHeader
+          title='Zephyrex VTT'
+          description='Your campaigns and the game systems they run on are kept here. Their screens are being built next; maps, scenes, dice and the live table follow.'
+        />
+      </div>
+    </SidebarInset>
   );
 }
 
 export const rpgExtension: ZephyrexClientExtension = {
   name: 'rpg',
   displayName: 'Zephyrex VTT',
-  description: 'Maps, scenes, tokens, sheets, dice, combat, live play',
+  description: 'Campaigns and game systems today; maps, scenes, dice and the live table on the way.',
   serverExtension: 'rpg_state',
-  pages: [
-    {
-      path: 'rpg',
-      component: RPGDashboard,
-    },
-  ],
-  navItems: [
-    {
-      title: 'Zephyrex VTT',
-      url: '/rpg',
-    },
-  ],
-  settingsPanel: RPGSettings,
+  pages: [{ path: 'rpg', component: RPGDashboard }],
+  navItems: [{ title: 'Home', url: '/rpg' }],
 };

@@ -40,6 +40,9 @@ module.exports = {
   env: {
     NEXT_PUBLIC_VTT_VARIANT: VARIANT,
     APP_URI,
+    // The framework middleware drops the CSP's upgrade-insecure-requests only when this is an
+    // http:// origin, as on a local or e2e build; without it every request goes to https.
+    NEXT_PUBLIC_APP_URI: APP_URI,
     NEXT_PUBLIC_THEME_DEFAULT_MODE: process.env.DEFAULT_THEME_MODE || 'dark',
   },
   async rewrites() {

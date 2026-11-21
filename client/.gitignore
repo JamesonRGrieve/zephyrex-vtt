@@ -51,3 +51,8 @@ test.ipynb
 
 __pycache__
 yarn.lock
+
+# e2e and the visual audit (the job writes its outputs outside the repo; these are the local defaults)
+/test-results/
+/playwright-report/
+/e2e-lite.db*

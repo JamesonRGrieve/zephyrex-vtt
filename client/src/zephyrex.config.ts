@@ -7,11 +7,11 @@ import { rpgExtension } from './extensions/rpg';
 export const HOME_PATH = '/rpg';
 
 /** The app's pages (matched as path prefixes); in the hosted build they need a signed-in person. */
-const APP_ROUTES = [HOME_PATH, '/settings', '/team'];
+const APP_ROUTES = [HOME_PATH];
 
 export const APP_NAME = 'Zephyrex VTT';
 export const APP_DESCRIPTION =
-  'A virtual tabletop on the Zephyrex framework: maps, scenes, tokens, sheets, dice and combat.';
+  'A virtual tabletop for any game system: campaigns and game systems today, with maps, scenes, dice and combat on the way.';
 
 /**
  * The build edition decides only what the back end can do, never what a page shows: pages show
