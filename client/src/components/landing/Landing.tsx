@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { CtaBand, FaqList, FeatureCard, Hero, Section, SiteFooter, SiteHeader } from '@zephyrex/marketing';
 import type { ReactElement } from 'react';
+import { VttLogo } from '~/brand/VttLogo';
 import { CLOSING, FAQS, FOOTER, HERO, NAV, PLANNED, START, TODAY } from '~/content/marketing';
 import { APP_NAME } from '~/zephyrex.config';
 
@@ -8,7 +9,16 @@ import { APP_NAME } from '~/zephyrex.config';
 export function Landing({ start = START }: { start?: { label: string; href: string } }): ReactElement {
   return (
     <div className='flex min-h-svh w-full min-w-0 flex-col'>
-      <SiteHeader brand={APP_NAME} nav={NAV} cta={start} />
+      <SiteHeader
+        brand={
+          <>
+            <VttLogo />
+            {APP_NAME}
+          </>
+        }
+        nav={NAV}
+        cta={start}
+      />
       <main className='mx-auto w-full min-w-0 max-w-5xl space-y-20 px-4 pb-12'>
         <Hero
           title={HERO.title}

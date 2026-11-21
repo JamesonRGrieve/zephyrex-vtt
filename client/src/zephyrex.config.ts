@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { ZephyrexConfig } from 'zephyrex';
+import { VttLogo } from './brand/VttLogo';
 import { genealogyExtension, rpgSystemsExtension } from './extensions/campaign';
 import { rpgExtension } from './extensions/rpg';
 
@@ -35,6 +36,7 @@ const config: ZephyrexConfig = {
   app: {
     name: APP_NAME,
     description: APP_DESCRIPTION,
+    logo: VttLogo,
     defaultTheme: (process.env.NEXT_PUBLIC_THEME_DEFAULT_MODE as 'dark' | 'light') ?? 'dark',
     // Never send a signed-in person's email hash to Gravatar: no request leaves for a third party.
     gravatar: false,
