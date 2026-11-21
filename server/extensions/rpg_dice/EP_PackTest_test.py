@@ -44,7 +44,8 @@ def _template(server: TestClient, user: Any, system_id: str, slug: str) -> str:
 
 @pytest.fixture(scope="module")
 def table(server: TestClient) -> dict[str, Any]:
-    """An acolyte: WS 40, Int 35, Fel 30; [redacted] Trained (rank 2); no Deceive or [redacted]."""
+    """An acolyte: WS 40, Int 35, Fel 30; [redacted] Trained (rank 2); [redacted] ([redacted]) Experienced
+    (rank 3) and ([redacted]) Known (rank 1); no Deceive or [redacted]."""
     gm, player = create_user(server), create_user(server)
     systems = asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))
     heresy = next(one for one in systems if one["slug"] == "redacted")
@@ -55,6 +56,10 @@ def table(server: TestClient) -> dict[str, Any]:
         _create(server, gm, "person_trait", person_id=acolyte["id"], trait_id=trait_id, value=value)
     tech_use = _template(server, gm, heresy["id"], "[redacted]")
     _create(server, gm, "person_trait", person_id=acolyte["id"], trait_id=tech_use, rank=2)
+    lore = _template(server, gm, heresy["id"], "[redacted]")
+    for specialisation, rank in (("[redacted]", 3), ("[redacted]", 1)):
+        fields = {"person_id": acolyte["id"], "trait_id": lore, "rank": rank, "specialisation": specialisation}
+        _create(server, gm, "person_trait", **fields)
     plain = _create(server, gm, "campaign", name="No pack", user_id=gm.id)
     stranger_pc = _create(server, gm, "person", name="Otto", kind="pc", user_id=player.id, campaign_id=plain["id"])
     return {"gm": gm, "player": player, "acolyte": acolyte, "unpacked": stranger_pc}
@@ -94,12 +99,26 @@ def test_the_target_follows_the_pack(
 
 @pytest.mark.parametrize(
     ("name", "options"),
-    [("[redacted]", {}), ("[redacted]", {"difficulty": "impossible"}), ("[redacted]-drill", {})],
+    [
+        ("[redacted]", {"specialisation": "[redacted]"}),
+        ("[redacted]", {"specialisation": "[redacted]"}),
+        ("[redacted]", {}),
+        ("[redacted]", {"specialisation": "[redacted]"}),
+        ("[redacted]", {"difficulty": "impossible"}),
+        ("[redacted]-drill", {}),
+    ],
 )
 def test_what_the_rules_forbid_is_refused(table: dict[str, Any], name: str, options: dict[str, Any]) -> None:
     with pytest.raises(HTTPException) as refused:
         _test(table["gm"], table["acolyte"], name, **options)
     assert refused.value.status_code == 422
+
+
+def test_a_specialist_skill_tests_the_named_specialisation(table: dict[str, Any]) -> None:
+    imperium = _test(table["player"], table["acolyte"], "[redacted]", specialisation=" imperium ")
+    assert (imperium["skill_rank"], imperium["target"], imperium["specialisation"]) == (3, 55, "imperium")
+    arbites = _test(table["player"], table["acolyte"], "[redacted]", specialisation="[redacted]")
+    assert (arbites["skill_rank"], arbites["target"]) == (1, 35)
 
 
 def test_a_campaign_without_a_pack_says_so(table: dict[str, Any]) -> None:
@@ -133,3 +152,6 @@ def test_a_dice_tray_reads_what_a_test_can_name(server: TestClient, table: dict[
     assert {"slug": "hellish", "modifier": -60} in options["difficulties"]
     stranger = server.post("/v1/dice/test-options", json=body, headers=_headers(create_user(server)))
     assert stranger.status_code == 404
+    common = next(one for one in options["skills"] if one["slug"] == "[redacted]")
+    assert common["specialisations"] == ["[redacted]", "[redacted]"]
+    assert next(one for one in options["skills"] if one["slug"] == "[redacted]")["specialisations"] == []

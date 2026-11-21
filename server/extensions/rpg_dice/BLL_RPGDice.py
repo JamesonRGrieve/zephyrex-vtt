@@ -277,6 +277,9 @@ class TestRequest(PlainModel):
     # A difficulty of the pack (redacted: trivial … hellish); none is the pack's default.
     difficulty: Optional[str] = Field(None, max_length=40)
     modifiers: list[int] = Field(default_factory=list, max_length=MAX_MODIFIERS)
+    # Which specialisation of a specialist skill ([redacted]: "[redacted]"); required for those, refused
+    # for the rest. Matched case-insensitively against the character's own.
+    specialisation: Optional[str] = Field(None, max_length=100)
 
 
 class TestEnvelope(PlainModel):
@@ -287,6 +290,7 @@ class TestOut(PlainModel):
     person_id: str
     system: str
     name: str
+    specialisation: Optional[str] = None
     kind: Literal["characteristic", "skill"]
     characteristic: StatOut
     skill_rank: Optional[int]
@@ -317,6 +321,8 @@ class TestOptionOut(PlainModel):
     short: Optional[str] = None
     characteristic: Optional[str] = None
     untrainable: bool = False
+    # A specialist skill's specialisations this character holds (rank 1+), for a tray to offer.
+    specialisations: list[str] = Field(default_factory=list)
 
 
 class DifficultyOut(PlainModel):
@@ -353,6 +359,11 @@ def _not_found(model: str) -> HTTPException:
 def _now_like(moment: datetime) -> datetime:
     now = datetime.now(timezone.utc)
     return now if moment.tzinfo is not None else now.replace(tzinfo=None)
+
+
+def _same(text: Optional[str]) -> str:
+    """A specialisation as compared: trimmed and case-folded, "" for none."""
+    return (text or "").strip().casefold()
 
 
 def _live(row: Any) -> bool:
@@ -534,14 +545,25 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             raise _refused(error) from error
         return CheckOut(**checked.as_dict(), person_id=person.id, resolved=resolved)
 
-    def _skill_rank(self, person_id: str, skill: Any, campaign: Any, gm: bool) -> Optional[int]:
-        """The rank (1–4) the character holds in a skill, or None when they hold it untrained."""
+    def _skill_rows(self, person_id: str, skill: Any, campaign: Any, gm: bool) -> list[Any]:
+        """The character's live, ranked rows of a skill (one per specialisation for specialist skills)."""
         try:
             trait = self._trait_for(stat_name(skill["name"]), campaign, gm)
         except HTTPException:
-            return None
+            return []
         rows = self._trusted(PersonTraitManager).list(person_id=person_id, trait_id=trait.id)
-        ranks = [int(row.rank) for row in rows if row.rank is not None and _live(row)]
+        return [row for row in rows if row.rank is not None and _live(row)]
+
+    def _skill_rank(
+        self, person_id: str, skill: Any, campaign: Any, gm: bool, specialisation: Optional[str] = None
+    ) -> Optional[int]:
+        """The rank (1–4) the character holds in a skill (of a specialist skill: in that
+        specialisation), or None when they hold it untrained."""
+        rows = self._skill_rows(person_id, skill, campaign, gm)
+        if skill["specialist"]:
+            wanted = _same(specialisation)
+            rows = [row for row in rows if _same(getattr(row, "specialisation", None)) == wanted]
+        ranks = [int(row.rank) for row in rows]
         return max(ranks) if ranks else None
 
     def _pack_for(self, campaign: Any) -> dict[str, Any]:
@@ -559,7 +581,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
     def test_options_for(self, body: TestOptionsRequest) -> TestOptionsOut:
         """What a test can name for this character: the pack's characteristics, skills (with
         whether each can be attempted untrained) and difficulties, for a dice tray to offer."""
-        person, campaign, _gm = self._character(body.person_id)
+        person, campaign, gm = self._character(body.person_id)
         pack = self._pack_for(campaign)
         difficulties = pack["difficulties"]
         return TestOptionsOut(
@@ -575,6 +597,18 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
                     name=one["name"],
                     characteristic=one["characteristic"],
                     untrainable=bool(one.get("specialist")),
+                    specialisations=(
+                        sorted(
+                            {
+                                row.specialisation.strip()
+                                for row in self._skill_rows(person.id, one, campaign, gm)
+                                if getattr(row, "specialisation", None)
+                            },
+                            key=str.casefold,
+                        )
+                        if one.get("specialist")
+                        else []
+                    ),
                 )
                 for one in pack["skills"]
             ],
@@ -600,9 +634,17 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             raise HTTPException(
                 status_code=422, detail={"message": f"{pack['system']} has no characteristic or skill {body.name!r}"}
             )
+        specialist = bool(skill and skill["specialist"])
+        if specialist and not _same(body.specialisation):
+            raise HTTPException(
+                status_code=422,
+                detail={"message": f"Name which {skill['name']} this is, e.g. {skill['name']} ([redacted])"},
+            )
+        if not specialist and body.specialisation:
+            raise HTTPException(status_code=422, detail={"message": f"{body.name} has no specialisations"})
         trait = self._trait_for(stat_name(characteristic["name"]), campaign, gm)
         stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
-        rank = None if skill is None else self._skill_rank(person.id, skill, campaign, gm)
+        rank = None if skill is None else self._skill_rank(person.id, skill, campaign, gm, body.specialisation)
         trained = skill is None or rank is not None
         try:
             outcome = percentile_test(
@@ -611,7 +653,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
                 roll=live_draw(100),
                 skill_rank=rank,
                 trained=trained,
-                specialist=bool(skill and skill["specialist"]),
+                specialist=specialist,
                 difficulty=body.difficulty,
                 modifiers=body.modifiers,
             )
@@ -621,6 +663,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             person_id=person.id,
             system=pack["system"],
             name=body.name,
+            specialisation=body.specialisation.strip() if specialist and body.specialisation else None,
             kind="skill" if skill else "characteristic",
             characteristic=stat,
             skill_rank=rank,

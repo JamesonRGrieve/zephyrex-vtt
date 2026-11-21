@@ -285,6 +285,13 @@ class PersonTraitModel(
         None,
         description="Optional discrete rank (e.g. proficiency tier)",
     )
+    specialisation: Optional[str] = Field(
+        None,
+        description=(
+            "Which specialisation of a specialist skill the person holds at this rank ([redacted] "
+            "([redacted]), Operate (Surface)): one row per specialisation. NULL for skills without them."
+        ),
+    )
     started_at: Optional[datetime] = Field(
         None,
         description=(
@@ -342,6 +349,7 @@ class PersonTraitModel(
     ):
         value: Optional[float] = None
         rank: Optional[int] = None
+        specialisation: Optional[str] = Field(None, max_length=100)
         started_at: Optional[datetime] = None
         expires_at: Optional[datetime] = None
         source_person_id: Optional[str] = None
@@ -353,6 +361,7 @@ class PersonTraitModel(
         # Fully editable so GMs can retcon any aspect.
         value: Optional[float] = None
         rank: Optional[int] = None
+        specialisation: Optional[str] = Field(None, max_length=100)
         started_at: Optional[datetime] = None
         expires_at: Optional[datetime] = None
         source_person_id: Optional[str] = None
@@ -367,6 +376,7 @@ class PersonTraitModel(
     ):
         value: Optional[NumericalSearchModel] = None
         rank: Optional[NumericalSearchModel] = None
+        specialisation: Optional[StringSearchModel] = None
         started_at: Optional[DateSearchModel] = None
         expires_at: Optional[DateSearchModel] = None
         target_location_id: Optional[StringSearchModel] = None

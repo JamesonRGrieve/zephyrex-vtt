@@ -81,13 +81,21 @@ class RPGDiceExtension(AbstractStaticExtension):
         name: str,
         difficulty: Optional[str] = None,
         modifiers: Optional[list[int]] = None,
+        specialisation: Optional[str] = None,
     ) -> dict[str, Any]:
         """Roll a test under the campaign's system pack, on the server. For [redacted]: ``name``
         is a characteristic or skill slug ([redacted], [redacted]), ``difficulty`` one of trivial …
-        hellish (default challenging), ``modifiers`` extra +/- numbers. The result has the target,
+        hellish (default challenging), ``modifiers`` extra +/- numbers, ``specialisation`` which one
+        of a specialist skill ([redacted]: "[redacted]"; required for those). The result has the target,
         the roll, success, the degrees of success or failure, a natural 1 or 100, and how the target
         was reached. For the campaign's GM or the character's own player."""
-        body = TestRequest(person_id=person_id, name=name, difficulty=difficulty, modifiers=modifiers or [])
+        body = TestRequest(
+            person_id=person_id,
+            name=name,
+            difficulty=difficulty,
+            modifiers=modifiers or [],
+            specialisation=specialisation,
+        )
         return cls.dice(requester_id).test_for(body).model_dump()
 
     @classmethod
