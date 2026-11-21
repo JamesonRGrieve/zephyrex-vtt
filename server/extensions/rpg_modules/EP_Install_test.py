@@ -82,14 +82,21 @@ def test_a_module_is_its_owners_alone_and_reinstalls_incrementally(app: Any) -> 
     owner, other = create_user(client), create_user(client)
     registry = app.state.model_registry
     bundle = _bundle()
-    first = install(registry, str(owner.id), bundle, system_ref="sys1", content_ref="c1")
-    assert (first.created, first.updated, first.unchanged, first.removed) == (len(bundle["documents"]), 0, 0, 0)
-    assert first.traits == TALENTS + 1 + 8 and first.kinds["homeworld"] == 1
+    rules = {
+        "characteristics": [
+            {"slug": "[redacted]", "key": "[redacted]", "name": "[redacted]", "short": "WS"},
+            {"slug": "agility", "key": "agility", "name": "Agility", "short": "Ag"},
+        ]
+    }
+    first = install(registry, str(owner.id), bundle, system_ref="sys1", content_ref="c1", rules=rules)
+    assert (first.created, first.updated, first.unchanged, first.removed) == (len(bundle["documents"]) + 2, 0, 0, 0)
+    assert first.traits == TALENTS + 1 + 8 + 2 and first.kinds["homeworld"] == 1
+    assert first.kinds["characteristic"] == 2
 
     records = ModuleRecordManager(requester_id=str(owner.id), model_registry=registry).list(
         content_module_id=first.module_id
     )
-    assert len(records) == len(bundle["documents"])
+    assert len(records) == len(bundle["documents"]) + 2
     [redacted] = next(row for row in records if row.source_id == "TALENT0000000901")
     assert [redacted].entity_id is None and [redacted].data == {"damage": "1d10+3"}
     port = next(row for row in records if row.source_id == "TALENT0000000950")
@@ -104,10 +111,14 @@ def test_a_module_is_its_owners_alone_and_reinstalls_incrementally(app: Any) -> 
     changed = copy.deepcopy(bundle)
     changed["documents"][0] = _document(0, name="Talent Zero", hash="h0-new")
     del changed["documents"][1]
-    second = install(registry, str(owner.id), changed, system_ref="sys2", content_ref="c2")
+    second = install(registry, str(owner.id), changed, system_ref="sys2", content_ref="c2", rules=rules)
     assert second.module_id == first.module_id
     assert (second.created, second.updated, second.removed) == (0, 1, 1)
-    assert second.unchanged == len(changed["documents"]) - 1
+    assert second.unchanged == len(changed["documents"]) - 1 + 2
+    # The owner's own trait: the public [redacted] pack's SYSTEM templates (readable by everyone) also match
+    # until that pack moves into the private dh2 module.
+    skill = client.get("/v1/trait", params={"slug": "[redacted]"}, headers=_headers(owner)).json()["traits"]
+    assert [one["kind"] for one in skill if one["created_by_user_id"] == str(owner.id)] == ["characteristic"]
     renamed = client.get("/v1/trait", params={"slug": "talent-zero"}, headers=_headers(owner)).json()["traits"]
     assert len(renamed) == 1
     gone = client.get("/v1/trait", params={"slug": "talent-1"}, headers=_headers(owner)).json()["traits"]
