@@ -54,7 +54,9 @@ export function useDiceTray(personId: string) {
         .post('/v1/dice/test-options', { options: { person_id: personId } })
         .then((answer: unknown) => {
           const parsed = testOptionsSchema.parse(answer).options;
-          setOptions(parsed.has_sheet ? { state: 'ready', options: parsed } : { state: 'formula-only', reason: 'no-sheet' });
+          // No sheet still gets the system's own tests: the server rolls them at the rules' average
+          // (5e: a plain d20), or refuses where the rulebook states none ([redacted]), never a made-up formula.
+          setOptions({ state: 'ready', options: parsed });
         })
         .catch((error: unknown) =>
           setOptions(

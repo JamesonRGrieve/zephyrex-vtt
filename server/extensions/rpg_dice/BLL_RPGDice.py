@@ -34,6 +34,7 @@ from zephyrex.extensions.rpg_dice.Percentile import test as percentile_test
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager, GameSystemModel  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.Packs import load_pack  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_dice.D20 import d20_test  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[import-not-found]
     DerivativeTraitManager,
@@ -303,6 +304,9 @@ class TestOut(PlainModel):
     degrees: int
     natural: Optional[Literal["success", "failure"]]
     steps: list[dict[str, Any]]
+    total: Optional[int] = Field(None, description="A d20 test's roll plus its modifiers (none for d100 roll-under)")
+    test_kind: str = Field("d100-under", description="The pack's test: d100-under ([redacted]) or d20-over (5e)")
+    no_sheet: bool = Field(False, description="Rolled for a character with no value for it, as the pack's rules say")
 
 
 class TestResultEnvelope(PlainModel):
@@ -330,6 +334,7 @@ class TestOptionOut(PlainModel):
 class DifficultyOut(PlainModel):
     slug: str
     modifier: int
+    dc: Optional[int] = None
 
 
 class TestOptionsOut(PlainModel):
@@ -720,8 +725,10 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
                 for one in pack["skills"]
             ],
             difficulties=[
-                DifficultyOut(slug=slug, modifier=modifier)
-                for slug, modifier in difficulties.items()
+                DifficultyOut(slug=slug, modifier=0, dc=value)
+                if pack["test"]["kind"] == "d20-over"
+                else DifficultyOut(slug=slug, modifier=value)
+                for slug, value in difficulties.items()
                 if slug not in ("default", "cite")
             ],
             default_difficulty=difficulties["default"],
@@ -800,6 +807,59 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
                 return True
         return False
 
+    def _level(self, person_id: str, campaign: Any, gm: bool) -> Optional[int]:
+        """The character's level (a Level trait), for a d20 pack's Proficiency Bonus; none without one."""
+        try:
+            trait = self._trait_for(stat_name("Level"), campaign, gm)
+        except HTTPException:
+            return None
+        values = self._person_values(person_id, trait.id)
+        return int(max(values)) if values else None
+
+    def _d20_test(
+        self, body: TestRequest, person: Any, campaign: Any, gm: bool, pack: dict[str, Any],
+        skill: Optional[dict[str, Any]], trait: Any, rank: Optional[int], no_sheet: bool,
+    ) -> TestOut:
+        """A D20 Test (a d20-over pack: [redacted]): ability modifier, Proficiency Bonus by level when
+        proficient, against the difficulty's DC; a character with no score tests at the pack's human
+        average, flagged no_sheet."""
+        if no_sheet:
+            score = float(pack["test"]["no_sheet_score"])
+            stat = StatOut(name=stat_name(trait.name or ""), trait_id=trait.id, base=score, value=score, steps=[])
+        else:
+            stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
+        try:
+            outcome = d20_test(
+                pack,
+                score=None if no_sheet else stat.value,
+                roll=live_draw(int(pack["test"].get("die", 20))),
+                skill_rank=rank,
+                level=self._level(person.id, campaign, gm) if rank else None,
+                difficulty=body.difficulty,
+                modifiers=body.modifiers,
+            )
+        except TestError as error:
+            raise HTTPException(status_code=422, detail={"message": str(error)}) from error
+        return TestOut(
+            person_id=person.id,
+            system=pack["system"],
+            name=body.name,
+            specialisation=None,
+            kind="skill" if skill else "characteristic",
+            characteristic=stat,
+            skill_rank=rank,
+            trained=skill is None or rank is not None,
+            target=outcome.target,
+            roll=outcome.roll,
+            success=outcome.success,
+            degrees=0,
+            natural=None,
+            steps=outcome.steps,
+            total=outcome.total,
+            test_kind="d20-over",
+            no_sheet=no_sheet,
+        )
+
     def test_for(self, body: TestRequest) -> TestOut:
         """A test under the campaign's system pack ([redacted]: d100 roll-under with degrees),
         rolled on the server: the characteristic resolved as a check resolves a stat, plus the
@@ -823,8 +883,21 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         if not specialist and body.specialisation:
             raise HTTPException(status_code=422, detail={"message": f"{body.name} has no specialisations"})
         trait = self._trait_for(stat_name(characteristic["name"]), campaign, gm)
-        stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
         rank = None if skill is None else self._skill_rank(person.id, skill, campaign, gm, body.specialisation)
+        no_sheet = not self._person_values(person.id, trait.id)
+        if pack["test"]["kind"] == "d20-over":
+            return self._d20_test(body, person, campaign, gm, pack, skill, trait, rank, no_sheet)
+        if no_sheet and pack["test"].get("no_sheet_score") is None:
+            # The pack's rulebook states no average to test a sheetless character at ([redacted] doesn't):
+            # a value is needed, never a made-up number.
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": f"{person.name or 'This character'} has no {characteristic['name']}, and "
+                    f"{pack['system']} states no average to test at: give them a {characteristic['name']} value"
+                },
+            )
+        stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
         trained = skill is None or rank is not None
         try:
             outcome = percentile_test(
@@ -870,12 +943,16 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         names = {one["slug"]: one["name"] for one in pack["characteristics"]}
         trait = self._trait_for(stat_name(names[rule["characteristic"]]), campaign, gm)
         if not self._person_values(person.id, trait.id):
-            # No value to read a bonus from (an NPC without a sheet): the GM sets their initiative.
-            raise HTTPException(
-                status_code=422,
-                detail={"message": f"{person.name or 'This character'} has no {names[rule['characteristic']]} to roll initiative with"},
-            )
-        stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
+            average = pack["test"].get("no_sheet_score")
+            if average is None:
+                # No value to read a bonus from, and no average the rulebook states: the GM sets it.
+                raise HTTPException(
+                    status_code=422,
+                    detail={"message": f"{person.name or 'This character'} has no {names[rule['characteristic']]} to roll initiative with"},
+                )
+            stat = StatOut(name=stat_name(trait.name or ""), trait_id=trait.id, base=float(average), value=float(average), steps=[])
+        else:
+            stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
         rolled = self.roll_formula(rule["dice"])
         bonus = initiative_bonus(stat.value, rule["bonus"])
         return InitiativeOut(

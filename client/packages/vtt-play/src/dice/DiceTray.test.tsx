@@ -14,7 +14,7 @@ vi.mock('zephyrex', () => ({
     ),
 }));
 
-const { DiceTray, parseModifiers } = await import('./DiceTray');
+const { DiceResult, DiceTray, parseModifiers } = await import('./DiceTray');
 
 const OPTIONS = {
   options: {
@@ -110,14 +110,43 @@ describe('the dice tray', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('9 (2d6)');
   });
 
-  it('offers formulas only, saying so, when the character has no sheet yet', async () => {
+  it('still offers the system’s tests when the character has no sheet, saying so', async () => {
     post.mockImplementation((path: string) =>
       Promise.resolve(path === '/v1/dice/test-options' ? { options: { ...OPTIONS.options, has_sheet: false } } : {}),
     );
     render(<DiceTray personId='p1' />);
-    expect(await screen.findByText('No character sheet yet: roll a formula')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Test')).toBeNull();
-    expect(screen.getByLabelText('Dice')).toBeInTheDocument();
+    expect(await screen.findByText('No character sheet yet: tests use the rules’ average.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Test')).toBeInTheDocument();
+  });
+
+  it('shows a d20 check as roll + modifiers against the DC, flagged when sheetless', () => {
+    render(
+      <DiceResult
+        result={{
+          person_id: 'p1',
+          system: 'dnd-5e',
+          name: 'stealth',
+          kind: 'skill',
+          skill_rank: null,
+          trained: false,
+          target: 15,
+          roll: 12,
+          success: false,
+          degrees: 0,
+          natural: null,
+          test_kind: 'd20-over',
+          total: 12,
+          no_sheet: true,
+          steps: [
+            { step: 'no_sheet', value: 10 },
+            { step: 'ability_modifier', value: 0 },
+            { step: 'dc', value: 15 },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Failure: rolled 12 + 0 = 12 against DC 15');
+    expect(screen.getByText('No sheet: tested at the rules’ average.')).toBeInTheDocument();
   });
 
   it('offers formulas only when the character can’t be read (404), not an error', async () => {

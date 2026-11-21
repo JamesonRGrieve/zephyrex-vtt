@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-/** Which dice a server result shows: a test's d100, or each die of a formula's terms. */
+/** Which dice a server result shows: a test's d100 (a d20 for a d20 pack), or each die of a formula's terms. */
 import type { RollResult, TestResult } from '../dice/schemas';
 import { diceFor, type ShownDie } from './faces';
 
@@ -20,7 +20,9 @@ function sidesOf(notation: string | undefined): number | null {
 export function shownDice(result: TestResult | RollResult): ShownDie[] {
   // A roll result passes extra keys through, so `in` can't tell them apart: a test has numeric degrees.
   const test = result as Partial<TestResult>;
-  if (typeof test.degrees === 'number' && typeof test.roll === 'number') return diceFor(100, test.roll);
+  if (typeof test.degrees === 'number' && typeof test.roll === 'number') {
+    return diceFor(test.test_kind === 'd20-over' ? 20 : 100, test.roll);
+  }
   const shown: ShownDie[] = [];
   for (const term of ((result as { terms?: Term[] }).terms ?? []) as Term[]) {
     const sides = sidesOf(term.notation);

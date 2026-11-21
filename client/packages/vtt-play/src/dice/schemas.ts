@@ -20,7 +20,8 @@ export const testOptionsSchema = z.object({
     system: z.string(),
     characteristics: z.array(option),
     skills: z.array(option),
-    difficulties: z.array(z.object({ slug: z.string(), modifier: z.number() })),
+    // A d100 pack's difficulty is a modifier; a d20 pack's is a DC (modifier 0).
+    difficulties: z.array(z.object({ slug: z.string(), modifier: z.number(), dc: z.number().nullish() })),
     default_difficulty: z.string(),
     has_sheet: z.boolean().default(true),
   }),
@@ -44,6 +45,10 @@ export const testResultSchema = z.object({
     degrees: z.number(),
     natural: z.enum(['success', 'failure']).nullable(),
     steps: z.array(step),
+    // d20-over (5e): roll + modifiers = total, against target (the DC); d100-under ([redacted]): roll against target.
+    test_kind: z.enum(['d100-under', 'd20-over']).default('d100-under'),
+    total: z.number().nullish(),
+    no_sheet: z.boolean().default(false),
   }),
 });
 export type TestResult = z.infer<typeof testResultSchema>['test'];

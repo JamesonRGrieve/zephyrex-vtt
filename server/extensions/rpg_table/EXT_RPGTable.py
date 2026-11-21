@@ -123,12 +123,20 @@ class RPGTableExtension(AbstractStaticExtension):
             result = await RPGDiceExtension.test(requester_id, person_id, name, difficulty, modifiers, specialisation)
             label = name.replace("-", " ").title() + (f" ({result['specialisation']})" if result.get("specialisation") else "")
             outcome = "success" if result["success"] else "failure"
-            degrees = result["degrees"]
-            natural = f", a natural {'1' if result['natural'] == 'success' else '100'}" if result.get("natural") else ""
-            text = (
-                f"{label} test: rolled {result['roll']} against {result['target']}, "
-                f"{outcome} by {degrees} degree{'s' if degrees != 1 else ''}{natural}"
-            )
+            sheetless = " (no sheet: tested at the rules' average)" if result.get("no_sheet") else ""
+            if result.get("test_kind") == "d20-over":
+                added = result["total"] - result["roll"]
+                text = (
+                    f"{label} check: rolled {result['roll']} {'+' if added >= 0 else '−'} {abs(added)} = {result['total']} "
+                    f"against DC {result['target']}, {outcome}{sheetless}"
+                )
+            else:
+                degrees = result["degrees"]
+                natural = f", a natural {'1' if result['natural'] == 'success' else '100'}" if result.get("natural") else ""
+                text = (
+                    f"{label} test: rolled {result['roll']} against {result['target']}, "
+                    f"{outcome} by {degrees} degree{'s' if degrees != 1 else ''}{natural}{sheetless}"
+                )
         else:
             result = await RPGDiceExtension.roll(requester_id, formula or "")
             text = f"Rolled {result['formula']}: {result['total']}"

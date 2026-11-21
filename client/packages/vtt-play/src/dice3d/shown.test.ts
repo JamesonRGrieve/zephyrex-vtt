@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
 import type { RollResult, TestResult } from '../dice/schemas';
+import { diceFor } from './faces';
 import { MAX_SHOWN, shownDice } from './shown';
 
 const test = { roll: 73, degrees: 1 } as unknown as TestResult;
@@ -15,6 +16,11 @@ describe('the dice a result shows', () => {
       { kind: 'd10-tens', label: '70' },
       { kind: 'd10', label: '3' },
     ]);
+  });
+
+  it('shows a d20 pack’s test as its d20', () => {
+    const check = { roll: 17, degrees: 0, test_kind: 'd20-over' } as unknown as TestResult;
+    expect(shownDice(check)).toEqual(diceFor(20, 17));
   });
 
   it('shows each die of a formula it has a model for, and skips the rest', () => {

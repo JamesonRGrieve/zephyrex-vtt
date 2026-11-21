@@ -149,7 +149,7 @@ def test_a_dice_tray_reads_what_a_test_can_name(server: TestClient, table: dict[
     assert {one["slug"] for one in options["characteristics"]} >= {"[redacted]", "fellowship"}
     lore = next(one for one in options["skills"] if one["slug"] == "[redacted]")
     assert lore["untrainable"] is True and lore["characteristic"] == "intelligence"
-    assert {"slug": "hellish", "modifier": -60} in options["difficulties"]
+    assert {"slug": "hellish", "modifier": -60, "dc": None} in options["difficulties"]
     stranger = server.post("/v1/dice/test-options", json=body, headers=_headers(create_user(server)))
     assert stranger.status_code == 404
     common = next(one for one in options["skills"] if one["slug"] == "[redacted]")

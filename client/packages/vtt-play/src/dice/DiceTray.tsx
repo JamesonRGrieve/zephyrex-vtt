@@ -61,12 +61,21 @@ export function DiceResult({ result }: { result: TestResult | RollResult }): Rea
   }
   const outcome = result.success ? 'Success' : 'Failure';
   const degrees = `${result.degrees} degree${result.degrees === 1 ? '' : 's'} of ${result.success ? 'success' : 'failure'}`;
+  const added = (result.total ?? result.roll) - result.roll;
   return (
     <div role='status' className='space-y-1'>
-      <p className='text-lg'>
-        <span className='font-semibold'>{outcome}</span>: rolled {result.roll} against {result.target}, {degrees}
-        {result.natural ? ` (a natural ${result.natural === 'success' ? '1' : '100'})` : ''}
-      </p>
+      {result.test_kind === 'd20-over' ? (
+        <p className='text-lg'>
+          <span className='font-semibold'>{outcome}</span>: rolled {result.roll} {added < 0 ? '−' : '+'} {Math.abs(added)} ={' '}
+          {result.total ?? result.roll} against DC {result.target}
+        </p>
+      ) : (
+        <p className='text-lg'>
+          <span className='font-semibold'>{outcome}</span>: rolled {result.roll} against {result.target}, {degrees}
+          {result.natural ? ` (a natural ${result.natural === 'success' ? '1' : '100'})` : ''}
+        </p>
+      )}
+      {result.no_sheet && <p className='text-muted-foreground text-sm'>No sheet: tested at the rules’ average.</p>}
       <ul className='text-muted-foreground text-sm'>
         {result.steps.map((one, index) => (
           <li key={index}>
@@ -105,6 +114,9 @@ function TestForm({
   };
   return (
     <form onSubmit={submit} className='space-y-3'>
+      {!options.has_sheet && (
+        <p className='text-muted-foreground text-sm'>No character sheet yet: tests use the rules’ average.</p>
+      )}
       <div className='space-y-1'>
         <Label htmlFor='dice-tray-name'>Test</Label>
         <select
@@ -152,7 +164,7 @@ function TestForm({
         <div ref={chips} role='radiogroup' aria-label='Difficulty' className='flex flex-wrap gap-2'>
           {options.difficulties.map((one) => (
             <ChoiceChip key={one.slug} checked={difficulty === one.slug} onClick={() => setDifficulty(one.slug)}>
-              {label(one.slug)} ({signed(one.modifier)})
+              {label(one.slug)} ({one.dc != null ? `DC ${one.dc}` : signed(one.modifier)})
             </ChoiceChip>
           ))}
         </div>
