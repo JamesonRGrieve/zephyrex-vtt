@@ -1,0 +1,24 @@
+{
+  "name": "@zephyrex/vtt-play",
+  "version": "0.0.1-alpha.1",
+  "description": "Zephyrex VTT's play UI, embeddable in any Zephyrex app (rpg-ai composes it): the dice tray, the seat list and the scene view.",
+  "author": "Jameson R Grieve",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JamesonRGrieve/zephyrex-vtt.git",
+    "directory": "client/packages/vtt-play"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "react": "^19.2.8",
+    "zephyrex": "^0.0.1-alpha.1",
+    "zod": "^4.6.5"
+  }
+}
