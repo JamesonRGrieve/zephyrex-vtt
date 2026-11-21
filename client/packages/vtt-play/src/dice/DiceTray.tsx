@@ -6,7 +6,7 @@
  * reached. rpg-ai's "Roll it" opens it prefilled (`prefill`). A campaign whose system has no rules
  * pack offers formulas only.
  */
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { chipGroup } from 'zephyrex/hooks/chipKeys';
 import { Button } from 'zephyrex/ui/button';
 import { ChoiceChip } from 'zephyrex/ui/choice-chip';
@@ -15,7 +15,12 @@ import { Label } from 'zephyrex/ui/label';
 import { LoadProblem } from 'zephyrex/ui/load-problem';
 import { SkeletonRows } from 'zephyrex/ui/skeleton';
 import type { RollResult, TestOptions, TestResult } from './schemas';
+import { canDrawDice } from '../dice3d/DiceStage';
+import { useDiceAnimation } from '../dice3d/useDiceAnimation';
 import { useDiceTray, type TestInput } from './useDiceTray';
+
+// three.js and cannon-es load only when a tray first shows a result.
+const DiceStage = lazy(() => import('../dice3d/DiceStage'));
 
 export interface DiceTrayProps {
   personId: string;
@@ -201,6 +206,7 @@ function FormulaForm({ busy, onRoll }: { busy: boolean; onRoll: (formula: string
 export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactNode {
   const tray = useDiceTray(personId);
   const { result } = tray;
+  const motion = useDiceAnimation();
   useEffect(() => {
     if (result !== null) onResult?.(result);
   }, [result, onResult]);
@@ -225,6 +231,21 @@ export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactN
         </p>
       )}
       {result !== null && <Result result={result} />}
+      {result !== null && canDrawDice() && (
+        <Suspense fallback={null}>
+          <DiceStage result={result} seed={tray.seed} animate={motion.animate} />
+        </Suspense>
+      )}
+      <label className='text-muted-foreground flex min-h-11 items-center gap-2 text-sm'>
+        <input
+          type='checkbox'
+          checked={motion.chosen}
+          disabled={motion.reduced}
+          onChange={(event) => motion.choose(event.target.checked)}
+          className='size-4'
+        />
+        {motion.reduced ? 'Dice appear at rest (your system asks for less motion)' : 'Animate dice'}
+      </label>
     </section>
   );
 }

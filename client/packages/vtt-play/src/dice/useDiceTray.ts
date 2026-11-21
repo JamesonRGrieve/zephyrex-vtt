@@ -39,6 +39,12 @@ export function useDiceTray(personId: string) {
   const client = useClient();
   const [options, setOptions] = useState<OptionsState>({ state: 'loading' });
   const [result, setResult] = useState<TestResult | RollResult | null>(null);
+  // A new seed with each result: the dice's tumble, shared by every seat that replays it.
+  const [seed, setSeed] = useState(0);
+  const show = (next: TestResult | RollResult): void => {
+    setResult(next);
+    setSeed(Math.floor(Math.random() * 2 ** 31));
+  };
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -76,20 +82,21 @@ export function useDiceTray(personId: string) {
     options,
     retry,
     result,
+    seed,
     problem,
     busy,
     test: (input: TestInput) =>
       run(
         client
           .post('/v1/dice/test', { test: { person_id: personId, modifiers: [], ...input } })
-          .then((answer: unknown) => setResult(testResultSchema.parse(answer).test)),
+          .then((answer: unknown) => show(testResultSchema.parse(answer).test)),
         'The test was not rolled',
       ),
     roll: (formula: string) =>
       run(
         client
           .post('/v1/dice/roll', { roll: { formula } })
-          .then((answer: unknown) => setResult(rollResultSchema.parse(answer).roll)),
+          .then((answer: unknown) => show(rollResultSchema.parse(answer).roll)),
         'The dice were not rolled',
       ),
   };

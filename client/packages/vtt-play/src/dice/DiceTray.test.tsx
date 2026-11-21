@@ -128,6 +128,20 @@ describe('the dice tray', () => {
     });
   });
 
+  it('keeps the device’s dice animation setting', async () => {
+    post.mockResolvedValue(OPTIONS);
+    window.localStorage.clear();
+    const { unmount } = render(<DiceTray personId='p1' />);
+    const toggle = await screen.findByRole('checkbox', { name: 'Animate dice' });
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
+    expect(window.localStorage.getItem('zephyrex-vtt:dice-animation')).toBe('off');
+    unmount();
+    render(<DiceTray personId='p1' />);
+    expect(await screen.findByRole('checkbox', { name: 'Animate dice' })).not.toBeChecked();
+  });
+
   it('refuses modifiers that are not whole numbers', async () => {
     post.mockResolvedValue(OPTIONS);
     render(<DiceTray personId='p1' />);
