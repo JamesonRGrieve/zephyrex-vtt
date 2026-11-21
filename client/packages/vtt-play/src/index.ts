@@ -17,3 +17,4 @@ export { SettingSystems, vttExtension, type VttExtensionOptions } from './extens
 export { campaignPath, scenePath, sheetPath, systemsPath, vttRoot } from './paths';
 export { CampaignSeats, CurrentSceneTokens, SceneList } from './table/TablePanel';
 export { TokenList } from './scene/SceneView';
+export { Inventory, type InventoryProps } from './inventory/Inventory';
