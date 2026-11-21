@@ -163,6 +163,59 @@ function Canvas({
   );
 }
 
+/** The tokens of a view as a list, with step buttons for the ones this person may move (keyboard,
+ * screen readers, phones); names link to the wiki. Used under the map, and on its own. */
+export function TokenList({
+  view,
+  personHref,
+  onMove,
+}: {
+  view: SceneViewData;
+  personHref?: (personId: string) => string | null;
+  onMove: (token: ViewToken, x: number, y: number) => void;
+}): ReactNode {
+  const move = onMove;
+  return (
+    <ul aria-label='Tokens' className='divide-border divide-y'>
+      {view.tokens.map((one) => {
+        const href = one.person_id ? (personHref?.(one.person_id) ?? null) : null;
+        return (
+          <li key={one.id} className='flex min-h-11 flex-wrap items-center gap-2 py-1'>
+            {href ? (
+              <a href={href} className='font-medium underline-offset-4 hover:underline'>
+                {one.name ?? 'Token'}
+              </a>
+            ) : (
+              <span className='font-medium'>{one.name ?? 'Token'}</span>
+            )}
+            <span className='text-muted-foreground text-xs'>
+              {one.mine ? 'Yours' : (one.disposition ?? '')}
+              {one.is_hidden ? ' · hidden' : ''}
+            </span>
+            {movable(view, one) && (
+              <span className='ms-auto flex gap-1'>
+                {STEPS.map((step) => (
+                  <Button
+                    key={step.label}
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    className='min-h-11 min-w-11'
+                    aria-label={`Move ${one.name ?? 'token'} ${step.label}`}
+                    onClick={() => move(one, one.x + step.dx * view.grid_size, one.y + step.dy * view.grid_size)}
+                  >
+                    {step.glyph}
+                  </Button>
+                ))}
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function SceneView({ sceneId, tokenId, personHref }: SceneViewProps): ReactNode {
   const scene = useSceneView(sceneId, tokenId);
   const [announcement, setAnnouncement] = useState('');
@@ -187,43 +240,7 @@ export function SceneView({ sceneId, tokenId, personHref }: SceneViewProps): Rea
       <p aria-live='polite' className='sr-only'>
         {announcement}
       </p>
-      <ul aria-label='Tokens' className='divide-border divide-y'>
-        {view.tokens.map((one) => {
-          const href = one.person_id ? (personHref?.(one.person_id) ?? null) : null;
-          return (
-            <li key={one.id} className='flex min-h-11 flex-wrap items-center gap-2 py-1'>
-              {href ? (
-                <a href={href} className='font-medium underline-offset-4 hover:underline'>
-                  {one.name ?? 'Token'}
-                </a>
-              ) : (
-                <span className='font-medium'>{one.name ?? 'Token'}</span>
-              )}
-              <span className='text-muted-foreground text-xs'>
-                {one.mine ? 'Yours' : (one.disposition ?? '')}
-                {one.is_hidden ? ' · hidden' : ''}
-              </span>
-              {movable(view, one) && (
-                <span className='ms-auto flex gap-1'>
-                  {STEPS.map((step) => (
-                    <Button
-                      key={step.label}
-                      type='button'
-                      variant='outline'
-                      size='sm'
-                      className='min-h-11 min-w-11'
-                      aria-label={`Move ${one.name ?? 'token'} ${step.label}`}
-                      onClick={() => move(one, one.x + step.dx * view.grid_size, one.y + step.dy * view.grid_size)}
-                    >
-                      {step.glyph}
-                    </Button>
-                  ))}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <TokenList view={view} personHref={personHref} onMove={move} />
     </section>
   );
 }

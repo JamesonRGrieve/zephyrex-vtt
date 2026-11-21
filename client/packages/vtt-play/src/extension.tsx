@@ -19,6 +19,19 @@ const CampaignTablePage = lazy(() => pages().then((module) => ({ default: module
 const ScenePage = lazy(() => pages().then((module) => ({ default: module.ScenePage })));
 const SheetPage = lazy(() => pages().then((module) => ({ default: module.SheetPage })));
 const SystemsPage = lazy(() => pages().then((module) => ({ default: module.SystemsPage })));
+const LazySettingSystems = lazy(() => pages().then((module) => ({ default: module.SettingSystems })));
+
+/**
+ * A setting's game systems and installed modules, for the wiki's setting page (Settings → <setting>
+ * → Game systems): a host passes it into the wiki's setting slot. Loads its page code lazily.
+ */
+export function SettingSystems({ settingId }: { settingId: string }): ReactElement {
+  return (
+    <Suspense fallback={null}>
+      <LazySettingSystems settingId={settingId} />
+    </Suspense>
+  );
+}
 
 type RoutedProps = { params: Record<string, string>; searchParams: Record<string, string> };
 
@@ -36,9 +49,11 @@ export interface VttExtensionOptions {
   base?: string;
   /** A character's wiki page (the wiki's recordPath), for names to link to. */
   personHref?: PersonHref;
+  /** false: mount the pages without nav entries (a host reaches them its own way). */
+  nav?: boolean;
 }
 
-export function vttExtension({ base = 'vtt', personHref }: VttExtensionOptions = {}): ZephyrexClientExtension {
+export function vttExtension({ base = 'vtt', personHref, nav = true }: VttExtensionOptions = {}): ZephyrexClientExtension {
   const root = vttRoot(base).slice(1);
   return {
     name: 'rpg_scene',
@@ -64,9 +79,11 @@ export function vttExtension({ base = 'vtt', personHref }: VttExtensionOptions =
       },
       { path: root, component: routed(() => <CampaignsPage base={base} />) },
     ],
-    navItems: [
-      { title: 'Tables', url: vttRoot(base) },
-      { title: 'Game systems', url: systemsPath(base) },
-    ],
+    navItems: nav
+      ? [
+          { title: 'Tables', url: vttRoot(base) },
+          { title: 'Game systems', url: systemsPath(base) },
+        ]
+      : [],
   };
 }

@@ -25,7 +25,13 @@ const tableSchema = z
   .passthrough();
 const systemSchema = z.object({ id: z.string(), name: z.string().nullish(), slug: z.string().nullish() }).passthrough();
 const moduleSchema = z
-  .object({ id: z.string(), name: z.string().nullish(), line: z.string().nullish(), document_count: z.number().nullish() })
+  .object({
+    id: z.string(),
+    name: z.string().nullish(),
+    line: z.string().nullish(),
+    document_count: z.number().nullish(),
+    game_system_id: z.string().nullish(),
+  })
   .passthrough();
 const currentSchema = z.object({ scene: z.object({ id: z.string(), name: z.string().nullish() }).nullable() });
 
@@ -186,5 +192,46 @@ export function SystemsPage(): ReactNode {
         </Rows>
       </section>
     </Page>
+  );
+}
+
+/**
+ * A setting's game systems and the modules installed for this account under them, for the wiki's
+ * Settings → <setting> page (a host puts it in the wiki's setting slot; the wiki never imports vtt).
+ */
+export function SettingSystems({ settingId }: { settingId: string }): ReactNode {
+  const systems = useList('/v1/game_system', 'game_systems', systemSchema, { setting_id: settingId });
+  const modules = useList('/v1/content_module', 'content_modules', moduleSchema);
+  return (
+    <section aria-label='Game systems' className='space-y-3'>
+      <Rows data={systems.data} retry={systems.retry} what='the game systems' empty='No game systems for this setting yet.'>
+        {(rows) => {
+          const ids = new Set(rows.map((one) => one.id));
+          const installed =
+            modules.data.state === 'ready'
+              ? modules.data.rows.filter((one) => ids.has(String(one.game_system_id ?? '')))
+              : [];
+          return (
+            <ul className='divide-border divide-y'>
+              {rows.map((one) => {
+                const mine = installed.filter((module) => module.game_system_id === one.id);
+                return (
+                  <li key={one.id} className='py-2'>
+                    <span className='font-medium'>{one.name ?? one.slug ?? 'Unnamed system'}</span>
+                    {mine.length > 0 && (
+                      <span className='text-muted-foreground ms-2 text-sm'>
+                        {mine
+                          .map((module) => `${module.name ?? module.line ?? 'module'} (${module.document_count ?? 0})`)
+                          .join(', ')}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }}
+      </Rows>
+    </section>
   );
 }

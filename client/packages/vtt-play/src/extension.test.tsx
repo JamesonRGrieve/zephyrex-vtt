@@ -20,6 +20,12 @@ describe('the VTT as an extension', () => {
     expect(extension.serverExtension).toBe('rpg_scene');
   });
 
+  it('mounts the pages without nav entries when the host asks', () => {
+    const quiet = vttExtension({ nav: false });
+    expect(quiet.navItems).toEqual([]);
+    expect(quiet.pages).toHaveLength(5);
+  });
+
   it('builds paths for apps that link in, segments encoded', () => {
     expect(vttRoot('vtt/')).toBe('/vtt');
     expect(campaignPath('vtt', 'c 1')).toBe('/vtt/campaign/c%201');
