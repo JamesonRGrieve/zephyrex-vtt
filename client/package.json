@@ -14,7 +14,7 @@
     "prettier": "prettier .",
     "prettier-fix": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "refresh:zephyrex": "pnpm update --no-save zephyrex @zephyrex/auth @zephyrex/lite @zephyrex/marketing @jgrieve/forms zod2gql",
+    "refresh:zephyrex": "pnpm update --no-save zephyrex @zephyrex/auth @zephyrex/lite @zephyrex/marketing @jgrieve/forms zod2gql @zephyrex-rpg/wiki",
     "pretest": "prisma generate",
     "test": "vitest run",
     "storybook": "storybook dev -p 6006",
@@ -25,15 +25,18 @@
     "@jgrieve/forms": "^0.0.1-alpha.1",
     "@prisma/adapter-better-sqlite3": "7.10.0",
     "@prisma/client": "^7.10.0",
+    "@zephyrex-rpg/wiki": "^0.0.1",
     "@zephyrex/auth": "^0.0.1-alpha.1",
     "@zephyrex/lite": "^0.0.1-alpha.1",
     "@zephyrex/marketing": "^0.0.1-alpha.1",
     "cannon-es": "^0.20.0",
     "clsx": "^2.1.1",
     "cookies-next": "^6.1.1",
+    "lucide-react": "^1.48.0",
     "next": "^16.4.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "swr": "^2.5.1",
     "tailwind-merge": "^3.7.0",
     "three": "^0.187.0",
     "zephyrex": "^0.0.1-alpha.1",
@@ -41,22 +44,25 @@
     "zod2gql": "^0.1.0-alpha.1"
   },
   "dependenciesMeta": {
-    "zephyrex": {
-      "injected": true
-    },
-    "@zephyrex/auth": {
-      "injected": true
-    },
     "@jgrieve/forms": {
       "injected": true
     },
-    "zod2gql": {
+    "@zephyrex-rpg/wiki": {
+      "injected": true
+    },
+    "@zephyrex/auth": {
       "injected": true
     },
     "@zephyrex/lite": {
       "injected": true
     },
     "@zephyrex/marketing": {
+      "injected": true
+    },
+    "zephyrex": {
+      "injected": true
+    },
+    "zod2gql": {
       "injected": true
     }
   },

@@ -13,6 +13,7 @@ overrides:
   '@zephyrex/marketing': file:../../client-framework/packages/marketing
   '@jgrieve/forms': file:../../dynamic-form
   zod2gql: file:../../zod2gql
+  '@zephyrex-rpg/wiki': file:../../zephyrex-rpg-wiki/client/packages/wiki
 
 packageExtensionsChecksum: sha256-tcwyliZ/U9nC21tAh932Bi1UaD9xgb5s3J7UifSquvA=
 
@@ -29,6 +30,9 @@ importers:
       '@prisma/client':
         specifier: ^7.10.0
         version: 7.10.1(@typescript/typescript6@6.0.2)(prisma@7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@12.11.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
+      '@zephyrex-rpg/wiki':
+        specifier: file:../../zephyrex-rpg-wiki/client/packages/wiki
+        version: file:../../zephyrex-rpg-wiki/client/packages/wiki(lucide-react@1.76.0(@types/react@19.3.0)(react@19.3.1))(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)(swr@2.5.1(react@19.3.1))(zephyrex@file:../../client-framework/packages/zephyrex(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@testing-library/react@16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(tailwindcss-animate@1.0.7(tailwindcss@4.3.5))(tailwindcss@4.3.5)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7))(zod@4.6.7)
       '@zephyrex/auth':
         specifier: file:../../auth
         version: file:../../auth(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7)
@@ -47,6 +51,9 @@ importers:
       cookies-next:
         specifier: ^6.1.1
         version: 6.1.1(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
+      lucide-react:
+        specifier: ^1.48.0
+        version: 1.76.0(@types/react@19.3.0)(react@19.3.1)
       next:
         specifier: ^16.4.6
         version: 16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -56,6 +63,9 @@ importers:
       react-dom:
         specifier: ^19.3.0
         version: 19.3.1(react@19.3.1)
+      swr:
+        specifier: ^2.5.1
+        version: 2.5.1(react@19.3.1)
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
@@ -73,6 +83,8 @@ importers:
         version: file:../../zod2gql(zod@4.6.7)
     dependenciesMeta:
       '@jgrieve/forms':
+        injected: true
+      '@zephyrex-rpg/wiki':
         injected: true
       '@zephyrex/auth':
         injected: true
@@ -3829,6 +3841,16 @@ packages:
 
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
+
+  '@zephyrex-rpg/wiki@file:../../zephyrex-rpg-wiki/client/packages/wiki':
+    resolution: {directory: ../../zephyrex-rpg-wiki/client/packages/wiki, type: directory}
+    peerDependencies:
+      lucide-react: '*'
+      next: '*'
+      react: '*'
+      swr: '*'
+      zephyrex: '*'
+      zod: '*'
 
   '@zephyrex/auth@file:../../auth':
     resolution: {directory: ../../auth, type: directory}
@@ -12373,6 +12395,15 @@ snapshots:
   '@xtuc/ieee754@1.2.0': {}
 
   '@xtuc/long@4.2.2': {}
+
+  '@zephyrex-rpg/wiki@file:../../zephyrex-rpg-wiki/client/packages/wiki(lucide-react@1.76.0(@types/react@19.3.0)(react@19.3.1))(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)(swr@2.5.1(react@19.3.1))(zephyrex@file:../../client-framework/packages/zephyrex(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@testing-library/react@16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(tailwindcss-animate@1.0.7(tailwindcss@4.3.5))(tailwindcss@4.3.5)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7))(zod@4.6.7)':
+    dependencies:
+      lucide-react: 1.76.0(@types/react@19.3.0)(react@19.3.1)
+      next: 16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react: 19.3.1
+      swr: 2.5.1(react@19.3.1)
+      zephyrex: file:../../client-framework/packages/zephyrex(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@testing-library/react@16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(tailwindcss-animate@1.0.7(tailwindcss@4.3.5))(tailwindcss@4.3.5)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7)
+      zod: 4.6.7
 
   '@zephyrex/auth@file:../../auth(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7)':
     dependencies:

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { wikiExtension } from '@zephyrex-rpg/wiki/extension';
 import type { ZephyrexConfig } from 'zephyrex';
 import { VttLogo } from './brand/VttLogo';
 import { genealogyExtension, rpgSystemsExtension } from './extensions/campaign';
@@ -7,8 +8,15 @@ import { rpgExtension } from './extensions/rpg';
 /** Where a person works. `/` is the landing page for visitors. */
 export const HOME_PATH = '/rpg';
 
+/**
+ * Where the wiki's pages live. The VTT includes the wiki out of the box (operator, 2026-11-21): the
+ * world's characters, items, places, organisations, journals and plot are first-class pages here,
+ * the same records scenes, tokens and sheets use.
+ */
+export const WIKI_BASE = 'w';
+
 /** The app's pages (matched as path prefixes); in the hosted build they need a signed-in person. */
-const APP_ROUTES = [HOME_PATH];
+const APP_ROUTES = [HOME_PATH, `/${WIKI_BASE}`];
 
 export const APP_NAME = 'Zephyrex VTT';
 export const APP_DESCRIPTION =
@@ -50,7 +58,7 @@ const config: ZephyrexConfig = {
         privateRoutes: [...APP_ROUTES, ...(process.env.PRIVATE_ROUTES ?? '').split(',').filter(Boolean)],
       }
     : { enabled: false },
-  extensions: [rpgExtension, genealogyExtension, rpgSystemsExtension],
+  extensions: [rpgExtension, wikiExtension({ base: WIKI_BASE }), genealogyExtension, rpgSystemsExtension],
 };
 
 export default config;

@@ -16,7 +16,7 @@ export const START: Link = { label: 'Open your table', href: '/rpg' };
 
 export const HERO = {
   title: 'Your table, on your own machine',
-  lead: 'A virtual tabletop for any game system: campaigns, characters and their state today, with maps, scenes, tokens, dice and combat on the way. Run it at home for your group, or use the hosted service.',
+  lead: 'A virtual tabletop for any game system, with your world wiki built in: campaigns, characters and their state today, with maps, scenes, tokens, dice and combat on the way. Run it at home for your group, or use the hosted service.',
 };
 
 /** What works now. */
@@ -26,6 +26,13 @@ export const TODAY: readonly Feature[] = [
     title: 'Campaigns and game systems',
     summary: 'Keep each campaign with the game system it runs on, and its game master.',
     details: ['Any system: you name it, nothing is built in', 'The same records in the home and hosted editions'],
+    availability: 'everywhere',
+  },
+  {
+    id: 'wiki',
+    title: 'A world wiki, built in',
+    summary: 'Every character, item, place, organisation, journal and plot thread is a wiki page of its own.',
+    details: ['The same records your scenes, tokens and sheets use', 'Worlds, taxonomy and plot alongside your campaigns'],
     availability: 'everywhere',
   },
   {

@@ -36,3 +36,7 @@ overrides:
   '@zephyrex/marketing': file:../../client-framework/packages/marketing
   '@jgrieve/forms': file:../../dynamic-form
   zod2gql: file:../../zod2gql
+  # The wiki's pages (operator, 2026-11-21: the VTT includes the wiki out of the box), from the
+  # pinned wiki checkout (WIKI_REF); deploy/compile-wiki.sh builds its dist against this app's own
+  # dependencies.
+  '@zephyrex-rpg/wiki': file:../../zephyrex-rpg-wiki/client/packages/wiki
