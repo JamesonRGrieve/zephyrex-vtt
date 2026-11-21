@@ -39,7 +39,27 @@ def test_the_named_systems_are_seeded_once_each(server: TestClient) -> None:
     for slug in SEEDED:
         assert slugs.count(slug) == 1, slug
     heresy = next(one for one in listed if one["slug"] == "redacted")
-    assert heresy["name"] == "[redacted]" and heresy["setting_id"] is None
+    assert heresy["name"] == "[redacted]"
+
+
+def _setting(server: TestClient, user: Any, slug: str) -> str:
+    response = server.get("/v1/setting", params={"slug": slug}, headers=_headers(user))
+    assert response.status_code == 200, response.text
+    found = response.json()["settings"]
+    assert len(found) == 1, found
+    return str(found[0]["id"])
+
+
+def test_each_seeded_system_belongs_to_the_wikis_setting(server: TestClient) -> None:
+    reader = create_user(server)
+    seed = json.loads((Path(__file__).parent / "game-systems.json").read_text())["systems"]
+    listed = {one["slug"]: one for one in _systems(reader)}
+    for system in seed:
+        assert listed[system["slug"]]["setting_id"] == _setting(server, reader, system["setting"]), system["slug"]
+    forty_k = _setting(server, reader, "redacted")
+    assert sorted(one["slug"] for one in _systems(reader, forty_k)) == sorted(
+        one["slug"] for one in seed if one["setting"] == "redacted"
+    )
 
 
 def test_a_system_made_without_a_slug_gets_one_from_its_name(server: TestClient) -> None:
