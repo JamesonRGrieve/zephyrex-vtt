@@ -80,9 +80,9 @@ beforeEach(() => {
 describe('the scene view', () => {
   it('lists what the player sees, linking characters to the wiki, and moves only their own token', async () => {
     post.mockImplementation((path: string) => Promise.resolve(path.endsWith('/view') ? view(false) : { scene_token: {} }));
-    render(<SceneView sceneId='s1' personHref={(id) => `/w/voidship/person/${id}`} />);
+    render(<SceneView showList sceneId='s1' personHref={(id) => `/w/voidship/person/${id}`} />);
     expect(await screen.findByRole('link', { name: 'Ada' })).toHaveAttribute('href', '/w/voidship/person/p-ada');
-    expect(screen.getByRole('img', { name: 'Map of Bridge' })).toBeInTheDocument();
+    expect(screen.getByRole('application', { name: /^Map of Bridge/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Move Orc/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Move Ada east' }));
     expect(post).toHaveBeenCalledWith('/v1/scene_token/ada/move', { move: { x: 100, y: 0 } });
@@ -90,7 +90,7 @@ describe('the scene view', () => {
 
   it('lets the GM move any token, hidden ones marked', async () => {
     post.mockImplementation((path: string) => Promise.resolve(path.endsWith('/view') ? view(true) : { scene_token: {} }));
-    render(<SceneView sceneId='s1' />);
+    render(<SceneView showList sceneId='s1' />);
     expect(await screen.findByText(/hidden/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Move Orc south' }));
     expect(post).toHaveBeenCalledWith('/v1/scene_token/orc/move', { move: { x: 300, y: 100 } });
@@ -100,7 +100,7 @@ describe('the scene view', () => {
     post.mockImplementation((path: string) =>
       path.endsWith('/view') ? Promise.resolve(view(false)) : Promise.reject(new Error('422')),
     );
-    render(<SceneView sceneId='s1' />);
+    render(<SceneView showList sceneId='s1' />);
     await userEvent.click(await screen.findByRole('button', { name: 'Move Ada south' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("Ada didn't move");
   });
@@ -108,7 +108,7 @@ describe('the scene view', () => {
   it('reads the view again when the scene’s room hears a change', async () => {
     let answer = view(false);
     post.mockImplementation(() => Promise.resolve(answer));
-    render(<SceneView sceneId='s1' />);
+    render(<SceneView showList sceneId='s1' />);
     await screen.findByText('Ada');
     expect(joined.room).toEqual({ type: 'scene', id: 's1' });
     answer = {
@@ -120,7 +120,7 @@ describe('the scene view', () => {
 
   it('says what failed to load', async () => {
     post.mockRejectedValue(new Error('down'));
-    render(<SceneView sceneId='s1' />);
+    render(<SceneView showList sceneId='s1' />);
     await waitFor(() => expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument());
   });
 });

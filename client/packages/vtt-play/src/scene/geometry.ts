@@ -56,6 +56,29 @@ export function fitWidth(width: number, height: number, viewport: [number, numbe
   return { zoom, x: -(vw / zoom - width) / 2, y: shown < vh ? -(vh / zoom - height) / 2 : 0 };
 }
 
+/** A camera showing a box of the scene (its left, top, width, height) in a viewport, centred, no
+ * closer than `maxZoom` (a lone token shouldn't fill the screen). */
+export function fitBox(box: [number, number, number, number], viewport: [number, number], maxZoom = 1.5): Camera {
+  const [left, top, width, height] = box;
+  const [vw, vh] = viewport;
+  const zoom = Math.min(maxZoom, MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(vw / Math.max(width, 1), vh / Math.max(height, 1))));
+  return { zoom, x: left - (vw / zoom - width) / 2, y: top - (vh / zoom - height) / 2 };
+}
+
+/** The box around tokens, padded by `pad` cells on every side; null with no tokens. */
+export function tokensBox<T extends Box>(
+  tokens: readonly T[],
+  grid: number,
+  pad = 3,
+): [number, number, number, number] | null {
+  if (tokens.length === 0) return null;
+  const left = Math.min(...tokens.map((one) => one.x)) - pad * grid;
+  const top = Math.min(...tokens.map((one) => one.y)) - pad * grid;
+  const right = Math.max(...tokens.map((one) => one.x + one.width * grid)) + pad * grid;
+  const bottom = Math.max(...tokens.map((one) => one.y + one.height * grid)) + pad * grid;
+  return [left, top, right - left, bottom - top];
+}
+
 /** The smallest tap target, in screen pixels (WCAG 2.5.5's 44 px). */
 export const MIN_TARGET = 44;
 

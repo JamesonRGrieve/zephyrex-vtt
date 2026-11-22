@@ -19,6 +19,11 @@ export interface SceneViewProps {
   tokenId?: string;
   /** A character's wiki page, for the token list's names. */
   personHref?: (personId: string) => string | null;
+  /** Also list the tokens with step buttons under the map (an accessible page's choice; the map
+   * itself takes taps and the keyboard, so play doesn't need it). */
+  showList?: boolean;
+  /** A long-press on a token: show its details. */
+  onTokenDetails?: (token: ViewToken) => void;
 }
 
 const STEPS = [
@@ -81,7 +86,7 @@ export function TokenList({
   );
 }
 
-export function SceneView({ sceneId, tokenId, personHref }: SceneViewProps): ReactNode {
+export function SceneView({ sceneId, tokenId, personHref, showList = false, onTokenDetails }: SceneViewProps): ReactNode {
   const scene = useSceneView(sceneId, tokenId);
   const [announcement, setAnnouncement] = useState('');
   const { data } = scene;
@@ -95,7 +100,7 @@ export function SceneView({ sceneId, tokenId, personHref }: SceneViewProps): Rea
 
   return (
     <section aria-label={view.name ?? 'Scene'} className='space-y-3'>
-      <SceneCanvas view={view} onMove={move} />
+      <SceneCanvas view={view} onMove={move} onTokenDetails={onTokenDetails} />
       {!view.lit && <p className='text-muted-foreground text-sm'>It’s dark here: you see only what’s lit or close.</p>}
       {scene.problem !== null && (
         <p role='alert' className='text-destructive text-sm'>
@@ -105,7 +110,7 @@ export function SceneView({ sceneId, tokenId, personHref }: SceneViewProps): Rea
       <p aria-live='polite' className='sr-only'>
         {announcement}
       </p>
-      <TokenList view={view} personHref={personHref} onMove={move} />
+      {showList && <TokenList view={view} personHref={personHref} onMove={move} />}
     </section>
   );
 }

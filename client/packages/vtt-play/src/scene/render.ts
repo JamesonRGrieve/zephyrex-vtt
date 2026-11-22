@@ -20,10 +20,21 @@ export interface Palette {
   mine: string;
 }
 
+/** A colour a canvas accepts, whatever form the theme gives a token in: a full colour (oklch(...),
+ * #hex, rgb(...)), or a bare channel list as shadcn themes store them ("240 4.8% 95.9%" for
+ * hsl(), "0.97 0 0" for oklch()). An invalid fill is ignored by a canvas (it keeps black), so each
+ * candidate is checked, and the fallback used when none is a colour. */
+export function resolveColour(value: string, fallback: string): string {
+  const raw = value.trim();
+  if (!raw) return fallback;
+  const supports = (candidate: string): boolean =>
+    typeof CSS !== 'undefined' && typeof CSS.supports === 'function' ? CSS.supports('color', candidate) : false;
+  const candidates = /^[\d.]/.test(raw) ? [`hsl(${raw})`, `oklch(${raw})`, raw] : [raw];
+  return candidates.find(supports) ?? fallback;
+}
+
 function token(style: CSSStyleDeclaration, name: string, fallback: string): string {
-  const value = style.getPropertyValue(name).trim();
-  if (!value) return fallback;
-  return /^[\d.]+(%|\s)/.test(value) ? `oklch(${value})` : value;
+  return resolveColour(style.getPropertyValue(name), fallback);
 }
 
 export function paletteOf(element: Element): Palette {
@@ -66,6 +77,7 @@ export function drawScene(
   size: [number, number],
   palette: Palette,
   drag: Drag | null = null,
+  selected: string | null = null,
 ): void {
   const [width, height] = size;
   const grid = view.grid_size;
@@ -75,6 +87,16 @@ export function drawScene(
   const [left, top] = toScreen(camera, 0, 0);
   context.fillStyle = view.background_color ?? palette.ground;
   context.fillRect(left, top, sceneWidth * camera.zoom, sceneHeight * camera.zoom);
+  // The place's name, faint in the scene's corner: a map with no art still says where it is.
+  if (view.name) {
+    context.fillStyle = palette.neutral;
+    context.globalAlpha = 0.6;
+    context.font = '600 14px system-ui, sans-serif';
+    context.textAlign = 'left';
+    context.textBaseline = 'top';
+    context.fillText(view.name, Math.max(left, 0) + 8, Math.max(top, 0) + 8);
+    context.globalAlpha = 1;
+  }
 
   // The grid, only where it's visible and only when cells are big enough to read.
   if (grid * camera.zoom >= 8) {
@@ -136,5 +158,26 @@ export function drawScene(
       context.fillText(initials(one.name), sx + w / 2, sy + h / 2);
     }
     context.globalAlpha = 1;
+    if (one.id === selected) {
+      // Selected: a ring and the name in a chip above, readable at any zoom.
+      context.strokeStyle = palette.mine;
+      context.lineWidth = 3;
+      context.beginPath();
+      context.arc(sx + w / 2, sy + h / 2, Math.max(radius, 2) + 4, 0, Math.PI * 2);
+      context.stroke();
+      const label = one.name ?? 'Token';
+      context.font = '600 13px system-ui, sans-serif';
+      const textWidth = context.measureText(label).width;
+      const chipX = sx + w / 2 - textWidth / 2 - 8;
+      const chipY = sy - 28;
+      context.fillStyle = palette.wall;
+      context.beginPath();
+      context.roundRect?.(chipX, chipY, textWidth + 16, 22, 11);
+      context.fill();
+      context.fillStyle = palette.ground;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(label, sx + w / 2, chipY + 11);
+    }
   }
 }

@@ -347,6 +347,7 @@ class TestOptionsOut(PlainModel):
     # Whether the character has a sheet under this pack (any of its characteristics set); without one
     # a tray offers formulas only.
     has_sheet: bool = True
+    test_kind: str = Field("d100-under", description="The pack's test: d100-under ([redacted]) or d20-over (5e)")
 
 
 class TestOptionsResultEnvelope(PlainModel):
@@ -780,6 +781,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             ],
             default_difficulty=difficulties["default"],
             has_sheet=self._has_sheet(person.id, pack, campaign, gm),
+            test_kind=str(pack["test"].get("kind", "d100-under")),
         )
 
     def sheet_for(self, body: SheetRequest) -> SheetOut:

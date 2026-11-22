@@ -24,6 +24,8 @@ export const testOptionsSchema = z.object({
     difficulties: z.array(z.object({ slug: z.string(), modifier: z.number(), dc: z.number().nullish() })),
     default_difficulty: z.string(),
     has_sheet: z.boolean().default(true),
+    // The pack's test: d100-under (the [redacted] lines) or d20-over (5e).
+    test_kind: z.enum(['d100-under', 'd20-over']).default('d100-under'),
   }),
 });
 export type TestOptions = z.infer<typeof testOptionsSchema>['options'];

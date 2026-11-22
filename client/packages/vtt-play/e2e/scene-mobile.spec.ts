@@ -16,7 +16,7 @@ const HARNESS = process.env.HARNESS_JS ?? '';
 async function open(page: Page): Promise<void> {
   await page.setContent(
     `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-     <style>body{margin:0;font-family:sans-serif}.h-\\[60svh\\]{height:60svh}.min-h-64{min-height:16rem}.w-full{width:100%}.h-full{height:100%}.relative{position:relative}.overflow-hidden{overflow:hidden}.touch-none{touch-action:none}canvas{display:block}</style>
+     <style>:root{--muted:240 4.8% 95.9%;--border:240 5.9% 90%;--foreground:240 10% 3.9%;--primary:262 83% 58%;--primary-foreground:0 0% 98%;--muted-foreground:240 3.8% 46.1%}body{margin:0;font-family:sans-serif}.h-\\[60svh\\]{height:60svh}.min-h-64{min-height:16rem}.w-full{width:100%}.h-full{height:100%}.relative{position:relative}.overflow-hidden{overflow:hidden}.touch-none{touch-action:none}canvas{display:block}</style>
      </head><body><p style="height:120px">Above the map</p><div id="root"></div><p style="height:1200px">Below the map</p></body></html>`,
   );
   await page.addScriptTag({ content: readFileSync(HARNESS, 'utf8') });
@@ -62,20 +62,50 @@ async function onPage(page: Page, x: number, y: number): Promise<[number, number
   return [at.left + (x - view.x) * view.zoom, at.top + (y - view.y) * view.zoom];
 }
 
-test('opens fitted to its width', async ({ page }) => {
+test('opens fitted to its tokens, on a visible ground (a theme of bare HSL channels)', async ({ page }) => {
   await open(page);
   const view = await camera(page);
-  expect(view.zoom).toBeCloseTo(390 / 2000, 3);
-  expect(view.x).toBeCloseTo(0, 0);
+  // Brann (1000, 700) and the Innkeeper (300, 300), padded three cells: 0..1400 × 0..1100.
+  const box = (await page.locator('canvas').boundingBox())!;
+  expect(view.zoom).toBeCloseTo(Math.min(box.width / 1400, box.height / 1100), 3);
+  const ground = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')!;
+    const pixel = canvas
+      .getContext('2d')!
+      .getImageData(Math.round(canvas.width * 0.9), Math.round(canvas.height * 0.5), 1, 1).data;
+    return [pixel[0], pixel[1], pixel[2], pixel[3]];
+  });
+  expect(ground[3]).toBeGreaterThan(0);
+  expect(ground[0]! + ground[1]! + ground[2]!).toBeGreaterThan(300); // the light theme's muted ground, not black
+});
+
+test('tap a token to select it, then tap a cell to move it there', async ({ page }) => {
+  await open(page);
+  const [left, top] = await onPage(page, 1050, 750);
+  await page.touchscreen.tap(left, top);
+  await expect(page.locator('canvas')).toHaveAttribute('data-selected', 'brann');
+  const [cellX, cellY] = await onPage(page, 1250, 750);
+  await page.touchscreen.tap(cellX, cellY);
+  await expect.poll(() => page.evaluate(() => window.moves)).toEqual([{ id: 'brann', x: 1200, y: 700 }]);
+  await expect(page.locator('canvas')).toHaveAttribute('data-selected', '');
+});
+
+test('the keyboard selects the player’s token and moves it', async ({ page }) => {
+  await open(page);
+  await page.locator('canvas').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('canvas')).toHaveAttribute('data-selected', 'brann');
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(() => page.evaluate(() => window.moves)).toEqual([{ id: 'brann', x: 1000, y: 800 }]);
 });
 
 test('drags the player’s own token from a 44 px target, snapped to the grid', async ({ page }) => {
   await open(page);
   const cdp = await page.context().newCDPSession(page);
-  // Brann's cell is drawn about 20 px wide; touch 15 px off its right edge, inside the 44 px target.
+  // Brann's cell is drawn about 28 px wide; touch 5 px off its right edge, inside the 44 px target.
   const [left, top] = await onPage(page, 1000, 700);
   const cell = 100 * (await camera(page)).zoom;
-  const start: [number, number] = [left + cell + 10, top + cell / 2];
+  const start: [number, number] = [left + cell + 5, top + cell / 2];
   await drag(cdp, start, [start[0] + cell * 2, start[1]]);
   await expect.poll(() => page.evaluate(() => window.moves)).toEqual([{ id: 'brann', x: 1200, y: 700 }]);
 });

@@ -195,8 +195,21 @@ function TestForm({
   );
 }
 
-function FormulaForm({ busy, onRoll }: { busy: boolean; onRoll: (formula: string) => void }): ReactNode {
-  const [formula, setFormula] = useState('1d100');
+/** The free roll's starting dice: a d100 for the percentile ([redacted]) packs, else a d20 (5e, or no pack). */
+export function defaultFormula(options: TestOptions | null): string {
+  return options !== null && options.test_kind === 'd100-under' ? '1d100' : '1d20';
+}
+
+function FormulaForm({
+  busy,
+  onRoll,
+  initial,
+}: {
+  busy: boolean;
+  onRoll: (formula: string) => void;
+  initial: string;
+}): ReactNode {
+  const [formula, setFormula] = useState(initial);
   return (
     <form
       onSubmit={(event) => {
@@ -239,7 +252,14 @@ export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactN
       {tray.options.state === 'ready' && (
         <TestForm options={tray.options.options} prefill={prefill} busy={tray.busy} onTest={tray.test} />
       )}
-      {tray.options.state !== 'loading' && <FormulaForm busy={tray.busy} onRoll={tray.roll} />}
+      {tray.options.state !== 'loading' && (
+        <FormulaForm
+          key={tray.options.state}
+          busy={tray.busy}
+          onRoll={tray.roll}
+          initial={defaultFormula(tray.options.state === 'ready' ? tray.options.options : null)}
+        />
+      )}
       {tray.problem !== null && (
         <p role='alert' className='text-destructive text-sm'>
           {tray.problem}

@@ -14,7 +14,8 @@ vi.mock('zephyrex', () => ({
     ),
 }));
 
-const { DiceResult, DiceTray, parseModifiers } = await import('./DiceTray');
+const { DiceResult, DiceTray, defaultFormula, parseModifiers } = await import('./DiceTray');
+const { testOptionsSchema } = await import('./schemas');
 
 const OPTIONS = {
   options: {
@@ -197,5 +198,15 @@ describe('the dice tray', () => {
     await userEvent.type(await screen.findByLabelText('Other modifiers'), 'lots');
     expect(screen.getByRole('button', { name: 'Roll the test' })).toBeDisabled();
     expect(screen.getByText('Whole numbers only, separated by commas.')).toBeInTheDocument();
+  });
+
+  it('starts the free roll on the system’s die: a d20 for 5e or no pack, a d100 for the [redacted] lines', () => {
+    expect(defaultFormula(null)).toBe('1d20');
+    expect(defaultFormula(testOptionsSchema.parse({ options: { ...OPTIONS.options, test_kind: 'd20-over' } }).options)).toBe(
+      '1d20',
+    );
+    expect(
+      defaultFormula(testOptionsSchema.parse({ options: { ...OPTIONS.options, test_kind: 'd100-under' } }).options),
+    ).toBe('1d100');
   });
 });
