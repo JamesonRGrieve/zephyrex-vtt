@@ -67,7 +67,9 @@ TRAIT_KINDS: dict[str, str] = {
 # An origin-path document's step becomes its kind.
 # The dnd5e system's item types that are traits in vtt (the 2024 packs): a character's origins and
 # class, and the features under them. A `feat` item says what it belongs to in system.type.value.
-DND5E_KINDS: dict[str, str] = {"race": "species", "background": "background", "class": "class", "subclass": "subclass"}
+DND5E_KINDS: dict[str, str] = {
+    "race": "species", "background": "background", "class": "class", "subclass": "subclass", "spell": "spell",
+}
 DND5E_FEATS: dict[str, str] = {"class": "class-feature", "race": "species-trait", "feat": "feat"}
 
 ORIGIN_STEPS: dict[str, str] = {

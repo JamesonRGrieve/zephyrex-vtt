@@ -91,6 +91,7 @@ def test_the_dnd5e_line_kinds() -> None:
     assert trait_kind(five("feat", type={"value": "class"})) == "class-feature"
     assert trait_kind(five("feat", type={"value": "race"})) == "species-trait"
     assert trait_kind(five("feat", type={"value": "feat"})) == "feat"
+    assert trait_kind(five("spell")) == "spell", "a known spell is a trait, so the sheet lists it under abilities"
     assert trait_kind(five("weapon")) is None
 
 
