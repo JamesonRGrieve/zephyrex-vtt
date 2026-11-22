@@ -201,3 +201,22 @@ def test_the_gm_places_a_new_npc_beside_the_seats_character(server: TestClient) 
     assert rest.status_code == 200, rest.text
     tokens = asyncio.run(RPGSceneExtension.scene_tokens(str(gm.id), taproom["id"]))
     assert sorted(one["name"] for one in tokens) == ["Brann", "Old Tam"], "one token per person"
+
+
+def test_a_scenes_own_picture_wins_over_its_places(server: TestClient) -> None:
+    gm = create_user(server)
+    campaign = _create(server, gm, "campaign", name="Saltmere", user_id=gm.id)
+    docks = _create(server, gm, "location", name="Saltmere Docks", picture_url="https://example.org/docks.jpg")
+    _create(server, gm, "person", name="Nia", kind="pc", user_id=gm.id, campaign_id=campaign["id"])
+    scene = _create(server, gm, "scene", name="Docks", campaign_id=campaign["id"], location_id=docks["id"])
+    view = server.post(f"/v1/scene/{scene['id']}/view", json={"view": {}}, headers=_headers(gm)).json()["view"]
+    assert view["background_url"] == "https://example.org/docks.jpg", "the place's picture"
+    current = server.get(f"/v1/scene/{scene['id']}", headers=_headers(gm))
+    put = server.put(
+        f"/v1/scene/{scene['id']}",
+        json={"scene": {"background_url": "https://example.org/battlemap.png"}},
+        headers={**_headers(gm), "If-Match": current.headers["ETag"]},
+    )
+    assert put.status_code == 200, put.text
+    view = server.post(f"/v1/scene/{scene['id']}/view", json={"view": {}}, headers=_headers(gm)).json()["view"]
+    assert view["background_url"] == "https://example.org/battlemap.png", "the scene's own map wins"

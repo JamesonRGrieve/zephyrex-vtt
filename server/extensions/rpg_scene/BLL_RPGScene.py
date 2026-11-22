@@ -81,6 +81,7 @@ class SceneModel(
     entry_x: Optional[float] = Field(None, description="Where arrivals appear, pixels; none = the scene's centre")
     entry_y: Optional[float] = Field(None, description="Where arrivals appear, pixels; none = the scene's centre")
     is_active: Optional[bool] = Field(False, description="The campaign's current scene (one per campaign; activate)")
+    background_url: Optional[str] = Field(None, description="The scene's map picture by link (a generated battlemap); over its place's picture")
     table_comment: ClassVar[str] = "A playable area in a campaign: the battlemap a table plays on"
 
     class Create(BaseModel, CampaignModel.Reference.ID.Optional, LocationModel.Reference.ID.Optional):
@@ -99,6 +100,7 @@ class SceneModel(
         flags: Optional[dict[str, Any]] = None
         entry_x: Optional[float] = None
         entry_y: Optional[float] = None
+        background_url: Optional[str] = Field(None, max_length=2000)
 
     class Update(BaseModel):
         location_id: Optional[str] = None
@@ -117,6 +119,7 @@ class SceneModel(
         flags: Optional[dict[str, Any]] = None
         entry_x: Optional[float] = None
         entry_y: Optional[float] = None
+        background_url: Optional[str] = Field(None, max_length=2000)
 
     class Search(ApplicationModel.Search, CampaignModel.Reference.ID.Search, LocationModel.Reference.ID.Search):
         is_active: Optional[bool] = None
@@ -1028,8 +1031,10 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         )
 
     def _background_of(self, scene: Any) -> Optional[str]:
-        """What to draw under the grid: the scene's own art when it has some (not yet: art is an
-        attachment), else its wiki location's picture (vault locations have paintings)."""
+        """What to draw under the grid: the scene's own map picture (background_url: a battlemap the
+        GM set or rpg-ai generated), else its wiki location's picture (vault locations have paintings)."""
+        if getattr(scene, "background_url", None):
+            return str(scene.background_url)
         location_id = getattr(scene, "location_id", None)
         location = None if location_id is None else self._get(LocationManager, location_id)
         return getattr(location, "picture_url", None) if location is not None else None
