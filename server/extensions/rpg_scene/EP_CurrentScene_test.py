@@ -95,3 +95,34 @@ def test_a_scenarios_scenes_copy_into_its_playthrough(server: TestClient) -> Non
     with pytest.raises(HTTPException) as refused:
         asyncio.run(RPGSceneExtension.copy_scenes(str(other.id), scenario["id"], playthrough["id"], {}))
     assert refused.value.status_code == 404
+
+
+def test_starting_a_playthrough_copies_the_scenarios_scenes(server: TestClient) -> None:
+    """The wiki's start (POST /v1/campaign/{id}/instantiate, its AFTER_INSTANTIATE callbacks) brings the
+    scenario's scenes into the playthrough, tokens on the copied characters, the current one current."""
+    import time
+
+    author = create_user(server)
+    scenario = _create(server, author, "campaign", name="The Lantern", user_id=author.id, is_scenario=True)
+    vell = _create(server, author, "person", name="Vell", kind="npc", campaign_id=scenario["id"])
+    deck = _create(server, author, "scene", name="Deck", campaign_id=scenario["id"], width=800, height=600)
+    _create(server, author, "scene_token", name="Vell", scene_id=deck["id"], person_id=vell["id"], x=200, y=200)
+    asyncio.run(RPGSceneExtension.activate_scene(str(author.id), deck["id"]))
+
+    accepted = server.post(f"/v1/campaign/{scenario['id']}/instantiate", json={"instantiate": {}}, headers=_headers(author))
+    assert accepted.status_code == 202, accepted.text
+    start = accepted.json()["start"]
+    deadline = time.monotonic() + 60
+    while start["state"] == "running":
+        assert time.monotonic() < deadline, start
+        time.sleep(0.5)
+        start = server.get(f"/v1/campaign_start/{start['id']}", headers=_headers(author)).json()["campaign_start"]
+    assert start["state"] == "done", start.get("error") or start
+
+    playthrough = start["campaign_id"]
+    shown = _current(server, author, playthrough)
+    assert shown is not None and shown["name"] == "Deck" and shown["campaign_id"] == playthrough
+    tokens = asyncio.run(RPGSceneExtension.scene_tokens(str(author.id), shown["id"]))
+    assert len(tokens) == 1 and tokens[0]["entity_id"] != vell["id"], "on the playthrough's copy of Vell"
+    copied = server.get(f"/v1/person/{tokens[0]['entity_id']}", headers=_headers(author)).json()["person"]
+    assert (copied["name"], copied["campaign_id"]) == ("Vell", playthrough)

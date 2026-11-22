@@ -41,6 +41,11 @@ EXTENSIONS = ",".join(
     [
         "auth_session",
         "genealogy",
+        # As the wiki composes them: its start copies each record's properties (metadata) and
+        # pictures (attachments, on cloud storage), and world_properties types them.
+        "cloud",
+        "attachments",
+        "metadata",
         "acl_rbac",
         "conversations",
         "rooms",
@@ -49,6 +54,7 @@ EXTENSIONS = ",".join(
         "world_inventory",
         "world_narrative",
         "world_taxonomy",
+        "world_properties",
         "entity_posts",
         "rpg_core",
         "rpg_systems",
