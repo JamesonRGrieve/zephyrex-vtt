@@ -220,3 +220,19 @@ def test_a_scenes_own_picture_wins_over_its_places(server: TestClient) -> None:
     assert put.status_code == 200, put.text
     view = server.post(f"/v1/scene/{scene['id']}/view", json={"view": {}}, headers=_headers(gm)).json()["view"]
     assert view["background_url"] == "https://example.org/battlemap.png", "the scene's own map wins"
+
+
+def test_the_gm_sets_a_scenes_background_through_the_ability(server: TestClient) -> None:
+    gm, player = create_user(server), create_user(server)
+    campaign = _create(server, gm, "campaign", name="Saltmere", user_id=gm.id)
+    _create(server, gm, "person", name="Nia", kind="pc", user_id=player.id, campaign_id=campaign["id"])
+    scene = _create(server, gm, "scene", name="Docks", campaign_id=campaign["id"])
+    before = asyncio.run(RPGSceneExtension.current_scene(str(gm.id), campaign["id"]))
+    assert before is not None and before["background_url"] is None, "nothing to draw: rpg-ai generates"
+    made = asyncio.run(RPGSceneExtension.set_scene_background(str(gm.id), scene["id"], "/v1/asset/a1/content"))
+    assert made["background_url"] == "/v1/asset/a1/content"
+    after = asyncio.run(RPGSceneExtension.current_scene(str(player.id), campaign["id"]))
+    assert after is not None and after["background_url"] == "/v1/asset/a1/content"
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(RPGSceneExtension.set_scene_background(str(player.id), scene["id"], "/v1/asset/x/content"))
+    assert refused.value.status_code == 404

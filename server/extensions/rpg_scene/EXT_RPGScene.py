@@ -68,6 +68,14 @@ class RPGSceneExtension(AbstractStaticExtension):
         return None if found is None else found.model_dump()
 
     @classmethod
+    @ability("set_scene_background")
+    async def set_scene_background(cls, requester_id: str, scene_id: str, background_url: str | None) -> dict[str, Any]:
+        """Set a scene's own map picture (a generated battlemap's link, e.g. /v1/asset/{id}/content),
+        drawn under its grid over its place's picture; None clears it. Returns the scene's summary,
+        background_url included. The campaign's GM."""
+        return cls.scenes(requester_id).set_background_for(scene_id, background_url).model_dump()
+
+    @classmethod
     @ability("place_person")
     async def place_person(
         cls,

@@ -778,6 +778,8 @@ class SceneSummary(PlainModel):
     width: Optional[int]
     height: Optional[int]
     grid_size: float
+    background_url: Optional[str] = Field(None, description="What the map draws under its grid: the scene's own picture, else its place's")
+
 
 
 class CurrentOut(PlainModel):
@@ -1030,6 +1032,23 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             background_url=self._background_of(scene),
         )
 
+    def _summarize(self, scene: Any) -> SceneSummary:
+        """A scene's summary with what its map draws under the grid (_background_of)."""
+        summary = _summary(scene)
+        summary.background_url = self._background_of(scene)
+        return summary
+
+    def set_background_for(self, scene_id: str, background_url: Optional[str]) -> SceneSummary:
+        """Set (or, with None, clear) a scene's own map picture: a generated battlemap's link. The
+        campaign's GM only."""
+        scene = self._get(SceneManager, scene_id)
+        campaign = None if scene is None or scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        if scene is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("SceneModel")
+        if background_url is not None and len(background_url) > 2000:
+            raise HTTPException(status_code=422, detail={"message": "That link is longer than 2000 characters"})
+        return self._summarize(self._trusted(SceneManager).update(id=scene.id, background_url=background_url))
+
     def _background_of(self, scene: Any) -> Optional[str]:
         """What to draw under the grid: the scene's own map picture (background_url: a battlemap the
         GM set or rpg-ai generated), else its wiki location's picture (vault locations have paintings)."""
@@ -1073,7 +1092,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             if other.id != scene.id and other.is_active:
                 # is_active is server-written (activate only): out of the client's Update schema.
                 scenes.update_trusted(id=other.id, is_active=False)
-        return _summary(scenes.update_trusted(id=scene.id, is_active=True))
+        return self._summarize(scenes.update_trusted(id=scene.id, is_active=True))
 
     def _is_member(self, campaign: Any) -> bool:
         """The campaign's GM, or a player with a character in it."""
@@ -1099,11 +1118,11 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         )
         for scene in scenes:
             if scene.is_active:
-                return _summary(scene)
+                return self._summarize(scene)
         if scenes:
-            return _summary(self._trusted(SceneManager).update_trusted(id=scenes[0].id, is_active=True))
+            return self._summarize(self._trusted(SceneManager).update_trusted(id=scenes[0].id, is_active=True))
         made = self.default_scene_for(campaign)
-        return None if made is None else _summary(made)
+        return None if made is None else self._summarize(made)
 
     def default_scene_for(self, campaign: Any) -> Any | None:
         """A plain grid scene for a campaign with none, made as its GM and made current: at the
@@ -1192,7 +1211,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             if other.is_active and other.id != current.id:
                 scenes.update_trusted(id=other.id, is_active=False)
         scenes.update_trusted(id=current.id, is_active=True)
-        return [_summary(self._get(SceneManager, scene.id) or scene) for _, scene in copied]
+        return [self._summarize(self._get(SceneManager, scene.id) or scene) for _, scene in copied]
 
     def _arrival_point(self, scene: Any) -> tuple[float, float]:
         """Where arrivals appear: the scene's entry point, else its centre."""
