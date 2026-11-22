@@ -739,6 +739,17 @@ class CurrentEnvelope(PlainModel):
     current: CurrentRequest
 
 
+class PlaceRequest(PlainModel):
+    person_id: str
+    near_person_id: Optional[str] = Field(None, description="Beside this person's token on the scene")
+    x: Optional[float] = Field(None, description="Or at this point, pixels")
+    y: Optional[float] = None
+
+
+class PlaceEnvelope(PlainModel):
+    place: PlaceRequest
+
+
 class CopyRequest(PlainModel):
     from_campaign_id: str
     to_campaign_id: str
@@ -1331,6 +1342,23 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             location_id=location,
         )
 
+    def place_person_for(self, scene_id: str, body: PlaceRequest) -> PilotOut:
+        """Put a person of the campaign on a scene (an NPC the GM just authored): on the nearest free
+        cell beside ``near_person_id``'s token there, else at the point given, else at the scene's
+        entry. One token per person, as pilot_token keeps it (off any other scene); their wiki
+        location follows the scene. The campaign's GM only."""
+        scene = self._get(SceneManager, scene_id)
+        if scene is None:
+            raise _not_found("SceneModel")
+        x, y = body.x, body.y
+        if body.near_person_id is not None:
+            beside = next(iter(_live(self._trusted(SceneTokenManager), scene_id=scene.id, person_id=body.near_person_id)), None)
+            if beside is not None:
+                grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+                x = float(beside.x or 0) + float(beside.width or 1) * grid / 2
+                y = float(beside.y or 0) + float(beside.height or 1) * grid / 2
+        return self.pilot_for(body.person_id, scene_id=scene.id, x=x, y=y)
+
     def tokens_for(self, scene_id: str) -> list[SceneTokenOut]:
         """Who is on a scene: each token and the wiki person it stands for. The campaign's GM gets
         every token, hidden ones flagged (a GM-side decision may count them); a member of the
@@ -1375,6 +1403,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
     )
     async def current_route(self, body: CurrentEnvelope) -> CurrentOut:
         return CurrentOut(scene=self.current_scene_for(body.current.campaign_id))
+
+    @custom_route(
+        method="POST",
+        path="/{scene_id}/place",
+        input_model=PlaceEnvelope,
+        output_model=PilotOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Put a person on a scene beside another's token, at a point, or at the entry (the campaign's GM)",
+    )
+    async def place_route(self, scene_id: str, body: PlaceEnvelope) -> PilotOut:
+        return self.place_person_for(scene_id, body.place)
 
     @custom_route(
         method="POST",

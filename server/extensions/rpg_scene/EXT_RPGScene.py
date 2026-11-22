@@ -68,6 +68,25 @@ class RPGSceneExtension(AbstractStaticExtension):
         return None if found is None else found.model_dump()
 
     @classmethod
+    @ability("place_person")
+    async def place_person(
+        cls,
+        requester_id: str,
+        scene_id: str,
+        person_id: str,
+        near_person_id: str | None = None,
+        x: float | None = None,
+        y: float | None = None,
+    ) -> dict[str, Any]:
+        """Put a person of the campaign on a scene (an NPC just authored mid-play): beside
+        ``near_person_id``'s token (the seat's character), else at a point, else at the entry, on the
+        nearest free cell; one token per person. Returns the token's place. The campaign's GM."""
+        from zephyrex.extensions.rpg_scene.BLL_RPGScene import PlaceRequest
+
+        body = PlaceRequest(person_id=person_id, near_person_id=near_person_id, x=x, y=y)
+        return cls.scenes(requester_id).place_person_for(scene_id, body).model_dump()
+
+    @classmethod
     @ability("copy_scenes")
     async def copy_scenes(
         cls, requester_id: str, from_campaign_id: str, to_campaign_id: str, id_map: dict[str, str] | None = None

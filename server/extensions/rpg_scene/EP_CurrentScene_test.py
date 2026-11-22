@@ -178,3 +178,26 @@ def test_a_campaign_without_a_system_uses_its_settings_packed_system(server: Tes
     villager = _create(server, gm, "person", name="Villager", kind="npc", campaign_id=campaign["id"])
     options = asyncio.run(RPGDiceExtension.test_options(str(gm.id), villager["id"]))
     assert options["system"] == "dnd-5e" and len(options["skills"]) == 18
+
+
+def test_the_gm_places_a_new_npc_beside_the_seats_character(server: TestClient) -> None:
+    gm, player = create_user(server), create_user(server)
+    campaign = _create(server, gm, "campaign", name="Split Antler", user_id=gm.id)
+    brann = _create(server, gm, "person", name="Brann", kind="pc", user_id=player.id, campaign_id=campaign["id"])
+    tam = _create(server, gm, "person", name="Old Tam", kind="npc", campaign_id=campaign["id"])
+    taproom = _create(server, gm, "scene", name="Taproom", campaign_id=campaign["id"], width=1000, height=800)
+    _create(server, gm, "scene_token", name="Brann", scene_id=taproom["id"], person_id=brann["id"], x=400, y=400)
+
+    placed = asyncio.run(RPGSceneExtension.place_person(str(gm.id), taproom["id"], tam["id"], near_person_id=brann["id"]))
+    assert placed["scene_id"] == taproom["id"] and placed["token_id"]
+    assert max(abs(placed["x"] - 400), abs(placed["y"] - 400)) == 100, "the nearest free cell beside Brann"
+
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(RPGSceneExtension.place_person(str(player.id), taproom["id"], tam["id"], x=100, y=100))
+    assert refused.value.status_code == 404
+    rest = server.post(
+        f"/v1/scene/{taproom['id']}/place", json={"place": {"person_id": tam["id"], "x": 850, "y": 650}}, headers=_headers(gm)
+    )
+    assert rest.status_code == 200, rest.text
+    tokens = asyncio.run(RPGSceneExtension.scene_tokens(str(gm.id), taproom["id"]))
+    assert sorted(one["name"] for one in tokens) == ["Brann", "Old Tam"], "one token per person"
