@@ -20,3 +20,4 @@ export { TokenList } from './scene/SceneView';
 export { Inventory, type InventoryProps } from './inventory/Inventory';
 export { CombatOrder, type CombatOrderProps, type EncounterOrder } from './combat/CombatOrder';
 export { Loot, type LootProps } from './loot/Loot';
+export { AbilityScores, type AbilityScoresProps, type BuilderOptions } from './builder/AbilityScores';
