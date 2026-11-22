@@ -536,7 +536,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             for trait in traits.list(campaign_id=campaign.id)
             if stat_name(trait.name or "") == name and (gm or self._readable(TraitManager, trait.id))
         ]
-        if not named and campaign.game_system_id is not None:
+        if not named and self.system_id_of(campaign) is not None:
             named = self._system_trait(name, campaign)
         if not named:
             raise _refused(DiceError("unknown_stat", f"There is no stat called @{name}"))
@@ -551,7 +551,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         another account's private module is never one of them, though a trusted read lists it."""
         candidates = [
             trait
-            for trait in self._trusted(TraitManager).list(game_system_id=campaign.game_system_id)
+            for trait in self._trusted(TraitManager).list(game_system_id=self.system_id_of(campaign))
             if trait.campaign_id is None and stat_name(trait.name or "") == name
         ]
         if not candidates:
@@ -622,9 +622,24 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             steps=fold_hidden(resolved.base, list(resolved.steps), visible),
         )
 
+    def _players_of(self, person: Any) -> set[str]:
+        """Who plays a character: the person's own player (user_id), and whoever holds a seat for
+        them at a table (rpg_table's controller_id: a playthrough's copied pregens are played
+        through seats). rpg_table builds on rpg_dice, so it's read only when it's loaded."""
+        found = {str(person.user_id)} if getattr(person, "user_id", None) else set()
+        try:
+            from zephyrex.extensions.rpg_table.BLL_RPGTable import TableSeatManager  # type: ignore[import-not-found]
+        except ImportError:
+            return found
+        seats = self._trusted(TableSeatManager)
+        for seat in seats.list(filters=[seats.DB.deleted_at.is_(None)], person_id=person.id):
+            if getattr(seat, "controller_id", None):
+                found.add(str(seat.controller_id))
+        return found
+
     def _character(self, person_id: str) -> tuple[Any, Any, bool]:
         """The character, their campaign, and whether the requester is its GM. Only the campaign's
-        GM and the character's own player get past; anyone else gets the same answer as a
+        GM and the character's player (their own, or their seat's) get past; anyone else gets the same answer as a
         character that isn't there, so nobody learns which ids exist."""
         person = self._get(PersonManager, "PersonModel", person_id)
         requester = str(self.requester.id)
@@ -634,7 +649,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         gm = campaign is not None and requester in {
             str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner
         }
-        if not gm and requester != getattr(person, "user_id", None):
+        if not gm and requester not in self._players_of(person):
             raise _not_found("PersonModel")
         if campaign is None:
             raise HTTPException(
@@ -678,9 +693,23 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         ranks = [int(row.rank) for row in rows]
         return max(ranks) if ranks else None
 
+    def system_id_of(self, campaign: Any) -> Optional[str]:
+        """The campaign's game system: its own, else (a vault-imported scenario or its playthrough,
+        made with a setting but no system) the one system of its setting that has a rules pack.
+        None when neither says (no setting, or a setting whose systems have several packs or none)."""
+        own = getattr(campaign, "game_system_id", None)
+        if own is not None:
+            return str(own)
+        setting_id = getattr(campaign, "setting_id", None)
+        if setting_id is None:
+            return None
+        systems = self._trusted(GameSystemManager).list(setting_id=setting_id)
+        packed = [system for system in systems if system.slug and load_pack(system.slug) is not None]
+        return str(packed[0].id) if len(packed) == 1 else None
+
     def _pack_for(self, campaign: Any) -> dict[str, Any]:
         """The rules pack of the campaign's game system, or a 422 saying it has none."""
-        system_id = getattr(campaign, "game_system_id", None)
+        system_id = self.system_id_of(campaign)
         system = None if system_id is None else self._get(GameSystemManager, "GameSystemModel", system_id)
         pack = None if system is None or not system.slug else load_pack(system.slug)
         if pack is None:
@@ -741,7 +770,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         owned gear. For the campaign's GM or the character's own player; a player never sees a trait
         they couldn't read themselves (a GM's secret)."""
         person, campaign, gm = self._character(body.person_id)
-        system_id = getattr(campaign, "game_system_id", None)
+        system_id = self.system_id_of(campaign)
         system = None if system_id is None else self._get(GameSystemManager, "GameSystemModel", system_id)
         traits = self._trusted(TraitManager)
         sections: dict[str, list[SheetEntry]] = {"characteristics": [], "skills": [], "resources": [], "origins": [], "abilities": []}

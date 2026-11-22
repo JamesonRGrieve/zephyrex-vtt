@@ -523,13 +523,14 @@ class SceneTokenManager(AbstractBLLManager, RouterMixin):
                 campaign = self._trusted(CampaignManager).get(id=scene.campaign_id)
             except HTTPException:
                 campaign = None
-        gm = campaign is not None and requester == campaign.user_id
+        gm = requester in _campaign_gms(campaign)
         player = False
         if not gm and token.person_id is not None:
             try:
-                player = getattr(self._trusted(PersonManager).get(id=token.person_id), "user_id", None) == requester
+                person = self._trusted(PersonManager).get(id=token.person_id)
             except HTTPException:
-                player = False
+                person = None
+            player = requester in _controllers(self.model_registry, person)
         if not (gm or player):
             raise _not_found("SceneTokenModel")
         if not gm:
@@ -787,6 +788,30 @@ def _live(manager: Any, **filters: Any) -> list[Any]:
     return list(manager.list(filters=[manager.DB.deleted_at.is_(None)], **filters))
 
 
+def _campaign_gms(campaign: Any) -> set[str]:
+    """A campaign's GM: its owner, or its creator for a campaign made without one."""
+    if campaign is None:
+        return set()
+    return {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}
+
+
+def _controllers(model_registry: Any, person: Any) -> set[str]:
+    """Who plays a character: the person's own player (user_id), and whoever holds a seat for them
+    at a table (rpg_table's controller_id; a playthrough's copied pregens are played through seats)."""
+    if person is None:
+        return set()
+    found = {str(person.user_id)} if getattr(person, "user_id", None) else set()
+    try:
+        from zephyrex.extensions.rpg_table.BLL_RPGTable import TableSeatManager  # type: ignore[import-not-found]
+    except ImportError:
+        return found
+    seats = TableSeatManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
+    for seat in _live(seats, person_id=person.id):
+        if getattr(seat, "controller_id", None):
+            found.add(str(seat.controller_id))
+    return found
+
+
 def _not_found(model: str) -> HTTPException:
     return HTTPException(
         status_code=404, detail={"message": f"Request searched {model} and could not find the required record."}
@@ -842,8 +867,8 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         requester = str(self.requester.id)
         campaign = None if scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
         person = None if viewer.person_id is None else self._get(PersonManager, viewer.person_id)
-        gm = campaign is not None and requester == campaign.user_id
-        player = person is not None and requester == getattr(person, "user_id", None)
+        gm = requester in _campaign_gms(campaign)
+        player = requester in _controllers(self.model_registry, person)
         if not (gm or player):
             # The same answer as a scene or token that isn't there.
             raise _not_found("SceneTokenModel")
@@ -900,20 +925,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             raise _not_found("SceneModel")
         requester = str(self.requester.id)
         campaign = None if scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
-        gm = campaign is not None and requester == campaign.user_id
+        gm = requester in _campaign_gms(campaign)
         rows = list(_live(self._trusted(SceneTokenManager), scene_id=scene.id))
-        walls = list(self._trusted(SceneWallManager).list(scene_id=scene.id))
+        walls = list(_live(self._trusted(SceneWallManager), scene_id=scene.id))
         people: dict[str, Any] = {}
 
-        def owner(row: Any) -> Optional[str]:
+        def plays(row: Any) -> bool:
             if row.person_id is None:
-                return None
+                return False
             if row.person_id not in people:
-                people[row.person_id] = self._get(PersonManager, row.person_id)
-            person = people[row.person_id]
-            return None if person is None else getattr(person, "user_id", None)
+                people[row.person_id] = _controllers(self.model_registry, self._get(PersonManager, row.person_id))
+            return requester in people[row.person_id]
 
-        mine = {row.id for row in rows if owner(row) == requester}
+        mine = {row.id for row in rows if plays(row)}
         viewer = None
         if body.token_id is not None:
             viewer = next((row for row in rows if row.id == body.token_id), None)
@@ -922,7 +946,11 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         elif not gm:
             viewer = next((row for row in rows if row.id in mine), None)
             if viewer is None:
-                raise _not_found("SceneModel")
+                # A player of the campaign with no token here sees the map and nothing on it; anyone
+                # else gets the same answer as a scene that isn't there.
+                if campaign is None or not self._is_member(campaign):
+                    raise _not_found("SceneModel")
+                return ViewOut(**self._empty_view(scene))
 
         def drawn(row: Any) -> ViewToken:
             return ViewToken(
@@ -979,11 +1007,27 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             walls=shown,
         )
 
+    def _empty_view(self, scene: Any) -> dict[str, Any]:
+        """A scene's map with nothing on it: for a player of the campaign with no token there."""
+        return {
+            "scene_id": scene.id,
+            "name": scene.name,
+            "width": scene.width,
+            "height": scene.height,
+            "grid_size": float(scene.grid_size or DEFAULT_GRID_SIZE),
+            "grid_distance": float(scene.grid_distance or DEFAULT_GRID_DISTANCE),
+            "grid_units": scene.grid_units or "ft",
+            "background_color": scene.background_color,
+            "gm": False,
+            "viewer": None,
+            "lit": False,
+            "tokens": [],
+            "walls": [],
+        }
+
     def _gms_of(self, campaign: Any) -> set[str]:
         """Who is a campaign's GM: its owner, or its creator for a campaign made without one."""
-        if campaign is None:
-            return set()
-        return {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}
+        return _campaign_gms(campaign)
 
     def activate_scene_for(self, scene_id: str) -> SceneSummary:
         """Make a scene its campaign's current scene, and no other: the campaign's GM only."""
@@ -1004,7 +1048,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         if requester in self._gms_of(campaign):
             return True
         return any(
-            getattr(person, "user_id", None) == requester
+            requester in _controllers(self.model_registry, person)
             for person in _live(self._trusted(PersonManager), campaign_id=campaign.id)
         )
 
@@ -1037,7 +1081,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         if gm is None:
             return None
         persons = _live(self._trusted(PersonManager), campaign_id=campaign.id)
-        players = [one for one in persons if getattr(one, "user_id", None)]
+        players = [one for one in persons if _controllers(self.model_registry, one)]
         place = next((one.location_id for one in players if getattr(one, "location_id", None)), None)
         if place is None:
             place = next((one.location_id for one in persons if getattr(one, "location_id", None)), None)
@@ -1063,7 +1107,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 person_id=person.id,
                 x=x,
                 y=y,
-                disposition="friendly" if getattr(person, "user_id", None) else "neutral",
+                disposition="friendly" if person in players else "neutral",
             )
         return self._trusted(SceneManager).update_trusted(id=scene.id, is_active=True)
 
@@ -1296,20 +1340,10 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             raise _not_found("SceneModel")
         requester = str(self.requester.id)
         campaign = None if scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
-        owners = set() if campaign is None else {
-            str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner
-        }
-        gm = requester in owners
+        gm = requester in _campaign_gms(campaign)
         rows = list(_live(self._trusted(SceneTokenManager), scene_id=scene.id))
-        if not gm:
-            member = False
-            for row in rows:
-                person = None if row.person_id is None else self._get(PersonManager, row.person_id)
-                if person is not None and getattr(person, "user_id", None) == requester:
-                    member = True
-                    break
-            if not member:
-                raise _not_found("SceneModel")
+        if not gm and (campaign is None or not self._is_member(campaign)):
+            raise _not_found("SceneModel")
         return [
             SceneTokenOut(token_id=row.id, name=row.name, entity_id=row.person_id, hidden=bool(row.is_hidden))
             for row in rows

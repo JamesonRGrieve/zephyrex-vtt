@@ -126,3 +126,55 @@ def test_starting_a_playthrough_copies_the_scenarios_scenes(server: TestClient) 
     assert len(tokens) == 1 and tokens[0]["entity_id"] != vell["id"], "on the playthrough's copy of Vell"
     copied = server.get(f"/v1/person/{tokens[0]['entity_id']}", headers=_headers(author)).json()["person"]
     assert (copied["name"], copied["campaign_id"]) == ("Vell", playthrough)
+
+
+def test_a_seated_player_sees_from_their_token_and_rolls_without_owning_the_person(server: TestClient) -> None:
+    """A playthrough's copied pregen is played through a table seat (controller_id), not the
+    person's user_id: its player sees the scene from its token, and rolls its tests. A player of the
+    campaign with no token on the scene gets the map and nothing on it."""
+    from zephyrex.extensions.rpg_dice.EXT_RPGDice import RPGDiceExtension
+    from zephyrex.extensions.rpg_table.BLL_RPGTable import TableSeatManager
+    from zephyrex.lib.Environment import env
+
+    gm, player, other = create_user(server), create_user(server), create_user(server)
+    campaign = _create(server, gm, "campaign", name="Playthrough", user_id=gm.id)
+    pregen = _create(server, gm, "person", name="Osk", kind="pc", campaign_id=campaign["id"])
+    _create(server, gm, "person", name="Wren", kind="pc", user_id=other.id, campaign_id=campaign["id"])
+    table = _create(server, gm, "table", name="Session 1", campaign_id=campaign["id"])
+    seats = TableSeatManager(requester_id=env("ROOT_ID"), model_registry=server.app.state.model_registry)
+    seats.create_row(conversation_id=table["conversation_id"], person_id=pregen["id"], name="Osk", avatar=None, controller_id=str(player.id))
+    scene = _create(server, gm, "scene", name="Chapel", campaign_id=campaign["id"], width=500, height=500)
+    _create(server, gm, "scene_token", name="Osk", scene_id=scene["id"], person_id=pregen["id"], x=100, y=100)
+
+    assert _current(server, player, campaign["id"])["id"] == scene["id"]
+    seen = server.post(f"/v1/scene/{scene['id']}/view", json={"view": {}}, headers=_headers(player))
+    assert seen.status_code == 200, seen.text
+    view = seen.json()["view"]
+    assert view["gm"] is False and [one["name"] for one in view["tokens"] if one["mine"]] == ["Osk"]
+
+    tokenless = server.post(f"/v1/scene/{scene['id']}/view", json={"view": {}}, headers=_headers(other))
+    assert tokenless.status_code == 200, tokenless.text
+    assert tokenless.json()["view"]["tokens"] == [] and tokenless.json()["view"]["walls"] == []
+
+    options = asyncio.run(RPGDiceExtension.roll(str(player.id), "1d6"))
+    assert 1 <= options["total"] <= 6
+    with pytest.raises(HTTPException) as no_pack:
+        asyncio.run(RPGDiceExtension.test_options(str(player.id), pregen["id"]))
+    assert no_pack.value.status_code == 422, "past the access rule: only the system is missing"
+
+
+def test_a_campaign_without_a_system_uses_its_settings_packed_system(server: TestClient) -> None:
+    """A vault-imported scenario (or its playthrough) has a setting but no game system: rpg_dice uses
+    the one system of that setting with a rules pack."""
+    from zephyrex.extensions.rpg_dice.EXT_RPGDice import RPGDiceExtension
+    from zephyrex.extensions.rpg_systems.EXT_RPGSystems import RPGSystemsExtension
+
+    gm = create_user(server)
+    systems = {one["slug"]: one for one in asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))}
+    setting_id = systems["dnd-5e"].get("setting_id")
+    if setting_id is None:
+        pytest.skip("the dnd-5e system has no setting in this database")
+    campaign = _create(server, gm, "campaign", name="Imported", user_id=gm.id, setting_id=setting_id)
+    villager = _create(server, gm, "person", name="Villager", kind="npc", campaign_id=campaign["id"])
+    options = asyncio.run(RPGDiceExtension.test_options(str(gm.id), villager["id"]))
+    assert options["system"] == "dnd-5e" and len(options["skills"]) == 18

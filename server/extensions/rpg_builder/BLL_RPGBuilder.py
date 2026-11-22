@@ -267,7 +267,7 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         enabled = {row.content_module_id for row in self._trusted(CampaignModuleManager).list(campaign_id=campaign.id)}
         records = self._trusted(ModuleRecordManager)
         system = []
-        for trait in self._live(traits, game_system_id=campaign.game_system_id, kind=kind):
+        for trait in self._live(traits, game_system_id=self._dice().system_id_of(campaign), kind=kind):
             if trait.campaign_id is not None:
                 continue
             modules = {row.content_module_id for row in records.list(entity_type="trait", entity_id=trait.id)}
