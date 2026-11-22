@@ -72,3 +72,27 @@ def test_an_enabled_module_answers_and_anothers_never_does(app: Any) -> None:
     _create(server, gm, "campaign_module", campaign_id=campaign["id"], content_module_id=module.module_id)
     enabled = asyncio.run(RPGDiceExtension.test(str(gm.id), acolyte["id"], "[redacted]"))
     assert enabled["target"] == 45, "the enabled module's trait wins over the template"
+
+
+def test_a_line_without_a_committed_pack_runs_by_its_enabled_modules_rules(app: Any) -> None:
+    """[redacted] has no committed pack: its campaign's tests run by the rules of the RT module
+    enabled on it (the bridge's rules step writes them in a pack's shape), and answer 422 before."""
+    from zephyrex.extensions.rpg_systems.Packs import load_pack
+
+    server = TestClient(app)
+    registry = app.state.model_registry
+    gm = create_user(server)
+    systems = asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))
+    rogue = next(one for one in systems if one["slug"] == "redacted")["id"]
+    shaped = {key: value for key, value in (load_pack("redacted") or {}).items() if key not in ("system", "$comment")}
+    rules = {**shaped, "line": "rt", "characteristic_generation": {"roll": {"dice": "2d10", "base": 25}}, "starting_xp": 0}
+    campaign = _create(server, gm, "campaign", name="Lantern", user_id=gm.id, game_system_id=rogue)
+    explorer = _create(server, gm, "person", name="Vell", kind="pc", user_id=gm.id, campaign_id=campaign["id"])
+    with pytest.raises(Exception) as before:
+        asyncio.run(RPGDiceExtension.test_options(str(gm.id), explorer["id"]))
+    assert getattr(before.value, "status_code", None) == 422
+
+    module = install(registry, str(gm.id), {"line": "rt", "packs": [], "documents": [], "problems": []}, rules=rules)
+    _create(server, gm, "campaign_module", campaign_id=campaign["id"], content_module_id=module.module_id)
+    options = asyncio.run(RPGDiceExtension.test_options(str(gm.id), explorer["id"]))
+    assert options["system"] == "redacted" and options["characteristics"]

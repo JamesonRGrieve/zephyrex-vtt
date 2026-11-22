@@ -35,7 +35,7 @@ from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager  # type: ig
 from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager, GameSystemModel  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.Packs import load_pack  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_dice.D20 import d20_test  # type: ignore[import-not-found]
-from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ContentModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[import-not-found]
     DerivativeTraitManager,
     PersonTraitManager,
@@ -707,11 +707,29 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         packed = [system for system in systems if system.slug and load_pack(system.slug) is not None]
         return str(packed[0].id) if len(packed) == 1 else None
 
+    def _module_pack(self, campaign: Any, system: Any) -> Optional[dict[str, Any]]:
+        """A system with no committed pack (the private [redacted] lines) runs by the rules of a content
+        module enabled on the campaign for that system: the Foundry bridge's rules step writes them in
+        a pack's shape (test, skill ranks, difficulties, characteristics, skills, and character
+        creation). None when no enabled module of the system has rules."""
+        modules = self._trusted(ContentModuleManager)
+        for link in self._trusted(CampaignModuleManager).list(campaign_id=campaign.id):
+            try:
+                module = modules.get(id=link.content_module_id)
+            except HTTPException:
+                continue
+            rules = getattr(module, "rules", None)
+            if rules and str(getattr(module, "game_system_id", "") or "") == str(system.id) and rules.get("test"):
+                return {**rules, "system": system.slug}
+        return None
+
     def _pack_for(self, campaign: Any) -> dict[str, Any]:
         """The rules pack of the campaign's game system, or a 422 saying it has none."""
         system_id = self.system_id_of(campaign)
         system = None if system_id is None else self._get(GameSystemManager, "GameSystemModel", system_id)
         pack = None if system is None or not system.slug else load_pack(system.slug)
+        if pack is None and system is not None:
+            pack = self._module_pack(campaign, system)
         if pack is None:
             raise HTTPException(
                 status_code=422,
