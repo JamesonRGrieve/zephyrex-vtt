@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name = "rpg_builder"
+version = "0.1.0"
+description = "Character creation by the rules as written: ability scores by the pack's own methods"
+entry_module = "EXT_RPGBuilder"
+minimum_framework_version = "0.0.1"
+# Where this extension's source is offered (AGPL-3.0 section 13).
+repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
+
+# The pack, the character's access rule and their stats come from rpg_dice
+[[extension_dependencies]]
+name = "rpg_dice"
+optional = false
+
+# Scores are written as the character's trait values
+[[extension_dependencies]]
+name = "rpg_traits"
+optional = false
+
+# A roll belongs to one of genealogy's persons
+[[extension_dependencies]]
+name = "genealogy"
+optional = false

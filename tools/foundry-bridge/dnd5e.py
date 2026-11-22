@@ -242,6 +242,8 @@ def test_pack(root: Path) -> dict[str, Any]:
         "difficulties": {**difficulties, "default": "medium", "cite": "Playing the Game › D20 Tests › Typical Difficulty Classes"},
         "characteristics": abilities,
         "characteristics_cite": "Playing the Game › Ability Scores and Modifiers",
+        # Character creation's three methods (Step 3), from the same text the module's rules step reads.
+        "ability_methods": {**rules(root)["ability_methods"], "cite": "Creating a Character › Generate Your Scores"},
         "skills": skills,
     }
 

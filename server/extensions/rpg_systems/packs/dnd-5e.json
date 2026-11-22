@@ -111,6 +111,34 @@
     }
   ],
   "characteristics_cite": "Playing the Game › Ability Scores and Modifiers",
+  "ability_methods": {
+    "standard_array": [
+      15,
+      14,
+      13,
+      12,
+      10,
+      8
+    ],
+    "roll": {
+      "formula": "4d6kh3",
+      "count": 6
+    },
+    "point_buy": {
+      "pool": 27,
+      "costs": {
+        "8": 0,
+        "9": 1,
+        "10": 2,
+        "11": 3,
+        "12": 4,
+        "13": 5,
+        "14": 7,
+        "15": 9
+      }
+    },
+    "cite": "Creating a Character › Generate Your Scores"
+  },
   "skills": [
     {
       "slug": "acrobatics",

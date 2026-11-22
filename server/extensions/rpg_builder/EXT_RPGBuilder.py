@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""rpg_builder extension: character creation by the rules as written (BLL_RPGBuilder), as routes and
+as abilities an agent calls: read a character's options, roll their ability scores, set them."""
+
+from typing import Any, ClassVar
+
+from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
+from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, RollRequest
+from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
+
+
+class RPGBuilderExtension(AbstractStaticExtension):
+    name: ClassVar[str] = "rpg_builder"
+    version: ClassVar[str] = "0.1.0"
+    description: ClassVar[str] = "Character creation by the rules as written: ability scores by the pack's own methods"
+    dependencies: ClassVar[Dependencies] = Dependencies(
+        [
+            EXT_Dependency(
+                name="rpg_dice",
+                friendly_name="Rpg Dice",
+                optional=False,
+                reason="The pack, the character's access rule and their stats come from rpg_dice",
+            ),
+            EXT_Dependency(
+                name="rpg_traits",
+                friendly_name="Rpg Traits",
+                optional=False,
+                reason="Scores are written as the character's trait values",
+            ),
+            EXT_Dependency(
+                name="genealogy",
+                friendly_name="Genealogy",
+                optional=False,
+                reason="A roll belongs to one of genealogy's persons",
+            ),
+        ]
+    )
+
+    @classmethod
+    def builder(cls, requester_id: str) -> BuilderManager:
+        manager: BuilderManager = cls.as_requester(BuilderManager, requester_id)
+        return manager
+
+    @classmethod
+    @ability("builder_options")
+    async def builder_options(cls, requester_id: str, person_id: str) -> dict[str, Any]:
+        """A character's ability score methods under the campaign's pack ([redacted]: standard array,
+        point buy with its costs and pool, 4d6 keep 3 six times), their current scores, any kept
+        roll, and whether the requester may set them now."""
+        return cls.builder(requester_id).options_for(person_id).model_dump()
+
+    @classmethod
+    @ability("roll_abilities")
+    async def roll_abilities(cls, requester_id: str, person_id: str, again: bool = False) -> dict[str, Any]:
+        """Roll a character's ability scores by the pack's random generation, on the server, and keep
+        the roll (one per character for a player; ``again`` lets the GM roll a new set)."""
+        return cls.builder(requester_id).roll_for(RollRequest(person_id=person_id, again=again)).model_dump()
+
+    @classmethod
+    @ability("set_abilities")
+    async def set_abilities(cls, requester_id: str, person_id: str, method: str, scores: dict[str, int]) -> dict[str, Any]:
+        """Set a character's ability scores by ``method`` (standard_array, point_buy, or roll: their
+        kept roll), one score per ability slug, checked against the method's rule."""
+        body = ApplyRequest(person_id=person_id, method=method, scores=scores)  # type: ignore[arg-type]
+        return cls.builder(requester_id).apply_for(body).model_dump()
