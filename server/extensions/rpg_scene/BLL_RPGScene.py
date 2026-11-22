@@ -738,6 +738,20 @@ class CurrentEnvelope(PlainModel):
     current: CurrentRequest
 
 
+class CopyRequest(PlainModel):
+    from_campaign_id: str
+    to_campaign_id: str
+    id_map: dict[str, str] = Field(default_factory=dict, description="Source wiki ids (persons, locations) to the copies'")
+
+
+class CopyEnvelope(PlainModel):
+    copy_scenes: CopyRequest
+
+
+class CopiedEnvelope(PlainModel):
+    scenes: list["SceneSummary"]
+
+
 class SceneSummary(PlainModel):
     id: str
     name: Optional[str]
@@ -750,6 +764,9 @@ class SceneSummary(PlainModel):
 
 class CurrentOut(PlainModel):
     scene: Optional[SceneSummary]
+
+
+CopiedEnvelope.model_rebuild()
 
 
 def _summary(scene: Any) -> SceneSummary:
@@ -981,15 +998,124 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 scenes.update_trusted(id=other.id, is_active=False)
         return _summary(scenes.update_trusted(id=scene.id, is_active=True))
 
+    def _is_member(self, campaign: Any) -> bool:
+        """The campaign's GM, or a player with a character in it."""
+        requester = str(self.requester.id)
+        if requester in self._gms_of(campaign):
+            return True
+        return any(
+            getattr(person, "user_id", None) == requester
+            for person in _live(self._trusted(PersonManager), campaign_id=campaign.id)
+        )
+
     def current_scene_for(self, campaign_id: str) -> Optional[SceneSummary]:
-        """A campaign's current scene, for anyone who may read it; none when none is active."""
-        for scene in self._trusted(SceneManager).list(campaign_id=campaign_id):
+        """A campaign's current scene, for its GM and its players (scenes are the GM's rows, so a
+        player's own read would miss them: membership is checked here and the scene read as the
+        system). With none active, its first scene becomes current; with no scene at all, a default
+        one is made where the party is (default_scene_for), so the map is never empty."""
+        campaign = self._get(CampaignManager, campaign_id)
+        if campaign is None or not self._is_member(campaign):
+            return None
+        scenes = sorted(
+            _live(self._trusted(SceneManager), campaign_id=campaign.id),
+            key=lambda one: one.created_at.timestamp() if one.created_at else 0,
+        )
+        for scene in scenes:
             if scene.is_active:
-                try:
-                    return _summary(self.get(id=scene.id))
-                except HTTPException:
-                    return None
-        return None
+                return _summary(scene)
+        if scenes:
+            return _summary(self._trusted(SceneManager).update_trusted(id=scenes[0].id, is_active=True))
+        made = self.default_scene_for(campaign)
+        return None if made is None else _summary(made)
+
+    def default_scene_for(self, campaign: Any) -> Any | None:
+        """A plain grid scene for a campaign with none, made as its GM and made current: at the
+        players' characters' wiki location (named after it, as its map), with a token for each
+        character there, placed from the centre outward; with no location, the players' characters.
+        None for a campaign without a GM."""
+        gm = next(iter(sorted(self._gms_of(campaign))), None)
+        if gm is None:
+            return None
+        persons = _live(self._trusted(PersonManager), campaign_id=campaign.id)
+        players = [one for one in persons if getattr(one, "user_id", None)]
+        place = next((one.location_id for one in players if getattr(one, "location_id", None)), None)
+        if place is None:
+            place = next((one.location_id for one in persons if getattr(one, "location_id", None)), None)
+        present = [one for one in persons if place is not None and getattr(one, "location_id", None) == place] or players
+        location = None if place is None else self._get(LocationManager, place)
+        as_gm = lambda manager: manager(requester_id=gm, model_registry=self.model_registry)  # noqa: E731
+        grid = DEFAULT_GRID_SIZE
+        scene = as_gm(SceneManager).create(
+            name=(getattr(location, "name", None) or getattr(campaign, "name", None) or "The table"),
+            campaign_id=campaign.id,
+            location_id=place,
+            width=int(20 * grid),
+            height=int(15 * grid),
+        )
+        taken: set[tuple[int, int]] = set()
+        tokens = as_gm(SceneTokenManager)
+        for person in present:
+            x, y = self._free_cell(scene, self._arrival_point(scene), taken)
+            taken.add((int(x // grid), int(y // grid)))
+            tokens.create(
+                name=person.name or "Character",
+                scene_id=scene.id,
+                person_id=person.id,
+                x=x,
+                y=y,
+                disposition="friendly" if getattr(person, "user_id", None) else "neutral",
+            )
+        return self._trusted(SceneManager).update_trusted(id=scene.id, is_active=True)
+
+    def copy_scenes_for(self, from_campaign_id: str, to_campaign_id: str, id_map: dict[str, str]) -> list[SceneSummary]:
+        """Copy a campaign's scenes, with everything on them, into another campaign: a scenario's maps
+        into a playthrough started from it. ``id_map`` maps the source's wiki ids (persons, locations)
+        to the copies' (the wiki's instantiate); ids not in it are kept. The source scene that was
+        current is current in the copy (else the first). For the target campaign's GM, who can read
+        the source campaign."""
+        target = self._get(CampaignManager, to_campaign_id)
+        if target is None or str(self.requester.id) not in self._gms_of(target):
+            raise _not_found("CampaignModel")
+        try:
+            CampaignManager(requester_id=str(self.requester.id), model_registry=self.model_registry).get(id=from_campaign_id)
+        except HTTPException:
+            raise _not_found("CampaignModel") from None
+        gm = str(self.requester.id)
+        mapped = dict(id_map)
+        skip = {"id", "created_at", "updated_at", "created_by_user_id", "updated_by_user_id", "deleted_at", "deleted_by_user_id"}
+
+        def copy(manager: type[Any], row: Any, **overrides: Any) -> Any:
+            creatable = set(manager._model.Create.model_fields)
+            fields = {key: value for key, value in row.model_dump().items() if key in creatable and key not in skip}
+            for key in ("person_id", "location_id", "scene_level_id", "scene_feature_id"):
+                if fields.get(key) is not None:
+                    fields[key] = mapped.get(fields[key], fields[key])
+            fields.update(overrides)
+            made = manager(requester_id=gm, model_registry=self.model_registry).create(**fields)
+            mapped[row.id] = made.id
+            return made
+
+        copied: list[tuple[Any, Any]] = []
+        sources = sorted(
+            _live(self._trusted(SceneManager), campaign_id=from_campaign_id),
+            key=lambda one: one.created_at.timestamp() if one.created_at else 0,
+        )
+        for source in sources:
+            scene = copy(SceneManager, source, campaign_id=to_campaign_id)
+            for part in (SceneLevelManager, SceneFeatureManager, SceneWallManager, SceneLightManager,
+                         SceneTileManager, SceneNoteManager, SceneRegionManager, SceneTokenManager):
+                for row in _live(self._trusted(part), scene_id=source.id):
+                    copy(part, row, scene_id=scene.id)
+            copied.append((source, scene))
+        if not copied:
+            return []
+        current = next((scene for source, scene in copied if source.is_active), copied[0][1])
+        scenes = self._trusted(SceneManager)
+        for other in _live(scenes, campaign_id=to_campaign_id):
+            if other.is_active and other.id != current.id:
+                scenes.update_trusted(id=other.id, is_active=False)
+        scenes.update_trusted(id=current.id, is_active=True)
+        return [_summary(self._get(SceneManager, scene.id) or scene) for _, scene in copied]
 
     def _arrival_point(self, scene: Any) -> tuple[float, float]:
         """Where arrivals appear: the scene's entry point, else its centre."""
@@ -1217,6 +1343,20 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         return CurrentOut(scene=self.current_scene_for(body.current.campaign_id))
 
     @custom_route(
+        method="POST",
+        path="/copy",
+        input_model=CopyEnvelope,
+        output_model=CopiedEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Copy a campaign's scenes into another (a scenario's maps into its playthrough; the target's GM)",
+    )
+    async def copy_route(self, body: CopyEnvelope) -> CopiedEnvelope:
+        request = body.copy_scenes
+        return CopiedEnvelope(scenes=self.copy_scenes_for(request.from_campaign_id, request.to_campaign_id, request.id_map))
+
+    @custom_route(
         method="GET",
         path="/{scene_id}/tokens",
         output_model=SceneTokensOut,
@@ -1277,3 +1417,17 @@ for _part in (
     SceneRegionManager,
 ):
     room_of(_part, lambda record: ("scene", record.scene_id) if record.scene_id else None)
+
+
+def _copy_on_instantiate(model_registry: Any, requester_id: str, source_id: str, made_id: str, id_map: dict[str, str]) -> None:
+    """The wiki's instantiate (a playthrough started from a scenario) copies the scenario's scenes,
+    tokens remapped to the copied characters, when the wiki offers the AFTER_INSTANTIATE callbacks."""
+    SceneManager(requester_id=requester_id, model_registry=model_registry).copy_scenes_for(source_id, made_id, id_map)
+
+
+try:
+    from zephyrex.extensions.rpg_core.BLL_RPGCore import AFTER_INSTANTIATE  # type: ignore[import-not-found,attr-defined]
+except ImportError:
+    AFTER_INSTANTIATE = None
+if AFTER_INSTANTIATE is not None and _copy_on_instantiate not in AFTER_INSTANTIATE:
+    AFTER_INSTANTIATE.append(_copy_on_instantiate)

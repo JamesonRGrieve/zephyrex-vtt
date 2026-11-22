@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { fit, MAX_ZOOM, MIN_ZOOM, panBy, snap, toScene, toScreen, tokenAt, zoomAt } from './geometry';
+import { fit, fitWidth, MAX_ZOOM, MIN_TARGET, MIN_ZOOM, panBy, snap, toScene, toScreen, tokenAt, zoomAt } from './geometry';
 
 describe('the camera', () => {
   it('maps screen to scene and back', () => {
@@ -39,5 +39,29 @@ describe('tokens', () => {
     expect(tokenAt(tokens, 150, 150, 100)?.id).toBe('b');
     expect(tokenAt(tokens, 50, 50, 100)?.id).toBe('a');
     expect(tokenAt(tokens, 250, 50, 100)).toBeNull();
+  });
+
+  it('keep a 44 px target however far out the zoom is', () => {
+    const tokens = [{ id: 'a', x: 1000, y: 1000, width: 1, height: 1 }];
+    const zoom = 0.2; // a 100-unit cell is 20 px on screen
+    expect(tokenAt(tokens, 1110, 1050, 100)).toBeNull();
+    expect(tokenAt(tokens, 1110, 1050, 100, MIN_TARGET / zoom)?.id).toBe('a');
+    expect(tokenAt(tokens, 1180, 1050, 100, MIN_TARGET / zoom)).toBeNull();
+  });
+});
+
+describe('fitting to width', () => {
+  it('fills a phone’s width and centres a short scene', () => {
+    const camera = fitWidth(2000, 1500, [390, 500]);
+    expect(camera.zoom).toBeCloseTo(0.195);
+    expect(toScreen(camera, 0, 0)[0]).toBeCloseTo(0);
+    expect(toScreen(camera, 2000, 0)[0]).toBeCloseTo(390);
+    const [, top] = toScreen(camera, 0, 0);
+    const [, bottom] = toScreen(camera, 0, 1500);
+    expect(top).toBeCloseTo(500 - bottom);
+  });
+
+  it('shows the top of a tall scene', () => {
+    expect(toScreen(fitWidth(1000, 4000, [390, 500]), 0, 0)[1]).toBeCloseTo(0);
   });
 });

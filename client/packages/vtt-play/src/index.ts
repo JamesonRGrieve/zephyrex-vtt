@@ -16,7 +16,7 @@ export type { Sheet, SheetEntry } from './sheet/schemas';
 export { SettingSystems, vttExtension, type VttExtensionOptions } from './extension';
 export { campaignPath, scenePath, sheetPath, systemsPath, vttRoot } from './paths';
 export { CampaignSeats, CurrentSceneTokens, SceneList } from './table/TablePanel';
-export { TokenList } from './scene/SceneView';
+export { SceneCanvas, TokenList } from './scene/SceneView';
 export { Inventory, type InventoryProps } from './inventory/Inventory';
 export { CombatOrder, type CombatOrderProps, type EncounterOrder } from './combat/CombatOrder';
 export { Loot, type LootProps } from './loot/Loot';

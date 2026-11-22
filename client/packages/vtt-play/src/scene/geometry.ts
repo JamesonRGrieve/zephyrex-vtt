@@ -47,16 +47,33 @@ export function fit(width: number, height: number, viewport: [number, number]): 
   return { zoom, x: -(vw / zoom - width) / 2, y: -(vh / zoom - height) / 2 };
 }
 
+/** A camera fitting the scene's width to the viewport (a phone held upright), centred vertically
+ * when the scene is shorter than the viewport, else showing its top. */
+export function fitWidth(width: number, height: number, viewport: [number, number]): Camera {
+  const [vw, vh] = viewport;
+  const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, vw / Math.max(width, 1)));
+  const shown = height * zoom;
+  return { zoom, x: -(vw / zoom - width) / 2, y: shown < vh ? -(vh / zoom - height) / 2 : 0 };
+}
+
+/** The smallest tap target, in screen pixels (WCAG 2.5.5's 44 px). */
+export const MIN_TARGET = 44;
+
 /** A token's top-left snapped so it sits on the grid. */
 export function snap(x: number, y: number, grid: number): [number, number] {
   return [Math.round(x / grid) * grid, Math.round(y / grid) * grid];
 }
 
-/** The topmost token under a scene point (the last drawn wins), or null. */
-export function tokenAt<T extends Box>(tokens: readonly T[], x: number, y: number, grid: number): T | null {
+/** The topmost token under a scene point (the last drawn wins), or null. `minSize` (scene units)
+ * grows a small token's hit box about its centre, so a far-out zoom still leaves a 44 px target. */
+export function tokenAt<T extends Box>(tokens: readonly T[], x: number, y: number, grid: number, minSize = 0): T | null {
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
     const token = tokens[index]!;
-    if (x >= token.x && x < token.x + token.width * grid && y >= token.y && y < token.y + token.height * grid) return token;
+    const width = Math.max(token.width * grid, minSize);
+    const height = Math.max(token.height * grid, minSize);
+    const left = token.x + (token.width * grid - width) / 2;
+    const top = token.y + (token.height * grid - height) / 2;
+    if (x >= left && x < left + width && y >= top && y < top + height) return token;
   }
   return null;
 }

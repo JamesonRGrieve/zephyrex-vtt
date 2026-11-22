@@ -61,10 +61,22 @@ class RPGSceneExtension(AbstractStaticExtension):
     @ability("current_scene")
     async def current_scene(cls, requester_id: str, campaign_id: str) -> dict[str, Any] | None:
         """A campaign's current scene ({id, name, campaign_id, location_id, width, height,
-        grid_size}), or None when none is active. A chat on a split party may override it with its
+        grid_size}) for its GM or players: the active one, else its first, else a default grid scene
+        made at the party's wiki location with their tokens; None only for a non-member. A chat on a split party may override it with its
         own scene; otherwise the table plays here."""
         found = cls.scenes(requester_id).current_scene_for(campaign_id)
         return None if found is None else found.model_dump()
+
+    @classmethod
+    @ability("copy_scenes")
+    async def copy_scenes(
+        cls, requester_id: str, from_campaign_id: str, to_campaign_id: str, id_map: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Copy a campaign's scenes with everything on them into another campaign (a scenario's maps
+        into a playthrough started from it), remapping wiki ids by ``id_map`` (source → copy: persons,
+        locations); the source's current scene is current in the copy. The target campaign's GM."""
+        found = cls.scenes(requester_id).copy_scenes_for(from_campaign_id, to_campaign_id, id_map or {})
+        return [one.model_dump() for one in found]
 
     @classmethod
     @ability("activate_scene")

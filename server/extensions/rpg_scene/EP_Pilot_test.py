@@ -117,7 +117,8 @@ def test_only_activate_makes_a_scene_current(server: TestClient) -> None:
         headers={**_headers(gm), "If-Match": current.headers["ETag"]},
     )
     assert put.status_code in (200, 422)
-    assert asyncio.run(RPGSceneExtension.current_scene(str(gm.id), campaign["id"])) is None, "not through a PUT"
+    after = server.get(f"/v1/scene/{first['id']}", headers=_headers(gm)).json()["scene"]
+    assert not after.get("is_active"), "not through a PUT"
     asyncio.run(RPGSceneExtension.activate_scene(str(gm.id), first["id"]))
     asyncio.run(RPGSceneExtension.activate_scene(str(gm.id), second["id"]))
     found = asyncio.run(RPGSceneExtension.current_scene(str(gm.id), campaign["id"]))
