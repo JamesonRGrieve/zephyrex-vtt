@@ -2,10 +2,10 @@
 """rpg_builder extension: character creation by the rules as written (BLL_RPGBuilder), as routes and
 as abilities an agent calls: read a character's options, roll their ability scores, set them."""
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, ChooseRequest, RollRequest
+from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, ChooseRequest, NpcSheetRequest, RollRequest
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -77,3 +77,25 @@ class RPGBuilderExtension(AbstractStaticExtension):
         """Record a creation choice: ``kind`` one the steps name (class, background, species) and
         ``trait_id`` one of its options. A player chooses once; the GM may change it."""
         return cls.builder(requester_id).choose_for(ChooseRequest(person_id=person_id, kind=kind, trait_id=trait_id)).model_dump()
+
+    @classmethod
+    @ability("npc_sheet")
+    async def npc_sheet(
+        cls, requester_id: str, person_id: str, role: str, hint: str = "", replace: bool = False
+    ) -> dict[str, Any]:
+        """Give an NPC a sheet from the closest compendium stat block of the campaign's pack (dnd-5e:
+        the SRD's humanoids, by ``role`` and the ``hint`` line about them), or the pack's generic
+        block (the Commoner): its ability scores and skill proficiencies become the NPC's, nothing
+        invented. Returns {sheet: {person_id, system, source: compendium | template, entry_name,
+        has_sheet, hp, ac, cr}, sheet_id, source_name}; a 422 when the pack has no blocks. The GM only."""
+        body = NpcSheetRequest(person_id=person_id, role=role, hint=hint, replace=replace)
+        return cls.builder(requester_id).npc_sheet_for(body).model_dump()
+
+    @classmethod
+    @ability("sheet_for_npc")
+    async def sheet_for_npc(
+        cls, requester_id: str, person_id: str, role: str, campaign_id: Optional[str] = None, hint: str = ""
+    ) -> dict[str, Any]:
+        """The same as npc_sheet, with the campaign checked against the person's."""
+        body = NpcSheetRequest(person_id=person_id, role=role, hint=hint, campaign_id=campaign_id)
+        return cls.builder(requester_id).npc_sheet_for(body).model_dump()

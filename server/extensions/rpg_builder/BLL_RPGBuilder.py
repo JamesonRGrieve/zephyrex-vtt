@@ -17,6 +17,7 @@ from pydantic import BaseModel as PlainModel
 from pydantic import Field
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonModel
 from zephyrex.extensions.rpg_builder.Abilities import AbilityError, check_scores
+from zephyrex.extensions.rpg_builder.Npcs import pick
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import DiceManager, stat_name  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import PersonTraitManager, TraitManager  # type: ignore[import-not-found]
@@ -153,6 +154,36 @@ class ChoicesOut(PlainModel):
 
 class ChoicesResultEnvelope(PlainModel):
     builder: ChoicesOut
+
+
+class NpcSheetRequest(PlainModel):
+    person_id: str
+    role: str = Field(description="What the NPC is in the story: barkeeper, guard, cult leader…")
+    hint: str = Field("", description="A line about them, to help choose (\"a gruff tavern keeper\")")
+    campaign_id: Optional[str] = Field(None, description="Checked against the person's campaign when given")
+    replace: bool = Field(False, description="Overwrite a sheet the NPC already has")
+
+
+class NpcSheetEnvelope(PlainModel):
+    npc: NpcSheetRequest
+
+
+class NpcSheetOut(PlainModel):
+    person_id: str
+    system: str
+    source: Literal["compendium", "template"]
+    entry_name: str
+    entry_uuid: Optional[str] = None
+    has_sheet: bool
+    hp: Optional[int] = Field(None, description="The block's hit points (the pack has no resource traits yet)")
+    ac: Optional[int] = None
+    cr: Optional[float] = None
+
+
+class NpcSheetResultEnvelope(PlainModel):
+    sheet: NpcSheetOut
+    sheet_id: str = Field(description="The person whose sheet it is")
+    source_name: str
 
 
 def _refuse(message: str) -> HTTPException:
@@ -334,6 +365,65 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         rows.create(person_id=person.id, trait_id=body.trait_id)
         return self.choices_for(person.id)
 
+    def npc_sheet_for(self, body: NpcSheetRequest) -> NpcSheetResultEnvelope:
+        """An NPC's sheet from the closest compendium stat block of the campaign's pack (dnd-5e: the
+        SRD's humanoids) by role and hint, or the pack's generic block: its ability scores and skill
+        proficiencies written as the NPC's, nothing invented. The campaign's GM only."""
+        dice = self._dice()
+        person, campaign, gm = dice._character(body.person_id)
+        if not gm:
+            raise HTTPException(status_code=404, detail={"message": "Request searched PersonModel and could not find the required record."})
+        if body.campaign_id is not None and body.campaign_id != str(campaign.id):
+            raise _refuse("That character isn't in this campaign")
+        pack = dice._pack_for(campaign)
+        npcs = pack.get("npcs")
+        if not npcs:
+            raise _refuse(f"{pack['system']}'s pack has no NPC stat blocks yet")
+        abilities = self._abilities(person.id, campaign, gm, pack)
+        if any(score is not None for _, _, score in abilities) and not body.replace:
+            raise _refuse(f"{person.name or 'This character'} already has a sheet; pass replace to overwrite it")
+        block, source = pick(npcs["blocks"], npcs["generic"], body.role, body.hint)
+        rows = self._trusted(PersonTraitManager)
+
+        def write(trait_id: str, **values: Any) -> None:
+            live = self._live(rows, person_id=person.id, trait_id=trait_id)
+            if live:
+                rows.update_trusted(id=live[0].id, **values)
+            else:
+                rows.create(person_id=person.id, trait_id=trait_id, **values)
+
+        for one, trait, _ in abilities:
+            write(trait.id, value=float(block["abilities"][one["slug"]]))
+        names = {skill["slug"]: skill["name"] for skill in pack["skills"]}
+        for slug, rank in (block.get("skills") or {}).items():
+            if slug in names:
+                write(dice._trait_for(stat_name(names[slug]), campaign, gm).id, rank=int(rank))
+        sheet = NpcSheetOut(
+            person_id=person.id,
+            system=pack["system"],
+            source=source,
+            entry_name=block["name"],
+            entry_uuid=block.get("uuid"),
+            has_sheet=True,
+            hp=block.get("hp"),
+            ac=block.get("ac"),
+            cr=block.get("cr"),
+        )
+        return NpcSheetResultEnvelope(sheet=sheet, sheet_id=person.id, source_name=block["name"])
+
+    @custom_route(
+        method="POST",
+        path="/npc-sheet",
+        input_model=NpcSheetEnvelope,
+        output_model=NpcSheetResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Builder",),
+        summary="An NPC's sheet from the closest compendium stat block by role (the campaign's GM)",
+    )
+    async def npc_sheet_route(self, body: NpcSheetEnvelope) -> NpcSheetResultEnvelope:
+        return self.npc_sheet_for(body.npc)
+
     @custom_route(
         method="POST",
         path="/choices",
@@ -398,3 +488,25 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
     )
     async def abilities_route(self, body: ApplyEnvelope) -> BuilderOptionsEnvelope:
         return BuilderOptionsEnvelope(builder=self.apply_for(body.abilities))
+
+
+class NpcSheetManager(AbstractBLLManager[Any], RouterMixin):
+    """POST /v1/sheet/npc: the same as /v1/builder/npc-sheet, at the path rpg-ai's lite edition calls."""
+
+    prefix: ClassVar[str | None] = "/v1/sheet"
+    tags: ClassVar[list[str] | None] = ["Builder"]
+    routes_to_register: ClassVar[list[RouteType] | None] = []
+
+    @custom_route(
+        method="POST",
+        path="/npc",
+        input_model=NpcSheetEnvelope,
+        output_model=NpcSheetResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Builder",),
+        summary="An NPC's sheet from the closest compendium stat block by role (the campaign's GM)",
+    )
+    async def npc_route(self, body: NpcSheetEnvelope) -> NpcSheetResultEnvelope:
+        builder = BuilderManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+        return builder.npc_sheet_for(body.npc)

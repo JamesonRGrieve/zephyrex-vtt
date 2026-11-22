@@ -124,3 +124,34 @@ def test_class_background_and_species_are_chosen_by_the_steps(server: TestClient
     with pytest.raises(HTTPException) as unknown:
         _run(RPGBuilderExtension.choose(str(player.id), world["brann"]["id"], "alignment", soldier["id"]))
     assert unknown.value.status_code == 422
+
+
+def test_an_npc_gets_the_closest_compendium_sheet(server: TestClient, world: dict[str, Any]) -> None:
+    gm, player = str(world["gm"].id), str(world["player"].id)
+    campaign_id = world["brann"]["campaign_id"]
+    barkeep = _create(server, world["gm"], "person", name="Old Tam", kind="npc", campaign_id=campaign_id)
+    guard = _create(server, world["gm"], "person", name="Sergeant Holt", kind="npc", campaign_id=campaign_id)
+
+    made = _run(RPGBuilderExtension.npc_sheet(gm, barkeep["id"], "barkeeper", "a gruff tavern keeper"))
+    assert (made["source_name"], made["sheet"]["source"], made["sheet_id"]) == ("Commoner", "compendium", barkeep["id"])
+    checked = _run(RPGDiceExtension.test(gm, barkeep["id"], "strength"))
+    assert checked["no_sheet"] is False and checked["total"] == checked["roll"]
+
+    held = _run(RPGBuilderExtension.sheet_for_npc(gm, guard["id"], "town guard", campaign_id=campaign_id))
+    assert held["source_name"] == "Guard" and held["sheet"]["hp"] == 11
+    perceives = _run(RPGDiceExtension.test(gm, guard["id"], "perception"))
+    assert perceives["skill_rank"] == 1 and perceives["total"] == perceives["roll"]  # WIS 11: +0; no level, no PB
+
+    with pytest.raises(HTTPException) as again:
+        _run(RPGBuilderExtension.npc_sheet(gm, guard["id"], "guard"))
+    assert again.value.status_code == 422 and "already has a sheet" in again.value.detail["message"]
+    with pytest.raises(HTTPException) as player_call:
+        _run(RPGBuilderExtension.npc_sheet(player, barkeep["id"], "guard", replace=True))
+    assert player_call.value.status_code == 404
+    rest = server.post(
+        "/v1/sheet/npc",
+        json={"npc": {"person_id": guard["id"], "role": "veteran mercenary", "replace": True}},
+        headers={"Authorization": f"Bearer {world['gm'].jwt}"},
+    )
+    assert rest.status_code == 200, rest.text
+    assert rest.json()["source_name"] == "Warrior Veteran"

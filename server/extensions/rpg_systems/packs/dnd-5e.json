@@ -111,6 +111,521 @@
     }
   ],
   "characteristics_cite": "Playing the Game › Ability Scores and Modifiers",
+  "npcs": {
+    "blocks": [
+      {
+        "slug": "archmage",
+        "name": "Archmage",
+        "cr": 12,
+        "abilities": {
+          "strength": 10,
+          "dexterity": 14,
+          "constitution": 12,
+          "intelligence": 20,
+          "wisdom": 15,
+          "charisma": 16
+        },
+        "skills": {
+          "arcana": 2,
+          "history": 1,
+          "perception": 1
+        },
+        "hp": 170,
+        "ac": 17,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmArchmage000000"
+      },
+      {
+        "slug": "assassin",
+        "name": "Assassin",
+        "cr": 8,
+        "abilities": {
+          "strength": 11,
+          "dexterity": 18,
+          "constitution": 14,
+          "intelligence": 16,
+          "wisdom": 11,
+          "charisma": 10
+        },
+        "skills": {
+          "acrobatics": 1,
+          "perception": 2,
+          "stealth": 2
+        },
+        "hp": 97,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmAssassin000000"
+      },
+      {
+        "slug": "bandit-captain",
+        "name": "Bandit Captain",
+        "cr": 2,
+        "abilities": {
+          "strength": 15,
+          "dexterity": 16,
+          "constitution": 14,
+          "intelligence": 14,
+          "wisdom": 11,
+          "charisma": 14
+        },
+        "skills": {
+          "athletics": 1,
+          "deception": 1
+        },
+        "hp": 52,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmBanditCaptain0"
+      },
+      {
+        "slug": "bandit",
+        "name": "Bandit",
+        "cr": 0.125,
+        "abilities": {
+          "strength": 11,
+          "dexterity": 12,
+          "constitution": 12,
+          "intelligence": 10,
+          "wisdom": 10,
+          "charisma": 10
+        },
+        "skills": {},
+        "hp": 11,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmBandit00000000"
+      },
+      {
+        "slug": "berserker",
+        "name": "Berserker",
+        "cr": 2,
+        "abilities": {
+          "strength": 16,
+          "dexterity": 12,
+          "constitution": 17,
+          "intelligence": 9,
+          "wisdom": 11,
+          "charisma": 9
+        },
+        "skills": {},
+        "hp": 67,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmBerserker00000"
+      },
+      {
+        "slug": "commoner",
+        "name": "Commoner",
+        "cr": 0,
+        "abilities": {
+          "strength": 10,
+          "dexterity": 10,
+          "constitution": 10,
+          "intelligence": 10,
+          "wisdom": 10,
+          "charisma": 10
+        },
+        "skills": {},
+        "hp": 4,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmCommoner000000"
+      },
+      {
+        "slug": "cultist-fanatic",
+        "name": "Cultist Fanatic",
+        "cr": 2,
+        "abilities": {
+          "strength": 11,
+          "dexterity": 14,
+          "constitution": 12,
+          "intelligence": 10,
+          "wisdom": 14,
+          "charisma": 13
+        },
+        "skills": {
+          "deception": 1,
+          "persuasion": 1,
+          "religion": 1
+        },
+        "hp": 44,
+        "ac": 13,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmCultistFanatic"
+      },
+      {
+        "slug": "cultist",
+        "name": "Cultist",
+        "cr": 0.125,
+        "abilities": {
+          "strength": 11,
+          "dexterity": 12,
+          "constitution": 10,
+          "intelligence": 10,
+          "wisdom": 11,
+          "charisma": 10
+        },
+        "skills": {
+          "deception": 1,
+          "religion": 1
+        },
+        "hp": 9,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmCultist0000000"
+      },
+      {
+        "slug": "druid",
+        "name": "Druid",
+        "cr": 2,
+        "abilities": {
+          "strength": 10,
+          "dexterity": 12,
+          "constitution": 13,
+          "intelligence": 12,
+          "wisdom": 16,
+          "charisma": 11
+        },
+        "skills": {
+          "medicine": 1,
+          "nature": 1,
+          "perception": 1
+        },
+        "hp": 44,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmDruid000000000"
+      },
+      {
+        "slug": "gladiator",
+        "name": "Gladiator",
+        "cr": 5,
+        "abilities": {
+          "strength": 18,
+          "dexterity": 15,
+          "constitution": 16,
+          "intelligence": 10,
+          "wisdom": 12,
+          "charisma": 15
+        },
+        "skills": {
+          "athletics": 2,
+          "performance": 1
+        },
+        "hp": 112,
+        "ac": 16,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmGladiator00000"
+      },
+      {
+        "slug": "guard-captain",
+        "name": "Guard Captain",
+        "cr": 4,
+        "abilities": {
+          "strength": 18,
+          "dexterity": 14,
+          "constitution": 16,
+          "intelligence": 12,
+          "wisdom": 14,
+          "charisma": 13
+        },
+        "skills": {
+          "athletics": 1,
+          "perception": 1
+        },
+        "hp": 75,
+        "ac": 18,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmGuardCaptain00"
+      },
+      {
+        "slug": "guard",
+        "name": "Guard",
+        "cr": 0.125,
+        "abilities": {
+          "strength": 13,
+          "dexterity": 12,
+          "constitution": 12,
+          "intelligence": 10,
+          "wisdom": 11,
+          "charisma": 10
+        },
+        "skills": {
+          "perception": 1
+        },
+        "hp": 11,
+        "ac": 16,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmGuard000000000"
+      },
+      {
+        "slug": "knight",
+        "name": "Knight",
+        "cr": 3,
+        "abilities": {
+          "strength": 16,
+          "dexterity": 11,
+          "constitution": 14,
+          "intelligence": 11,
+          "wisdom": 11,
+          "charisma": 15
+        },
+        "skills": {},
+        "hp": 52,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmKnight00000000"
+      },
+      {
+        "slug": "mage",
+        "name": "Mage",
+        "cr": 6,
+        "abilities": {
+          "strength": 9,
+          "dexterity": 14,
+          "constitution": 11,
+          "intelligence": 17,
+          "wisdom": 12,
+          "charisma": 11
+        },
+        "skills": {
+          "arcana": 1,
+          "history": 1,
+          "perception": 1
+        },
+        "hp": 81,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmMage0000000000"
+      },
+      {
+        "slug": "noble",
+        "name": "Noble",
+        "cr": 0.125,
+        "abilities": {
+          "strength": 11,
+          "dexterity": 12,
+          "constitution": 11,
+          "intelligence": 12,
+          "wisdom": 14,
+          "charisma": 16
+        },
+        "skills": {
+          "deception": 1,
+          "insight": 1,
+          "persuasion": 1
+        },
+        "hp": 9,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmNoble000000000"
+      },
+      {
+        "slug": "pirate-captain",
+        "name": "Pirate Captain",
+        "cr": 6,
+        "abilities": {
+          "strength": 10,
+          "dexterity": 18,
+          "constitution": 14,
+          "intelligence": 10,
+          "wisdom": 14,
+          "charisma": 17
+        },
+        "skills": {
+          "acrobatics": 1,
+          "perception": 1
+        },
+        "hp": 84,
+        "ac": 17,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmPirateCaptain0"
+      },
+      {
+        "slug": "pirate",
+        "name": "Pirate",
+        "cr": 1,
+        "abilities": {
+          "strength": 10,
+          "dexterity": 16,
+          "constitution": 12,
+          "intelligence": 8,
+          "wisdom": 12,
+          "charisma": 14
+        },
+        "skills": {},
+        "hp": 33,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmPirate00000000"
+      },
+      {
+        "slug": "priest-acolyte",
+        "name": "Priest Acolyte",
+        "cr": 0.25,
+        "abilities": {
+          "strength": 14,
+          "dexterity": 10,
+          "constitution": 12,
+          "intelligence": 10,
+          "wisdom": 14,
+          "charisma": 11
+        },
+        "skills": {
+          "medicine": 1,
+          "religion": 1
+        },
+        "hp": 11,
+        "ac": 13,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmPriestAcolyte0"
+      },
+      {
+        "slug": "priest",
+        "name": "Priest",
+        "cr": 2,
+        "abilities": {
+          "strength": 16,
+          "dexterity": 10,
+          "constitution": 12,
+          "intelligence": 13,
+          "wisdom": 16,
+          "charisma": 13
+        },
+        "skills": {
+          "medicine": 2,
+          "perception": 1,
+          "religion": 2
+        },
+        "hp": 38,
+        "ac": 13,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmPriest00000000"
+      },
+      {
+        "slug": "scout",
+        "name": "Scout",
+        "cr": 0.5,
+        "abilities": {
+          "strength": 11,
+          "dexterity": 14,
+          "constitution": 12,
+          "intelligence": 11,
+          "wisdom": 13,
+          "charisma": 11
+        },
+        "skills": {
+          "nature": 2,
+          "perception": 2,
+          "stealth": 2,
+          "survival": 2
+        },
+        "hp": 16,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmScout000000000"
+      },
+      {
+        "slug": "spy",
+        "name": "Spy",
+        "cr": 1,
+        "abilities": {
+          "strength": 10,
+          "dexterity": 15,
+          "constitution": 10,
+          "intelligence": 12,
+          "wisdom": 14,
+          "charisma": 16
+        },
+        "skills": {
+          "deception": 1,
+          "insight": 1,
+          "investigation": 2,
+          "perception": 2,
+          "sleight-of-hand": 1,
+          "stealth": 2
+        },
+        "hp": 27,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmSpy00000000000"
+      },
+      {
+        "slug": "tough-boss",
+        "name": "Tough Boss",
+        "cr": 4,
+        "abilities": {
+          "strength": 17,
+          "dexterity": 14,
+          "constitution": 16,
+          "intelligence": 11,
+          "wisdom": 10,
+          "charisma": 11
+        },
+        "skills": {},
+        "hp": 82,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmToughBoss00000"
+      },
+      {
+        "slug": "tough",
+        "name": "Tough",
+        "cr": 0.5,
+        "abilities": {
+          "strength": 15,
+          "dexterity": 12,
+          "constitution": 14,
+          "intelligence": 10,
+          "wisdom": 10,
+          "charisma": 11
+        },
+        "skills": {},
+        "hp": 32,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmTough000000000"
+      },
+      {
+        "slug": "vampire-familiar",
+        "name": "Vampire Familiar",
+        "cr": 3,
+        "abilities": {
+          "strength": 17,
+          "dexterity": 16,
+          "constitution": 15,
+          "intelligence": 10,
+          "wisdom": 10,
+          "charisma": 14
+        },
+        "skills": {
+          "perception": 2,
+          "persuasion": 1,
+          "stealth": 2
+        },
+        "hp": 65,
+        "ac": 15,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmVampireFamilia"
+      },
+      {
+        "slug": "warrior-infantry",
+        "name": "Warrior Infantry",
+        "cr": 0.125,
+        "abilities": {
+          "strength": 13,
+          "dexterity": 11,
+          "constitution": 11,
+          "intelligence": 8,
+          "wisdom": 11,
+          "charisma": 8
+        },
+        "skills": {},
+        "hp": 9,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmWarriorInfantr"
+      },
+      {
+        "slug": "warrior-veteran",
+        "name": "Warrior Veteran",
+        "cr": 3,
+        "abilities": {
+          "strength": 16,
+          "dexterity": 13,
+          "constitution": 14,
+          "intelligence": 10,
+          "wisdom": 11,
+          "charisma": 10
+        },
+        "skills": {
+          "athletics": 1,
+          "perception": 1
+        },
+        "hp": 65,
+        "ac": null,
+        "uuid": "Compendium.dnd5e.actors24.Actor.mmWarriorVeteran"
+      }
+    ],
+    "generic": "commoner",
+    "cite": "Monsters › Humanoids (actors24)"
+  },
   "ability_methods": {
     "standard_array": [
       15,

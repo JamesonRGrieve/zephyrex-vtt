@@ -160,6 +160,51 @@ def _range(text: str) -> tuple[int, int]:
     return int(low), int(high or low)
 
 
+NPC_FOLDER = "actors24/humanoid"
+
+
+def _skill_keys(root: Path) -> dict[str, str]:
+    """dnd5e's own skill abbreviations (module/config.mjs: acr → acrobatics) as pack skill slugs."""
+    config = (root / "module" / "config.mjs").read_text(encoding="utf-8")
+    found = re.findall(r'(\w{3}): \{\s*label: "DND5E\.Skill\w+",\s*ability: "\w+",\s*fullKey: "(\w+)"', config)
+    if not found:
+        raise RulesTextError("dnd5e's config no longer lists its skills with their full keys")
+    return {short: re.sub(r"([a-z])([A-Z])", r"\1-\2", full).lower() for short, full in found}
+
+
+def npc_stat_blocks(root: Path, abilities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The SRD's humanoid stat blocks (Commoner, Guard, Bandit, Noble, Priest…), as the 2024 actor pack
+    states them: ability scores, skill proficiencies (1, or 2 for Expertise), hit points, armour class
+    and challenge rating. Nothing is adjusted."""
+    skills = _skill_keys(root)
+    short = {one["short"].lower(): one["slug"] for one in abilities}
+    blocks = []
+    for path in sorted((root / "packs" / "_source" / NPC_FOLDER).glob("*.yml")):
+        if path.name == "_folder.yml":
+            continue
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        system = document.get("system") or {}
+        if document.get("type") != "npc":
+            continue
+        scores = {short[key]: int(value["value"]) for key, value in (system.get("abilities") or {}).items() if key in short}
+        if len(scores) != len(abilities):
+            raise RulesTextError(f"{document.get('name')} doesn't give all six ability scores")
+        attributes = system.get("attributes") or {}
+        blocks.append(
+            {
+                "slug": path.stem,
+                "name": document["name"],
+                "cr": (system.get("details") or {}).get("cr"),
+                "abilities": scores,
+                "skills": {skills[key]: int(value["value"]) for key, value in (system.get("skills") or {}).items() if key in skills and value.get("value")},
+                "hp": (attributes.get("hp") or {}).get("max"),
+                "ac": (attributes.get("ac") or {}).get("flat"),
+                "uuid": f"Compendium.dnd5e.actors24.Actor.{document['_id']}",
+            }
+        )
+    return blocks
+
+
 def test_pack(root: Path) -> dict[str, Any]:
     """vtt's rules pack for [redacted] (rpg_systems/packs/dnd-5e.json), parsed from the SRD's own text:
     a D20 Test (d20 + ability modifier + Proficiency Bonus if proficient, against a DC), the
@@ -248,6 +293,9 @@ def test_pack(root: Path) -> dict[str, Any]:
         "difficulties": {**difficulties, "default": "medium", "cite": "Playing the Game › D20 Tests › Typical Difficulty Classes"},
         "characteristics": abilities,
         "characteristics_cite": "Playing the Game › Ability Scores and Modifiers",
+        # The SRD's humanoid stat blocks, for an NPC's sheet (rpg_builder's npc_sheet); the Commoner
+        # is the SRD's ordinary person, used when no other block fits.
+        "npcs": {"blocks": npc_stat_blocks(root, abilities), "generic": "commoner", "cite": "Monsters › Humanoids (actors24)"},
         # Character creation's three methods (Step 3), from the same text the module's rules step reads.
         "ability_methods": {**rules(root)["ability_methods"], "cite": "Creating a Character › Generate Your Scores"},
         # The creation steps a builder walks, with the trait kinds each chooses (the module's 5e kinds).
