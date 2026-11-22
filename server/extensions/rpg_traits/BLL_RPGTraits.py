@@ -391,3 +391,47 @@ DerivativeTraitModel.Manager = DerivativeTraitManager
 PersonTraitModel.Manager = PersonTraitManager
 
 ALL_MODELS: List[type] = [TraitModel, DerivativeTraitModel, PersonTraitModel]
+
+
+def _copy_on_instantiate(model_registry: Any, requester_id: str, source_id: str, made_id: str, id_map: dict[str, str]) -> None:
+    """The wiki's start (a playthrough of a scenario, with picked pregens) copies each copied person's
+    sheet. The scenario's own trait definitions are copied onto the playthrough first (the wiki's
+    id_map holds no VTT rows); then every live person_trait of a person in ``id_map`` goes onto that
+    person's copy: the same system trait, or the copy of a campaign trait, with value, rank,
+    specialisation and the rest, source_person_id remapped when set. Independent of rpg_scene's
+    callback (no order between extensions). Written as the requester (the playthrough's GM)."""
+    from zephyrex.lib.Environment import env
+
+    skip = {"id", "person_id", "campaign_id", "created_at", "updated_at", "created_by_user_id", "updated_by_user_id"}
+    # The scenario's own trait definitions first (the wiki copies no VTT rows): each onto the playthrough,
+    # source → copy kept for the sheets below. System traits (no campaign) stay shared.
+    # Read as the system (a scenario's rows may be its author's), write as the requester: the
+    # playthrough's GM, who owns the copies and reads them like the rest of their campaign.
+    traits = TraitManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
+    traits_out = TraitManager(requester_id=requester_id, model_registry=model_registry)
+    trait_fields = set(TraitModel.Create.model_fields)
+    copied_traits: dict[str, str] = {}
+    for trait in traits.list(filters=[traits.DB.deleted_at.is_(None)], campaign_id=source_id):
+        fields = {key: value for key, value in trait.model_dump().items() if key in trait_fields and key not in skip}
+        copied_traits[str(trait.id)] = str(traits_out.create(campaign_id=made_id, **fields).id)
+    rows = PersonTraitManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
+    rows_out = PersonTraitManager(requester_id=requester_id, model_registry=model_registry)
+    creatable = set(PersonTraitModel.Create.model_fields)
+    for source_person, copy_person in id_map.items():
+        if source_person == source_id:
+            continue
+        for row in rows.list(filters=[rows.DB.deleted_at.is_(None)], person_id=source_person):
+            fields = {key: value for key, value in row.model_dump().items() if key in creatable and key not in skip}
+            if fields.get("trait_id") is not None:
+                fields["trait_id"] = copied_traits.get(str(fields["trait_id"]), fields["trait_id"])
+            if fields.get("source_person_id") is not None:
+                fields["source_person_id"] = id_map.get(str(fields["source_person_id"]), fields["source_person_id"])
+            rows_out.create(person_id=copy_person, **fields)
+
+
+try:
+    from zephyrex.extensions.rpg_core.BLL_RPGCore import AFTER_INSTANTIATE  # type: ignore[import-not-found,attr-defined]
+except ImportError:
+    AFTER_INSTANTIATE = None
+if AFTER_INSTANTIATE is not None and _copy_on_instantiate not in AFTER_INSTANTIATE:
+    AFTER_INSTANTIATE.append(_copy_on_instantiate)
