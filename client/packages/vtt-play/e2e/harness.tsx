@@ -14,6 +14,19 @@ declare global {
   }
 }
 
+/** A plain red picture, made here, as the place's painting (the test reads the ground's colour). */
+function redPicture(): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 8;
+  const context = canvas.getContext('2d')!;
+  context.fillStyle = '#e00000';
+  context.fillRect(0, 0, 8, 8);
+  return canvas.toDataURL('image/png');
+}
+
+const withPicture = Boolean((window as unknown as { vttPicture?: boolean }).vttPicture);
+
 const view = {
   id: 's1',
   name: 'The Split Antler',
@@ -49,6 +62,7 @@ const view = {
     },
   ],
   walls: [],
+  background_url: withPicture ? redPicture() : null,
 } as unknown as SceneViewData;
 
 window.moves = [];

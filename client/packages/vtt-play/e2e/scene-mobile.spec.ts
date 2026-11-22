@@ -13,12 +13,13 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
 
 const HARNESS = process.env.HARNESS_JS ?? '';
 
-async function open(page: Page): Promise<void> {
+async function open(page: Page, withPicture = false): Promise<void> {
   await page.setContent(
     `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
      <style>:root{--muted:240 4.8% 95.9%;--border:240 5.9% 90%;--foreground:240 10% 3.9%;--primary:262 83% 58%;--primary-foreground:0 0% 98%;--muted-foreground:240 3.8% 46.1%}body{margin:0;font-family:sans-serif}.h-\\[60svh\\]{height:60svh}.min-h-64{min-height:16rem}.w-full{width:100%}.h-full{height:100%}.relative{position:relative}.overflow-hidden{overflow:hidden}.touch-none{touch-action:none}canvas{display:block}</style>
      </head><body><p style="height:120px">Above the map</p><div id="root"></div><p style="height:1200px">Below the map</p></body></html>`,
   );
+  if (withPicture) await page.evaluate(() => Object.assign(window, { vttPicture: true }));
   await page.addScriptTag({ content: readFileSync(HARNESS, 'utf8') });
   await expect(page.locator('canvas')).toHaveAttribute('data-camera', /.+/);
 }
@@ -77,6 +78,21 @@ test('opens fitted to its tokens, on a visible ground (a theme of bare HSL chann
   });
   expect(ground[3]).toBeGreaterThan(0);
   expect(ground[0]! + ground[1]! + ground[2]!).toBeGreaterThan(300); // the light theme's muted ground, not black
+});
+
+test('draws the place’s picture under the grid when the scene has no art', async ({ page }) => {
+  await open(page, true);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const canvas = document.querySelector('canvas')!;
+        const [r, g, b] = canvas
+          .getContext('2d')!
+          .getImageData(Math.round(canvas.width * 0.9), Math.round(canvas.height * 0.5), 1, 1).data;
+        return r! > 150 && g! < 120 && b! < 120;
+      }),
+    )
+    .toBe(true);
 });
 
 test('tap a token to select it, then tap a cell to move it there', async ({ page }) => {

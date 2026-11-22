@@ -52,6 +52,45 @@ export function paletteOf(element: Element): Palette {
   };
 }
 
+// Pictures (a location's painting, a character's portrait), loaded once each. A picture that isn't
+// loaded yet draws nothing; its load asks for one more draw (the `redraw` a caller passes).
+const pictures = new Map<string, HTMLImageElement>();
+const waiting = new Map<string, Set<() => void>>();
+
+function picture(url: string | null | undefined, redraw?: () => void): HTMLImageElement | null {
+  if (!url || typeof Image === 'undefined') return null;
+  const known = pictures.get(url);
+  if (known) return known.complete && known.naturalWidth > 0 ? known : null;
+  const image = new Image();
+  image.decoding = 'async';
+  image.referrerPolicy = 'no-referrer';
+  pictures.set(url, image);
+  if (redraw) waiting.set(url, new Set([redraw]));
+  const done = (): void => {
+    for (const again of waiting.get(url) ?? []) again();
+    waiting.delete(url);
+  };
+  image.onload = done;
+  image.onerror = done;
+  image.src = url;
+  return null;
+}
+
+/** An image drawn to cover a box (cropped, never stretched). */
+function cover(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
+  const sw = w / scale;
+  const sh = h / scale;
+  context.drawImage(image, (image.naturalWidth - sw) / 2, (image.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+}
+
 function initials(name: string | null | undefined): string {
   const words = (name ?? '?').trim().split(/\s+/);
   return (words.length > 1 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '?').slice(0, 2)).toUpperCase();
@@ -78,6 +117,7 @@ export function drawScene(
   palette: Palette,
   drag: Drag | null = null,
   selected: string | null = null,
+  redraw?: () => void,
 ): void {
   const [width, height] = size;
   const grid = view.grid_size;
@@ -87,6 +127,14 @@ export function drawScene(
   const [left, top] = toScreen(camera, 0, 0);
   context.fillStyle = view.background_color ?? palette.ground;
   context.fillRect(left, top, sceneWidth * camera.zoom, sceneHeight * camera.zoom);
+  // The scene's art, else its place's picture: cover-fitted to the scene, a little dimmed so the grid
+  // and tokens read over it.
+  const backdrop = picture(view.background_url, redraw);
+  if (backdrop) {
+    context.globalAlpha = 0.85;
+    cover(context, backdrop, left, top, sceneWidth * camera.zoom, sceneHeight * camera.zoom);
+    context.globalAlpha = 1;
+  }
   // The place's name, faint in the scene's corner: a map with no art still says where it is.
   if (view.name) {
     context.fillStyle = palette.neutral;
@@ -144,13 +192,23 @@ export function drawScene(
     context.beginPath();
     context.arc(sx + w / 2, sy + h / 2, Math.max(radius, 2), 0, Math.PI * 2);
     context.fill();
+    const portrait = radius >= 8 ? picture(one.picture_url, redraw) : null;
+    if (portrait) {
+      // The portrait inside a ring of the token's colour (whose it is: yours, friend, foe).
+      context.save();
+      context.beginPath();
+      context.arc(sx + w / 2, sy + h / 2, Math.max(radius - 3, 2), 0, Math.PI * 2);
+      context.clip();
+      cover(context, portrait, sx + w / 2 - radius, sy + h / 2 - radius, radius * 2, radius * 2);
+      context.restore();
+    }
     if (one.is_hidden) {
       context.setLineDash([4, 4]);
       context.strokeStyle = palette.wall;
       context.stroke();
       context.setLineDash([]);
     }
-    if (radius >= 10) {
+    if (radius >= 10 && !portrait) {
       context.fillStyle = palette.ink;
       context.font = `600 ${Math.round(radius * 0.8)}px system-ui, sans-serif`;
       context.textAlign = 'center';

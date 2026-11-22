@@ -15,6 +15,8 @@ export const viewSchema = z.object({
     gm: z.boolean(),
     viewer: z.string().nullish(),
     lit: z.boolean(),
+    // Drawn under the grid: the scene's art, else its wiki location's picture.
+    background_url: z.string().nullish(),
     tokens: z.array(
       z.object({
         id: z.string(),
@@ -27,6 +29,8 @@ export const viewSchema = z.object({
         height: z.number(),
         rotation: z.number(),
         is_hidden: z.boolean(),
+        // The character's wiki picture, drawn in the token's circle.
+        picture_url: z.string().nullish(),
         mine: z.boolean(),
       }),
     ),

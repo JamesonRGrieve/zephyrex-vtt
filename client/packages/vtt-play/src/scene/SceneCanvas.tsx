@@ -68,6 +68,8 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
       : fitWidth(current.width ?? 40 * grid, current.height ?? 30 * grid, [width, height]);
   }, []);
 
+  // A picture's arrival draws again through this, so the callback below needn't depend on itself.
+  const drawRef = useRef<() => void>(() => undefined);
   const draw = useCallback(() => {
     const element = canvas.current;
     const context = element?.getContext('2d');
@@ -86,11 +88,16 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
       paletteOf(element),
       drag.current,
       selectedRef.current,
+      () => window.requestAnimationFrame(() => drawRef.current()),
     );
     // The camera and selection, for tests and tools.
     element.dataset.camera = `${camera.current.zoom.toFixed(4)},${camera.current.x.toFixed(1)},${camera.current.y.toFixed(1)}`;
     element.dataset.selected = selectedRef.current ?? '';
   }, []);
+
+  useEffect(() => {
+    drawRef.current = draw;
+  }, [draw]);
 
   const select = useCallback(
     (one: ViewToken | null) => {

@@ -671,6 +671,8 @@ class ViewToken(PlainModel):
     rotation: float
     is_hidden: bool = False
     mine: bool = False
+    picture_url: Optional[str] = None
+
 
 
 class ViewWall(PlainModel):
@@ -694,6 +696,7 @@ class ViewOut(PlainModel):
     lit: bool
     tokens: list[ViewToken]
     walls: list[ViewWall]
+    background_url: Optional[str] = None
 
 
 class ViewResultEnvelope(PlainModel):
@@ -941,11 +944,15 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         walls = list(_live(self._trusted(SceneWallManager), scene_id=scene.id))
         people: dict[str, Any] = {}
 
+        pictures: dict[str, Optional[str]] = {}
+
         def plays(row: Any) -> bool:
             if row.person_id is None:
                 return False
             if row.person_id not in people:
-                people[row.person_id] = _controllers(self.model_registry, self._get(PersonManager, row.person_id))
+                person = self._get(PersonManager, row.person_id)
+                people[row.person_id] = _controllers(self.model_registry, person)
+                pictures[row.person_id] = getattr(person, "picture_url", None) if person is not None else None
             return requester in people[row.person_id]
 
         mine = {row.id for row in rows if plays(row)}
@@ -976,6 +983,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 rotation=float(row.rotation or 0),
                 is_hidden=bool(row.is_hidden),
                 mine=row.id in mine,
+                picture_url=pictures.get(row.person_id) if row.person_id else None,
             )
 
         def wall(row: Any) -> ViewWall:
@@ -1016,7 +1024,15 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             lit=lit,
             tokens=tokens,
             walls=shown,
+            background_url=self._background_of(scene),
         )
+
+    def _background_of(self, scene: Any) -> Optional[str]:
+        """What to draw under the grid: the scene's own art when it has some (not yet: art is an
+        attachment), else its wiki location's picture (vault locations have paintings)."""
+        location_id = getattr(scene, "location_id", None)
+        location = None if location_id is None else self._get(LocationManager, location_id)
+        return getattr(location, "picture_url", None) if location is not None else None
 
     def _empty_view(self, scene: Any) -> dict[str, Any]:
         """A scene's map with nothing on it: for a player of the campaign with no token there."""
@@ -1034,6 +1050,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             "lit": False,
             "tokens": [],
             "walls": [],
+            "background_url": self._background_of(scene),
         }
 
     def _gms_of(self, campaign: Any) -> set[str]:
