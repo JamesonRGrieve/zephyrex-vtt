@@ -5,7 +5,7 @@ as abilities an agent calls: read a character's options, roll their ability scor
 from typing import Any, ClassVar
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, RollRequest
+from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, ChooseRequest, RollRequest
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -63,3 +63,17 @@ class RPGBuilderExtension(AbstractStaticExtension):
         kept roll), one score per ability slug, checked against the method's rule."""
         body = ApplyRequest(person_id=person_id, method=method, scores=scores)  # type: ignore[arg-type]
         return cls.builder(requester_id).apply_for(body).model_dump()
+
+    @classmethod
+    @ability("builder_choices")
+    async def builder_choices(cls, requester_id: str, person_id: str) -> dict[str, Any]:
+        """A character's creation steps under the pack ([redacted]: class; origin's background and
+        species; ability scores…), each choice's options and what the character has chosen."""
+        return cls.builder(requester_id).choices_for(person_id).model_dump()
+
+    @classmethod
+    @ability("choose")
+    async def choose(cls, requester_id: str, person_id: str, kind: str, trait_id: str) -> dict[str, Any]:
+        """Record a creation choice: ``kind`` one the steps name (class, background, species) and
+        ``trait_id`` one of its options. A player chooses once; the GM may change it."""
+        return cls.builder(requester_id).choose_for(ChooseRequest(person_id=person_id, kind=kind, trait_id=trait_id)).model_dump()

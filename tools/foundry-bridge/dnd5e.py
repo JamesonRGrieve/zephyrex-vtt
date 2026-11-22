@@ -208,6 +208,12 @@ def test_pack(root: Path) -> dict[str, Any]:
     find(d20, r"expertise\]? feature doubles the Proficiency Bonus", "that Expertise doubles the Proficiency Bonus")
     average = find(playing, r"(\d+)–\d+ This represents the human average", "the human-average score")
     initiative = find(combat, r"they make a " + _ABILITY + r" check that determines their place in the Initiative order", "how Initiative is rolled")
+    creation = page(CREATION_PAGE)
+    steps = re.findall(r"Step (\d): ([A-Z][A-Za-z ]+?) text ", creation)
+    origin = find(creation, r"origin involves choosing a @UUID\[[^\]]+\]\{(\w+)\}, a @UUID\[[^\]]+\]\{(\w+)\}", "what an origin is chosen from")
+    picks = {"Choose a Class": ["class"], "Character Origin": [origin.group(1), origin.group(2)]}
+    if [name for _, name in steps[:3]] != ["Choose a Class", "Character Origin", "Ability Scores"]:
+        raise RulesTextError("the SRD's creation steps no longer begin class, origin, ability scores")
     attribution = find(legal, r"(This work includes material from the System Reference Document .*?legalcode) \.", "the attribution").group(1)
 
     return {
@@ -244,6 +250,14 @@ def test_pack(root: Path) -> dict[str, Any]:
         "characteristics_cite": "Playing the Game › Ability Scores and Modifiers",
         # Character creation's three methods (Step 3), from the same text the module's rules step reads.
         "ability_methods": {**rules(root)["ability_methods"], "cite": "Creating a Character › Generate Your Scores"},
+        # The creation steps a builder walks, with the trait kinds each chooses (the module's 5e kinds).
+        "creation": {
+            "steps": [
+                {"step": int(number), "name": name, **({"choices": picks[name]} if name in picks else {})}
+                for number, name in steps
+            ],
+            "cite": "Creating a Character",
+        },
         "skills": skills,
     }
 

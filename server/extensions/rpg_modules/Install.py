@@ -37,6 +37,8 @@ LINE_SYSTEMS: dict[str, str] = {
     "dw": "redacted",
     "ow": "redacted",
     "rt": "redacted",
+    # [redacted] from the dnd5e Foundry system's own packs (tools/foundry-bridge/dnd5e.py).
+    "dnd5e": "dnd-5e",
 }
 LINE_NAMES: dict[str, str] = {
     "bc": "[redacted]",
@@ -45,6 +47,7 @@ LINE_NAMES: dict[str, str] = {
     "dw": "[redacted]",
     "ow": "[redacted]",
     "rt": "[redacted]",
+    "dnd5e": "[redacted]",
 }
 
 # Foundry item types that are traits in vtt, and the trait kind each becomes.
@@ -62,6 +65,11 @@ TRAIT_KINDS: dict[str, str] = {
     "vehicleTrait": "vehicle-trait",
 }
 # An origin-path document's step becomes its kind.
+# The dnd5e system's item types that are traits in vtt (the 2024 packs): a character's origins and
+# class, and the features under them. A `feat` item says what it belongs to in system.type.value.
+DND5E_KINDS: dict[str, str] = {"race": "species", "background": "background", "class": "class", "subclass": "subclass"}
+DND5E_FEATS: dict[str, str] = {"class": "class-feature", "race": "species-trait", "feat": "feat"}
+
 ORIGIN_STEPS: dict[str, str] = {
     "homeWorld": "homeworld",
     "background": "background",
@@ -120,6 +128,11 @@ def trait_kind(document: Mapping[str, Any]) -> Optional[str]:
     if document.get("foundry_class") != "Item":
         return None
     kind = document.get("type")
+    if document.get("line") == "dnd5e":
+        if kind == "feat":
+            belongs = ((document.get("system") or {}).get("type") or {}).get("value")
+            return DND5E_FEATS.get(belongs or "", "feat")
+        return DND5E_KINDS.get(kind or "")
     if kind == "originPath":
         step = (document.get("system") or {}).get("step")
         return ORIGIN_STEPS.get(step) or (slugify(step) if isinstance(step, str) and step else "origin")

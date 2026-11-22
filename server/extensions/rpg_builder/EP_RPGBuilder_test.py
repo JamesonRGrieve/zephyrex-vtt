@@ -96,3 +96,31 @@ def test_strangers_and_packs_without_methods(world: dict[str, Any]) -> None:
     with pytest.raises(HTTPException) as plain:
         _run(RPGBuilderExtension.builder_options(str(world["player"].id), world["rhia"]["id"]))
     assert plain.value.status_code == 422 and "no ability score methods" in plain.value.detail["message"]
+
+
+def test_class_background_and_species_are_chosen_by_the_steps(server: TestClient, world: dict[str, Any]) -> None:
+    gm, player = world["gm"], world["player"]
+    campaign_id = world["brann"]["campaign_id"]
+    fighter = _create(server, gm, "trait", name="Fighter", kind="class", campaign_id=campaign_id)
+    wizard = _create(server, gm, "trait", name="Wizard", kind="class", campaign_id=campaign_id)
+    soldier = _create(server, gm, "trait", name="Soldier", kind="background", campaign_id=campaign_id)
+    _create(server, gm, "trait", name="Dwarf", kind="species", campaign_id=campaign_id)
+
+    steps = _run(RPGBuilderExtension.builder_choices(str(player.id), world["brann"]["id"]))["steps"]
+    assert [(one["step"], one["name"]) for one in steps[:3]] == [(1, "Choose a Class"), (2, "Character Origin"), (3, "Ability Scores")]
+    assert [choice["kind"] for choice in steps[1]["choices"]] == ["background", "species"]
+    assert [option["name"] for option in steps[0]["choices"][0]["options"]] == ["Fighter", "Wizard"]
+
+    done = _run(RPGBuilderExtension.choose(str(player.id), world["brann"]["id"], "class", fighter["id"]))
+    assert done["steps"][0]["choices"][0]["chosen"]["name"] == "Fighter"
+    with pytest.raises(HTTPException) as again:
+        _run(RPGBuilderExtension.choose(str(player.id), world["brann"]["id"], "class", wizard["id"]))
+    assert again.value.status_code == 422 and "already chosen" in again.value.detail["message"]
+    changed = _run(RPGBuilderExtension.choose(str(gm.id), world["brann"]["id"], "class", wizard["id"]))
+    assert changed["steps"][0]["choices"][0]["chosen"]["name"] == "Wizard", "the GM may change it, one class kept"
+    with pytest.raises(HTTPException) as wrong:
+        _run(RPGBuilderExtension.choose(str(player.id), world["brann"]["id"], "class", soldier["id"]))
+    assert wrong.value.status_code == 422 and "isn't a class" in wrong.value.detail["message"]
+    with pytest.raises(HTTPException) as unknown:
+        _run(RPGBuilderExtension.choose(str(player.id), world["brann"]["id"], "alignment", soldier["id"]))
+    assert unknown.value.status_code == 422

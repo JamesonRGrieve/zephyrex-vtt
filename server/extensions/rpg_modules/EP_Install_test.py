@@ -79,6 +79,21 @@ def test_the_kinds_follow_the_foundry_types() -> None:
     assert trait_kind(_document(1, foundry_class="Actor", type="npc")) is None
 
 
+def test_the_dnd5e_line_kinds() -> None:
+    """[redacted] (dnd5e's own packs): origins and class, and each feat by what it belongs to."""
+
+    def five(type_: str, **system: Any) -> dict[str, Any]:
+        return {"line": "dnd5e", "foundry_class": "Item", "type": type_, "system": system}
+
+    assert trait_kind(five("race")) == "species"
+    assert trait_kind(five("background")) == "background"
+    assert (trait_kind(five("class")), trait_kind(five("subclass"))) == ("class", "subclass")
+    assert trait_kind(five("feat", type={"value": "class"})) == "class-feature"
+    assert trait_kind(five("feat", type={"value": "race"})) == "species-trait"
+    assert trait_kind(five("feat", type={"value": "feat"})) == "feat"
+    assert trait_kind(five("weapon")) is None
+
+
 def test_a_module_is_its_owners_alone_and_reinstalls_incrementally(app: Any) -> None:
     client = TestClient(app)
     owner, other = create_user(client), create_user(client)

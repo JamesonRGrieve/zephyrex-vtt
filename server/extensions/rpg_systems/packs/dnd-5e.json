@@ -139,6 +139,38 @@
     },
     "cite": "Creating a Character › Generate Your Scores"
   },
+  "creation": {
+    "steps": [
+      {
+        "step": 1,
+        "name": "Choose a Class",
+        "choices": [
+          "class"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "Character Origin",
+        "choices": [
+          "background",
+          "species"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "Ability Scores"
+      },
+      {
+        "step": 4,
+        "name": "Alignment"
+      },
+      {
+        "step": 5,
+        "name": "Character Creation Details"
+      }
+    ],
+    "cite": "Creating a Character"
+  },
   "skills": [
     {
       "slug": "acrobatics",
