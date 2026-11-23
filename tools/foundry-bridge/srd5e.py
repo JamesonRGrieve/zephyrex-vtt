@@ -141,8 +141,17 @@ def rules(root: Path) -> dict[str, Any]:
     pool = find(r"You have (\d+) points to spend on your ability scores", "the point-buy pool")
     costs = find(r"Ability Score Point Costs Score Cost ((?:\d+ \d+ ?)+)", "the point-cost table")
     abilities = find(r"assign them to ([A-Z][a-z]+(?:, [A-Z][a-z]+)*,? and [A-Z][a-z]+)", "the six abilities")
+    by_class = find(r"Standard Array by Class Class Str\. Dex\. Con\. Int\. Wis\. Cha\. ((?:@UUID\[[^\]]+\]\{[A-Za-z]+\} (?:\d+ ){5}\d+ ?)+)", "the Standard Array by Class table")
     pairs = costs.group(1).split()
     names = [name.strip() for name in re.split(r",\s*(?:and\s+)?|\s+and\s+", abilities.group(1)) if name.strip()]
+    standard = sorted((int(score) for score in array.group(1).replace(" ", "").split(",") if score), reverse=True)
+    # Each class's row: its six scores in the abilities' order, keyed by the class's compendium UUID.
+    placed: dict[str, dict[str, Any]] = {}
+    for uuid, name, row in re.findall(r"@UUID\[([^\]]+)\]\{([A-Za-z]+)\} ((?:\d+ ){5}\d+)", by_class.group(1)):
+        scores = [int(score) for score in row.split()]
+        if sorted(scores, reverse=True) != standard:
+            raise RulesTextError(f"the Standard Array by Class row for {name} isn't the standard array")
+        placed[uuid] = {"name": name, "scores": dict(zip((one.lower() for one in names), scores))}
     extra = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}.get(roll.group(2), 0)
     return {
         "line": LINE,
@@ -150,6 +159,8 @@ def rules(root: Path) -> dict[str, Any]:
         "abilities": [{"slug": name.lower(), "name": name, "short": name[:3].upper()} for name in names],
         "ability_methods": {
             "standard_array": [int(score) for score in array.group(1).replace(" ", "").split(",") if score],
+            # The SRD's suggested placement of the standard array for each class (Step 3).
+            "standard_array_by_class": placed,
             "roll": {"formula": roll.group(1), "count": 1 + extra},
             "point_buy": {
                 "pool": int(pool.group(1)),
@@ -249,6 +260,12 @@ def test_pack(root: Path) -> dict[str, Any]:
     ]
     if not skills or len({one["slug"] for one in skills}) != len(skills):
         raise RulesTextError("the SRD's Skills table no longer reads as one skill per row")
+    # Each skill's key in the Foundry system's documents (skills:ath in a class's skill choices).
+    keys = {slug: short for short, slug in _skill_keys(root).items()}
+    for one in skills:
+        if one["slug"] not in keys:
+            raise RulesTextError(f"the Foundry system has no skill key for {one['name']}")
+        one["key"] = keys[one["slug"]]
 
     classes = find(d20, r"Typical Difficulty Classes Task Difficulty DC ((?:[A-Z][a-z]+(?: [a-z]+)? \d+ ?)+)", "the Typical Difficulty Classes")
     difficulties: dict[str, Any] = {

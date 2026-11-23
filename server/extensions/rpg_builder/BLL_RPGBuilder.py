@@ -18,8 +18,11 @@ from pydantic import Field
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonModel
 from zephyrex.extensions.rpg_builder.Abilities import AbilityError, check_scores
 from zephyrex.extensions.rpg_builder.Npcs import pick
+from zephyrex.extensions.rpg_builder.Pregen import Document, Gap, name_key, parse_line, plan
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import DiceManager, stat_name  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_systems.Packs import load_pack  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import PersonTraitManager, TraitManager  # type: ignore[import-not-found]
 from zephyrex.lib.CustomRoute import ExposeIn, custom_route
 from zephyrex.lib.Environment import env
@@ -184,6 +187,45 @@ class NpcSheetResultEnvelope(PlainModel):
     sheet: NpcSheetOut
     sheet_id: str = Field(description="The person whose sheet it is")
     source_name: str
+
+
+class PregenRequest(PlainModel):
+    person_id: str
+    replace: bool = Field(False, description="Overwrite a sheet the pregen already has")
+    dry_run: bool = Field(False, description="Report what would be built and what stays open; write nothing")
+
+
+class PregenEnvelope(PlainModel):
+    pregen: PregenRequest
+
+
+class PregenGapOut(PlainModel):
+    what: str = Field(description="What is open: line, edition, level, class, background, species, abilities, equipment")
+    detail: str
+
+
+class PregenOut(PlainModel):
+    person_id: str
+    name: Optional[str] = None
+    system: Optional[str] = None
+    level: Optional[int] = None
+    class_name: Optional[str] = None
+    background: Optional[str] = None
+    species: Optional[str] = None
+    edition: Optional[str] = None
+    has_sheet: bool = Field(description="Whether the pregen had sheet rows before this call")
+    built: bool = Field(description="Whether a sheet was (or, in a dry run, would be) written")
+    written: int = 0
+    abilities: dict[str, int] = Field(default_factory=dict, description="The standard array as the SRD places it for the class")
+    saves: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list, description="Skills granted outright (proficient)")
+    features: list[str] = Field(default_factory=list, description="The granted features and spells, by name")
+    hp: Optional[int] = Field(None, description="Level-1 hit points from these scores (before any open ability increase)")
+    gaps: list[PregenGapOut] = Field(default_factory=list, description="Choices the rules leave open that the pregen's data doesn't settle")
+
+
+class PregenResultEnvelope(PlainModel):
+    pregen: PregenOut
 
 
 def _refuse(message: str) -> HTTPException:
@@ -410,6 +452,120 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             cr=block.get("cr"),
         )
         return NpcSheetResultEnvelope(sheet=sheet, sheet_id=person.id, source_name=block["name"])
+
+    def _catalog(self, system_id: str) -> dict[str, dict[str, Document]]:
+        """The system's class, background and species traits that came from a module, each with its
+        record's source data (Foundry's system), by name_key."""
+        traits = self._trusted(TraitManager)
+        records = self._trusted(ModuleRecordManager)
+        catalog: dict[str, dict[str, Document]] = {}
+        for kind in ("class", "background", "species"):
+            found: dict[str, Document] = {}
+            for trait in self._live(traits, game_system_id=system_id, kind=kind):
+                if trait.campaign_id is not None:
+                    continue
+                for record in records.list(entity_type="trait", entity_id=trait.id):
+                    found[name_key(trait.name or "")] = Document(trait.id, record.source_id, trait.name or "", record.data or {})
+                    break
+            catalog[kind] = found
+        return catalog
+
+    def build_pregen_for(self, body: PregenRequest) -> PregenOut:
+        """A setting pregen's starting sheet by the SRD's creation rules (rpg_builder.Pregen): what
+        its own line and the rules settle is written, every open choice is reported, nothing is
+        guessed. The pregen's owner only; refused when it has a sheet, unless replace."""
+        from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
+
+        persons = self._trusted(PersonManager)
+        person = next(iter(self._live(persons, id=body.person_id)), None)
+        requester = str(self.requester.id)
+        if person is None or requester not in {
+            str(owner) for owner in (getattr(person, "user_id", None), getattr(person, "created_by_user_id", None)) if owner
+        }:
+            raise HTTPException(status_code=404, detail={"message": "Request searched PersonModel and could not find the required record."})
+        if getattr(person, "campaign_id", None) is not None:
+            raise _refuse("build_pregen is for a setting's pregen; a campaign's characters use the builder's steps")
+        system_id = self._dice().system_id_of(person)
+        system = None if system_id is None else self._trusted(GameSystemManager).get(id=system_id)
+        pack = None if system is None or not system.slug else load_pack(system.slug)
+        if pack is None:
+            raise _refuse("This pregen's setting has no game system with a rules pack")
+        catalog = self._catalog(str(system.id))
+        # Its line is in its description (genealogy's), or its entry (the wiki's Plate value, as JSON text).
+        text = " ".join(str(getattr(person, name, None) or "") for name in ("description", "summary", "entry"))
+        line = parse_line(text, [document.name for document in catalog["class"].values()])
+        result = plan(line, catalog, pack)
+
+        records = self._trusted(ModuleRecordManager)
+        traits = self._trusted(TraitManager)
+        feature_ids: list[tuple[str, str]] = []
+        for source_id in result.features:
+            record = next((row for row in records.list(source_id=source_id, entity_type="trait") if row.entity_id), None)
+            trait = None if record is None else next(iter(self._live(traits, id=record.entity_id)), None)
+            if trait is None:
+                result.gaps.append(Gap("feature", f"{source_id} isn't a trait in the module"))
+                continue
+            feature_ids.append((trait.id, trait.name or ""))
+        by_slug = {
+            (trait.kind, trait.slug): trait.id
+            for trait in self._live(traits, game_system_id=system.id)
+            if trait.campaign_id is None and trait.kind in ("characteristic", "skill") and trait.slug
+        }
+        rows = self._trusted(PersonTraitManager)
+        existing = self._live(rows, person_id=person.id)
+        if existing and not body.replace and not body.dry_run:
+            raise _refuse(f"{person.name or 'This pregen'} already has a sheet; pass replace to overwrite it")
+
+        wanted: list[dict[str, Any]] = [{"trait_id": trait_id} for trait_id in result.origins.values()]
+        wanted += [{"trait_id": trait_id} for trait_id, _ in feature_ids]
+        for slug, score in result.abilities.items():
+            if ("characteristic", slug) in by_slug:
+                wanted.append({"trait_id": by_slug[("characteristic", slug)], "value": float(score)})
+        for slug in result.skills:
+            if ("skill", slug) in by_slug:
+                wanted.append({"trait_id": by_slug[("skill", slug)], "rank": 1})
+        wanted = list({row["trait_id"]: row for row in wanted}.values())
+
+        written = 0
+        if result.buildable and not body.dry_run:
+            for row in existing:
+                rows.delete(id=row.id)
+            for row in wanted:
+                rows.create(person_id=person.id, **row)
+            written = len(wanted)
+        return PregenOut(
+            person_id=person.id,
+            name=person.name,
+            system=pack["system"],
+            level=line.level if line else None,
+            class_name=line.klass if line else None,
+            background=line.background if line else None,
+            species=line.species if line else None,
+            edition=line.edition if line else None,
+            has_sheet=bool(existing),
+            built=result.buildable,
+            written=written,
+            abilities=result.abilities,
+            saves=result.saves,
+            skills=result.skills,
+            features=[name for _, name in feature_ids],
+            hp=result.hp,
+            gaps=[PregenGapOut(what=gap.what, detail=gap.detail) for gap in result.gaps],
+        )
+
+    @custom_route(
+        method="POST",
+        path="/pregen",
+        input_model=PregenEnvelope,
+        output_model=PregenResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Builder",),
+        summary="A setting pregen's starting sheet by the SRD's creation rules; open choices reported (its owner)",
+    )
+    async def pregen_route(self, body: PregenEnvelope) -> PregenResultEnvelope:
+        builder = BuilderManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+        return PregenResultEnvelope(pregen=builder.build_pregen_for(body.pregen))
 
     @custom_route(
         method="POST",

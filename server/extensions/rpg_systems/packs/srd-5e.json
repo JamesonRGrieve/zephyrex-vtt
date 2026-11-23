@@ -635,6 +635,140 @@
       10,
       8
     ],
+    "standard_array_by_class": {
+      "Compendium.dnd5e.classes24.Item.phbbrbBarbarian0": {
+        "name": "Barbarian",
+        "scores": {
+          "strength": 15,
+          "dexterity": 13,
+          "constitution": 14,
+          "intelligence": 10,
+          "wisdom": 12,
+          "charisma": 8
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbbrdBard000000": {
+        "name": "Bard",
+        "scores": {
+          "strength": 8,
+          "dexterity": 14,
+          "constitution": 12,
+          "intelligence": 13,
+          "wisdom": 10,
+          "charisma": 15
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbclcCleric0000": {
+        "name": "Cleric",
+        "scores": {
+          "strength": 14,
+          "dexterity": 8,
+          "constitution": 13,
+          "intelligence": 10,
+          "wisdom": 15,
+          "charisma": 12
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbdrdDruid00000": {
+        "name": "Druid",
+        "scores": {
+          "strength": 8,
+          "dexterity": 12,
+          "constitution": 14,
+          "intelligence": 13,
+          "wisdom": 15,
+          "charisma": 10
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbftrFighter000": {
+        "name": "Fighter",
+        "scores": {
+          "strength": 15,
+          "dexterity": 14,
+          "constitution": 13,
+          "intelligence": 8,
+          "wisdom": 10,
+          "charisma": 12
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbmnkMonk000000": {
+        "name": "Monk",
+        "scores": {
+          "strength": 12,
+          "dexterity": 15,
+          "constitution": 13,
+          "intelligence": 10,
+          "wisdom": 14,
+          "charisma": 8
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbpdnPaladin000": {
+        "name": "Paladin",
+        "scores": {
+          "strength": 15,
+          "dexterity": 10,
+          "constitution": 13,
+          "intelligence": 8,
+          "wisdom": 12,
+          "charisma": 14
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbrgrRanger0000": {
+        "name": "Ranger",
+        "scores": {
+          "strength": 12,
+          "dexterity": 15,
+          "constitution": 13,
+          "intelligence": 8,
+          "wisdom": 14,
+          "charisma": 10
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbrgeRogue00000": {
+        "name": "Rogue",
+        "scores": {
+          "strength": 12,
+          "dexterity": 15,
+          "constitution": 13,
+          "intelligence": 14,
+          "wisdom": 10,
+          "charisma": 8
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbscrSorcerer00": {
+        "name": "Sorcerer",
+        "scores": {
+          "strength": 10,
+          "dexterity": 13,
+          "constitution": 14,
+          "intelligence": 8,
+          "wisdom": 12,
+          "charisma": 15
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbwlkWarlock000": {
+        "name": "Warlock",
+        "scores": {
+          "strength": 8,
+          "dexterity": 14,
+          "constitution": 13,
+          "intelligence": 12,
+          "wisdom": 10,
+          "charisma": 15
+        }
+      },
+      "Compendium.dnd5e.classes24.Item.phbwzdWizard0000": {
+        "name": "Wizard",
+        "scores": {
+          "strength": 8,
+          "dexterity": 12,
+          "constitution": 13,
+          "intelligence": 15,
+          "wisdom": 14,
+          "charisma": 10
+        }
+      }
+    },
     "roll": {
       "formula": "4d6kh3",
       "count": 6
@@ -692,126 +826,144 @@
       "name": "Acrobatics",
       "characteristic": "dexterity",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "acr"
     },
     {
       "slug": "animal-handling",
       "name": "Animal Handling",
       "characteristic": "wisdom",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "ani"
     },
     {
       "slug": "arcana",
       "name": "Arcana",
       "characteristic": "intelligence",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "arc"
     },
     {
       "slug": "athletics",
       "name": "Athletics",
       "characteristic": "strength",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "ath"
     },
     {
       "slug": "deception",
       "name": "Deception",
       "characteristic": "charisma",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "dec"
     },
     {
       "slug": "history",
       "name": "History",
       "characteristic": "intelligence",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "his"
     },
     {
       "slug": "insight",
       "name": "Insight",
       "characteristic": "wisdom",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "ins"
     },
     {
       "slug": "intimidation",
       "name": "Intimidation",
       "characteristic": "charisma",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "itm"
     },
     {
       "slug": "investigation",
       "name": "Investigation",
       "characteristic": "intelligence",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "inv"
     },
     {
       "slug": "medicine",
       "name": "Medicine",
       "characteristic": "wisdom",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "med"
     },
     {
       "slug": "nature",
       "name": "Nature",
       "characteristic": "intelligence",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "nat"
     },
     {
       "slug": "perception",
       "name": "Perception",
       "characteristic": "wisdom",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "prc"
     },
     {
       "slug": "performance",
       "name": "Performance",
       "characteristic": "charisma",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "prf"
     },
     {
       "slug": "persuasion",
       "name": "Persuasion",
       "characteristic": "charisma",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "per"
     },
     {
       "slug": "religion",
       "name": "Religion",
       "characteristic": "intelligence",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "rel"
     },
     {
       "slug": "sleight-of-hand",
       "name": "Sleight of Hand",
       "characteristic": "dexterity",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "slt"
     },
     {
       "slug": "stealth",
       "name": "Stealth",
       "characteristic": "dexterity",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "ste"
     },
     {
       "slug": "survival",
       "name": "Survival",
       "characteristic": "wisdom",
       "specialist": false,
-      "cite": "Playing the Game › D20 Tests › Skills"
+      "cite": "Playing the Game › D20 Tests › Skills",
+      "key": "sur"
     }
   ]
 }

@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""build_pregen's planning, pure: a pregen's line, and what the SRD's creation rules fix or leave open.
+The documents are cut-down shapes of the open fifth-edition system's own (SRD 5.2.1, CC-BY-4.0)."""
+
+from typing import Any
+
+from zephyrex.extensions.rpg_builder.Pregen import Document, name_key, parse_line, plan
+
+FIGHTER = "Compendium.dnd5e.classes24.Item.phbftrFighter000"
+PACK: dict[str, Any] = {
+    "characteristics": [
+        {"slug": slug, "name": slug.title(), "short": slug[:3].upper()}
+        for slug in ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
+    ],
+    "skills": [{"slug": "insight", "key": "ins"}, {"slug": "religion", "key": "rel"}, {"slug": "athletics", "key": "ath"}],
+    "ability_methods": {
+        "standard_array_by_class": {
+            FIGHTER: {"name": "Fighter", "scores": {"strength": 15, "dexterity": 14, "constitution": 13, "intelligence": 8, "wisdom": 10, "charisma": 12}}
+        }
+    },
+}
+
+
+def _catalog() -> dict[str, dict[str, Document]]:
+    fighter = Document("t-fighter", FIGHTER, "Fighter", {
+        "hd": {"denomination": "d10"},
+        "advancement": [
+            {"type": "Trait", "level": 1, "title": "Saving Throw Proficiencies", "configuration": {"grants": ["saves:str", "saves:con"], "choices": []}},
+            {"type": "Trait", "level": 1, "title": "Skill Proficiencies", "configuration": {"grants": [], "choices": [{"count": 2, "pool": ["skills:ath", "skills:ins"]}]}},
+            {"type": "Trait", "level": 1, "title": "Armor Training", "classRestriction": "secondary", "configuration": {"grants": ["skills:rel"]}},
+            {"type": "ItemGrant", "level": 1, "title": "Class Features", "configuration": {"items": [{"uuid": "F-second-wind", "optional": False}]}},
+            {"type": "ItemGrant", "level": 2, "title": "Class Features", "configuration": {"items": [{"uuid": "F-action-surge", "optional": False}]}},
+            {"type": "ItemChoice", "title": "Fighting Style", "configuration": {"choices": {"1": {"count": 1}}}},
+            {"type": "Subclass", "level": 3, "configuration": {}},
+            {"type": "AbilityScoreImprovement", "level": 4, "configuration": {"points": 2}},
+        ],
+        "startingEquipment": [{"type": "OR", "group": ""}],
+    })
+    acolyte = Document("t-acolyte", "B-acolyte", "Acolyte", {
+        "advancement": [
+            {"type": "AbilityScoreImprovement", "level": 0, "title": "Background Ability Score Improvement",
+             "configuration": {"points": 3, "cap": 2, "locked": ["str", "dex", "con"]}},
+            {"type": "Trait", "level": 0, "title": "Background Proficiencies", "configuration": {"grants": ["tool:art:calligrapher", "skills:ins", "skills:rel"], "choices": []}},
+            {"type": "ItemGrant", "level": 0, "title": "Background Feat", "configuration": {"items": [{"uuid": "F-magic-initiate", "optional": False}]}},
+        ],
+        "startingEquipment": [{"type": "AND", "group": ""}],
+        "wealth": "50",
+    })
+    elf = Document("t-elf", "S-elf-high", "Elf, High", {
+        "advancement": [
+            {"type": "Size", "level": 0, "configuration": {"sizes": ["med"]}},
+            {"type": "ItemGrant", "level": 0, "title": "Elf Traits", "configuration": {"items": [{"uuid": "F-darkvision", "optional": False}]}},
+        ],
+    })
+    return {"class": {"fighter": fighter}, "background": {"acolyte": acolyte}, "species": {name_key("Elf, High"): elf}}
+
+
+def test_a_pregen_line_names_level_species_class_background_and_edition() -> None:
+    line = parse_line("Level 1 High Elf Fighter, Acolyte background (SRD 5.2.1). Raised in a temple.", ["Fighter", "Cleric"])
+    assert line is not None
+    assert (line.level, line.species, line.klass, line.background, line.edition) == (1, "High Elf", "Fighter", "Acolyte", "5.2.1")
+    assert parse_line("A gruff sellsword.", ["Fighter"]) is None
+
+
+def test_names_compare_with_their_comma_turned() -> None:
+    assert name_key("Elf, High") == name_key("High Elf") == "high elf"
+
+
+def test_the_rules_fix_scores_saves_skills_features_and_hp_and_report_every_open_choice() -> None:
+    line = parse_line("Level 1 High Elf Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"])
+    got = plan(line, _catalog(), PACK)
+    assert got.buildable
+    assert got.origins == {"class": "t-fighter", "background": "t-acolyte", "species": "t-elf"}
+    assert got.abilities["strength"] == 15 and got.abilities["intelligence"] == 8
+    assert got.saves == ["strength", "constitution"]
+    # The background's skills outright; the multiclass-only set is not the character's.
+    assert got.skills == ["insight", "religion"]
+    # Level-1 grants only (Action Surge is level 2).
+    assert got.features == ["F-second-wind", "F-magic-initiate", "F-darkvision"]
+    assert got.hp == 10 + 1  # d10 + the Constitution modifier of 13
+    open_choices = [gap.detail for gap in got.gaps]
+    assert any("Skill Proficiencies: choose 2" in one for one in open_choices)
+    assert any("Fighting Style" in one for one in open_choices)
+    assert any("3 points among intelligence, wisdom, charisma, at most +2 each" in one for one in open_choices)
+    assert any("Fighter's starting equipment" in one for one in open_choices)
+    assert any("Acolyte's starting equipment: choose its option, or 50 GP instead" in one for one in open_choices)
+    # A one-size species and later-level advancements open nothing.
+    assert not any("size" in one or "subclass" in one for one in open_choices)
+
+
+def test_an_other_edition_or_level_or_unknown_origin_builds_nothing() -> None:
+    older = plan(parse_line("Level 1 High Elf Fighter, Acolyte background (SRD 5.1).", ["Fighter"]), _catalog(), PACK)
+    assert not older.buildable and [gap.what for gap in older.gaps] == ["edition"]
+    higher = plan(parse_line("Level 3 High Elf Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"]), _catalog(), PACK)
+    assert not higher.buildable and [gap.what for gap in higher.gaps] == ["level"]
+    unknown = plan(parse_line("Level 1 High Elf Fighter, Recluse background (SRD 5.2.1).", ["Fighter"]), _catalog(), PACK)
+    assert not unknown.buildable and any(gap.what == "background" and "Recluse" in gap.detail for gap in unknown.gaps)

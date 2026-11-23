@@ -5,7 +5,7 @@ as abilities an agent calls: read a character's options, roll their ability scor
 from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, ChooseRequest, NpcSheetRequest, RollRequest
+from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, ChooseRequest, NpcSheetRequest, PregenRequest, RollRequest
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -77,6 +77,19 @@ class RPGBuilderExtension(AbstractStaticExtension):
         """Record a creation choice: ``kind`` one the steps name (class, background, species) and
         ``trait_id`` one of its options. A player chooses once; the GM may change it."""
         return cls.builder(requester_id).choose_for(ChooseRequest(person_id=person_id, kind=kind, trait_id=trait_id)).model_dump()
+
+    @classmethod
+    @ability("build_pregen")
+    async def build_pregen(cls, requester_id: str, person_id: str, replace: bool = False, dry_run: bool = False) -> dict[str, Any]:
+        """Give a setting pregen (a pc with no campaign) its starting sheet by the SRD's creation rules,
+        from its own line ("Level 1 Dragonborn Cleric, Acolyte background (SRD 5.2.1)") and the srd5e
+        module: its class, background and species, the standard array as the SRD places it for the
+        class, the skills and features granted outright. Every choice the rules leave open and its data
+        doesn't settle is a gap, reported and not guessed. Returns {pregen: {built, written, abilities,
+        saves, skills, features, hp, gaps: [{what, detail}], ...}}. ``dry_run`` writes nothing; a sheet
+        already there is refused unless ``replace``. The pregen's owner only."""
+        body = PregenRequest(person_id=person_id, replace=replace, dry_run=dry_run)
+        return {"pregen": cls.builder(requester_id).build_pregen_for(body).model_dump()}
 
     @classmethod
     @ability("npc_sheet")
