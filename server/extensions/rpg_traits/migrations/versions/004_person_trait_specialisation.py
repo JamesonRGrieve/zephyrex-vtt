@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""rpg_traits 004: a person's trait carries the specialisation it holds of a specialist skill ([redacted] (Stars), Craft (Wood)), one row per specialisation, so a test can tell them apart.
+"""rpg_traits 004: a person's trait carries the specialisation it holds of a specialist skill (Lore
+(Stars), Craft (Wood)), one row per specialisation, so a test can tell them apart.
 Inspector-guarded: a no-op where the column is already there.
 """
 
