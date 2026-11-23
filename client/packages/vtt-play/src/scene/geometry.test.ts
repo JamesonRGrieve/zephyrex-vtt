@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { fit, fitWidth, MAX_ZOOM, MIN_TARGET, MIN_ZOOM, panBy, snap, toScene, toScreen, tokenAt, zoomAt } from './geometry';
+import {
+  doorAt,
+  fit,
+  fitWidth,
+  MAX_ZOOM,
+  measure,
+  MIN_TARGET,
+  MIN_ZOOM,
+  panBy,
+  snap,
+  toScene,
+  toScreen,
+  tokenAt,
+  zoomAt,
+} from './geometry';
 
 describe('the camera', () => {
   it('maps screen to scene and back', () => {
@@ -63,5 +77,37 @@ describe('fitting to width', () => {
 
   it('shows the top of a tall scene', () => {
     expect(toScreen(fitWidth(1000, 4000, [390, 500]), 0, 0)[1]).toBeCloseTo(0);
+  });
+});
+
+describe('the measure tool and doors', () => {
+  it('measures in whole cells of the scene’s distance, a diagonal step counting as one', () => {
+    expect(measure([0, 0], [300, 0], 100, 5, 'ft')).toEqual({ cells: 3, distance: 15, label: '15 ft' });
+    expect(measure([0, 0], [300, 400], 100, 5, 'ft').label).toBe('20 ft');
+    expect(measure([50, 50], [90, 60], 100, 5, 'ft').cells).toBe(0);
+  });
+
+  it('finds the door nearest a point, ignoring plain walls and doors too far', () => {
+    const walls = [
+      {
+        id: 'wall',
+        points: [
+          [0, 0],
+          [100, 0],
+        ],
+        door_type: 'none',
+      },
+      {
+        id: 'door',
+        points: [
+          [200, 0],
+          [300, 0],
+        ],
+        door_type: 'door',
+      },
+    ];
+    expect(doorAt(walls, 250, 10, 44)?.id).toBe('door');
+    expect(doorAt(walls, 50, 0, 44)).toBeNull();
+    expect(doorAt(walls, 250, 100, 44)).toBeNull();
   });
 });

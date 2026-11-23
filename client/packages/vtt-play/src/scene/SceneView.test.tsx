@@ -4,7 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const post = vi.fn();
-const client = { post };
+const get = vi.fn();
+const put = vi.fn();
+const client = { post, get, put };
 vi.mock('zephyrex', () => ({
   useClient: () => client,
   writeProblem: async (write: Promise<unknown>, fallback: string) =>
@@ -75,6 +77,8 @@ function view(gm: boolean) {
 // A block body: a function returned from beforeEach is a cleanup hook vitest would call.
 beforeEach(() => {
   post.mockReset();
+  get.mockReset();
+  put.mockReset();
 });
 
 describe('the scene view', () => {
@@ -122,5 +126,55 @@ describe('the scene view', () => {
     post.mockRejectedValue(new Error('down'));
     render(<SceneView showList sceneId='s1' />);
     await waitFor(() => expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument());
+  });
+  it('switches between moving tokens and measuring', async () => {
+    post.mockImplementation(() => Promise.resolve(view(false)));
+    render(<SceneView sceneId='s1' />);
+    const measure = await screen.findByRole('radio', { name: 'Measure' });
+    expect(screen.getByRole('radio', { name: 'Move' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(measure);
+    expect(measure).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('gives the GM the map controls: the scene to show, and the cast to place', async () => {
+    post.mockImplementation((path: string) => Promise.resolve(path.endsWith('/view') ? view(true) : {}));
+    get.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.startsWith('/v1/scene?')
+          ? {
+              scenes: [
+                { id: 's1', name: 'Bridge', is_active: false },
+                { id: 's2', name: 'Hold', is_active: true },
+              ],
+            }
+          : {
+              persons: [
+                { id: 'p-ada', name: 'Ada', kind: 'pc' },
+                { id: 'p-tam', name: 'Old Tam', kind: 'npc' },
+              ],
+            },
+      ),
+    );
+    const picked = vi.fn();
+    render(<SceneView sceneId='s1' campaignId='c1' onScene={picked} />);
+    const controls = await screen.findByRole('region', { name: 'Map controls' });
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/v1/scene?campaign_id=c1'));
+    // Ada has a token here; Old Tam doesn't.
+    await userEvent.click(await screen.findByRole('button', { name: 'Place Old Tam on the map' }));
+    expect(post).toHaveBeenCalledWith('/v1/scene/s1/place', { place: { person_id: 'p-tam' } });
+    expect(screen.queryByRole('button', { name: 'Place Ada on the map' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Show to players' }));
+    expect(post).toHaveBeenCalledWith('/v1/scene/s1/activate', { activate: {} });
+    await userEvent.selectOptions(screen.getByLabelText('Scene'), 's2');
+    expect(picked).toHaveBeenCalledWith('s2');
+    expect(controls).toBeInTheDocument();
+  });
+
+  it('shows players no map controls', async () => {
+    post.mockImplementation(() => Promise.resolve(view(false)));
+    render(<SceneView sceneId='s1' campaignId='c1' />);
+    await screen.findByRole('radio', { name: 'Measure' });
+    expect(screen.queryByRole('region', { name: 'Map controls' })).toBeNull();
+    expect(get).not.toHaveBeenCalled();
   });
 });

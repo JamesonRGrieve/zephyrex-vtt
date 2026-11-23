@@ -11,6 +11,7 @@ import type { SceneViewData } from '../src/scene/schemas';
 declare global {
   interface Window {
     moves: { id: string; x: number; y: number }[];
+    doors: string[];
   }
 }
 
@@ -26,6 +27,9 @@ function redPicture(): string {
 }
 
 const withPicture = Boolean((window as unknown as { vttPicture?: boolean }).vttPicture);
+// The measure tool, and the GM's view (a door to tap), for those tests.
+const tool = (window as unknown as { vttTool?: 'select' | 'measure' }).vttTool ?? 'select';
+const gm = Boolean((window as unknown as { vttGm?: boolean }).vttGm);
 
 const view = {
   id: 's1',
@@ -33,7 +37,8 @@ const view = {
   width: 2000,
   height: 1500,
   grid_size: 100,
-  gm: false,
+  grid_distance: 5,
+  grid_units: 'ft',
   lit: true,
   tokens: [
     {
@@ -61,12 +66,33 @@ const view = {
       person_id: 'p2',
     },
   ],
-  walls: [],
+  walls: gm
+    ? [
+        {
+          id: 'door',
+          points: [
+            [600, 200],
+            [700, 200],
+          ],
+          door_type: 'door',
+          door_state: 'closed',
+        },
+      ]
+    : [],
   background_url: withPicture ? redPicture() : null,
+  gm,
 } as unknown as SceneViewData;
 
 window.moves = [];
+window.doors = [];
 const root = document.getElementById('root');
 if (root) {
-  createRoot(root).render(<SceneCanvas view={view} onMove={(token, x, y) => window.moves.push({ id: token.id, x, y })} />);
+  createRoot(root).render(
+    <SceneCanvas
+      view={view}
+      tool={tool}
+      onMove={(token, x, y) => window.moves.push({ id: token.id, x, y })}
+      onDoor={(wall) => window.doors.push(wall.id)}
+    />,
+  );
 }

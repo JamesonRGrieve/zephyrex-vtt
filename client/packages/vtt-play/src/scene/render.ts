@@ -109,6 +109,13 @@ export interface Drag {
   y: number;
 }
 
+/** A measuring line, in scene coordinates, with its distance. */
+export interface Ruler {
+  from: [number, number];
+  to: [number, number];
+  label: string;
+}
+
 export function drawScene(
   context: CanvasRenderingContext2D,
   view: SceneViewData,
@@ -118,6 +125,7 @@ export function drawScene(
   drag: Drag | null = null,
   selected: string | null = null,
   redraw?: () => void,
+  ruler: Ruler | null = null,
 ): void {
   const [width, height] = size;
   const grid = view.grid_size;
@@ -237,5 +245,23 @@ export function drawScene(
       context.textBaseline = 'middle';
       context.fillText(label, sx + w / 2, chipY + 11);
     }
+  }
+  if (ruler) {
+    const [ax, ay] = toScreen(camera, ruler.from[0], ruler.from[1]);
+    const [bx, by] = toScreen(camera, ruler.to[0], ruler.to[1]);
+    context.setLineDash([]);
+    context.strokeStyle = palette.door;
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(ax, ay);
+    context.lineTo(bx, by);
+    context.stroke();
+    context.font = '600 14px sans-serif';
+    const text = ruler.label;
+    const width = context.measureText(text).width + 12;
+    context.fillStyle = palette.wall;
+    context.fillRect(bx + 8, by - 26, width, 22);
+    context.fillStyle = palette.ground;
+    context.fillText(text, bx + 14, by - 10);
   }
 }

@@ -4,7 +4,8 @@
  * SceneCanvas in a 390 × 844 touch viewport opens fitted to its width, pans with one finger,
  * pinch-zooms, drags the player's own token from a 44 px target however small it's drawn, and
  * leaves the page scrolling outside it; with a mouse, a wheel over it zooms without scrolling the
- * page. Touches go through CDP, as a phone's would.
+ * page; the measure tool reads a finger's drag in the scene's units; the GM taps a door to open it.
+ * Touches go through CDP, as a phone's would.
  */
 import { readFileSync } from 'node:fs';
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
@@ -13,13 +14,14 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
 
 const HARNESS = process.env.HARNESS_JS ?? '';
 
-async function open(page: Page, withPicture = false): Promise<void> {
+async function open(page: Page, withPicture = false, flags: Record<string, unknown> = {}): Promise<void> {
   await page.setContent(
     `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
      <style>:root{--muted:240 4.8% 95.9%;--border:240 5.9% 90%;--foreground:240 10% 3.9%;--primary:262 83% 58%;--primary-foreground:0 0% 98%;--muted-foreground:240 3.8% 46.1%}body{margin:0;font-family:sans-serif}.h-\\[60svh\\]{height:60svh}.min-h-64{min-height:16rem}.w-full{width:100%}.h-full{height:100%}.relative{position:relative}.overflow-hidden{overflow:hidden}.touch-none{touch-action:none}canvas{display:block}</style>
      </head><body><p style="height:120px">Above the map</p><div id="root"></div><p style="height:1200px">Below the map</p></body></html>`,
   );
   if (withPicture) await page.evaluate(() => Object.assign(window, { vttPicture: true }));
+  if (Object.keys(flags).length) await page.evaluate((set) => Object.assign(window, set), flags);
   await page.addScriptTag({ content: readFileSync(HARNESS, 'utf8') });
   await expect(page.locator('canvas')).toHaveAttribute('data-camera', /.+/);
 }
@@ -124,6 +126,24 @@ test('drags the player’s own token from a 44 px target, snapped to the grid', 
   const start: [number, number] = [left + cell + 5, top + cell / 2];
   await drag(cdp, start, [start[0] + cell * 2, start[1]]);
   await expect.poll(() => page.evaluate(() => window.moves)).toEqual([{ id: 'brann', x: 1200, y: 700 }]);
+});
+
+test('the measure tool reads a drag in the scene’s units, and moves nothing', async ({ page }) => {
+  await open(page, false, { vttTool: 'measure' });
+  const cdp = await page.context().newCDPSession(page);
+  // Three cells east of an empty spot, the cells 5 ft each.
+  const from = await onPage(page, 150, 950);
+  const to = await onPage(page, 450, 950);
+  await drag(cdp, from, to);
+  await expect(page.locator('canvas')).toHaveAttribute('data-measure', '15 ft');
+  expect(await page.evaluate(() => window.moves)).toEqual([]);
+});
+
+test('the GM taps a door to open or close it', async ({ page }) => {
+  await open(page, false, { vttGm: true });
+  const [left, top] = await onPage(page, 650, 200);
+  await page.touchscreen.tap(left, top);
+  await expect.poll(() => page.evaluate(() => window.doors)).toEqual(['door']);
 });
 
 test('pans with one finger and pinch-zooms', async ({ page }) => {

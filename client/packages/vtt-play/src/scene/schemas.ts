@@ -46,3 +46,4 @@ export const viewSchema = z.object({
 });
 export type SceneViewData = z.infer<typeof viewSchema>['view'];
 export type ViewToken = SceneViewData['tokens'][number];
+export type ViewWall = SceneViewData['walls'][number];

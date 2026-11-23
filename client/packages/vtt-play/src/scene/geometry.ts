@@ -100,3 +100,45 @@ export function tokenAt<T extends Box>(tokens: readonly T[], x: number, y: numbe
   }
   return null;
 }
+
+export interface Measured {
+  /** Grid cells between the two points, counting a diagonal step as one (the grid's own reckoning). */
+  cells: number;
+  distance: number;
+  label: string;
+}
+
+/** The distance from one scene point to another in the scene's units: whole cells, each `distance`. */
+export function measure(
+  from: readonly [number, number],
+  to: readonly [number, number],
+  grid: number,
+  distance: number,
+  units: string,
+): Measured {
+  const cells = Math.round(Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1])) / grid);
+  const total = cells * distance;
+  return { cells, distance: total, label: `${total} ${units}`.trim() };
+}
+
+export interface DoorLike {
+  points: number[][];
+  door_type?: string | null;
+}
+
+/** The door whose middle is nearest a scene point, within `radius`; walls that aren't doors don't count. */
+export function doorAt<T extends DoorLike>(walls: readonly T[], x: number, y: number, radius: number): T | null {
+  let best: T | null = null;
+  let nearest = radius;
+  for (const wall of walls) {
+    if (!wall.door_type || wall.door_type === 'none' || wall.points.length === 0) continue;
+    const cx = wall.points.reduce((sum, point) => sum + (point[0] ?? 0), 0) / wall.points.length;
+    const cy = wall.points.reduce((sum, point) => sum + (point[1] ?? 0), 0) / wall.points.length;
+    const away = Math.hypot(cx - x, cy - y);
+    if (away <= nearest) {
+      nearest = away;
+      best = wall;
+    }
+  }
+  return best;
+}

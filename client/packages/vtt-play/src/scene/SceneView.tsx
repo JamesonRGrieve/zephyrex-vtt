@@ -2,13 +2,18 @@
 'use client';
 /**
  * A scene to play on: the map the server lets this person see (the GM's whole scene; a player's
- * token's sight) on SceneCanvas (pan, pinch and wheel zoom, dragging tokens). Under it, the tokens
- * as a list with step buttons, for keyboards, screen readers and small screens.
+ * token's sight) on SceneCanvas (pan, pinch and wheel zoom, dragging tokens). Above it, the tools:
+ * move tokens, or measure. The GM taps a door to open or close it and, given the campaign, has the
+ * map controls (the scene to show, the cast to place). Under it, the tokens as a list with step
+ * buttons, for keyboards, screen readers and small screens.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { chipGroup } from 'zephyrex/hooks/chipKeys';
 import { Button } from 'zephyrex/ui/button';
+import { ChoiceChip } from 'zephyrex/ui/choice-chip';
 import { LoadProblem } from 'zephyrex/ui/load-problem';
 import { SkeletonRows } from 'zephyrex/ui/skeleton';
+import { MapControls } from './MapControls';
 import { movable, SceneCanvas } from './SceneCanvas';
 import type { SceneViewData, ViewToken } from './schemas';
 import { useSceneView } from './useSceneView';
@@ -24,6 +29,29 @@ export interface SceneViewProps {
   showList?: boolean;
   /** A long-press on a token: show its details. */
   onTokenDetails?: (token: ViewToken) => void;
+  /** The scene's campaign: with it, the GM gets the map controls (the scene to show, the cast to place). */
+  campaignId?: string;
+  /** The GM picked another scene in the map controls. */
+  onScene?: (sceneId: string) => void;
+}
+
+const TOOLS = [
+  { tool: 'select', label: 'Move' },
+  { tool: 'measure', label: 'Measure' },
+] as const;
+
+function ToolBar({ tool, onTool }: { tool: 'select' | 'measure'; onTool: (tool: 'select' | 'measure') => void }): ReactNode {
+  const chips = useRef<HTMLDivElement>(null);
+  useEffect(() => chipGroup(chips.current), []);
+  return (
+    <div ref={chips} role='radiogroup' aria-label='Map tool' className='flex flex-wrap gap-2'>
+      {TOOLS.map((one) => (
+        <ChoiceChip key={one.tool} checked={tool === one.tool} onClick={() => onTool(one.tool)}>
+          {one.label}
+        </ChoiceChip>
+      ))}
+    </div>
+  );
 }
 
 const STEPS = [
@@ -86,9 +114,18 @@ export function TokenList({
   );
 }
 
-export function SceneView({ sceneId, tokenId, personHref, showList = false, onTokenDetails }: SceneViewProps): ReactNode {
+export function SceneView({
+  sceneId,
+  tokenId,
+  personHref,
+  showList = false,
+  onTokenDetails,
+  campaignId,
+  onScene,
+}: SceneViewProps): ReactNode {
   const scene = useSceneView(sceneId, tokenId);
   const [announcement, setAnnouncement] = useState('');
+  const [tool, setTool] = useState<'select' | 'measure'>('select');
   const { data } = scene;
   if (data.state === 'loading') return <SkeletonRows rows={4} label='Loading the scene' />;
   if (data.state === 'failed') return <LoadProblem what='the scene' error={data.error} onRetry={scene.retry} />;
@@ -100,7 +137,15 @@ export function SceneView({ sceneId, tokenId, personHref, showList = false, onTo
 
   return (
     <section aria-label={view.name ?? 'Scene'} className='space-y-3'>
-      <SceneCanvas view={view} onMove={move} onTokenDetails={onTokenDetails} />
+      {view.gm && campaignId && <MapControls campaignId={campaignId} view={view} onScene={onScene} />}
+      <ToolBar tool={tool} onTool={setTool} />
+      <SceneCanvas
+        view={view}
+        onMove={move}
+        onTokenDetails={onTokenDetails}
+        tool={tool}
+        onDoor={view.gm ? (wall) => void scene.toggleDoor(wall) : undefined}
+      />
       {!view.lit && <p className='text-muted-foreground text-sm'>It’s dark here: you see only what’s lit or close.</p>}
       {scene.problem !== null && (
         <p role='alert' className='text-destructive text-sm'>

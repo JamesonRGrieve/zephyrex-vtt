@@ -12,11 +12,27 @@
  *   keys move the selected one a cell, Escape lets go. A polite live region says what happened.
  * - It opens fitted to its tokens (else the whole scene's width), and follows its box's size until
  *   the player pans or zooms (a panel that opens later measures 0 at first).
+ * - The measure tool (tool 'measure'): drag from one point to another for the distance in the
+ *   scene's units, whole cells; the line stays until the next measure.
+ * - The GM taps a door to open or close it (onDoor).
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { fitBox, fitWidth, MIN_TARGET, panBy, snap, toScene, tokenAt, tokensBox, zoomAt, type Camera } from './geometry';
-import { drawScene, paletteOf, type Drag } from './render';
-import type { SceneViewData, ViewToken } from './schemas';
+import {
+  doorAt,
+  fitBox,
+  fitWidth,
+  measure,
+  MIN_TARGET,
+  panBy,
+  snap,
+  toScene,
+  tokenAt,
+  tokensBox,
+  zoomAt,
+  type Camera,
+} from './geometry';
+import { drawScene, paletteOf, type Drag, type Ruler } from './render';
+import type { SceneViewData, ViewToken, ViewWall } from './schemas';
 
 export function movable(view: SceneViewData, one: ViewToken): boolean {
   return view.gm || one.mine;
@@ -31,6 +47,10 @@ export interface SceneCanvasProps {
   onMove: (token: ViewToken, x: number, y: number) => void;
   /** A long-press on a token (any token this person sees): show its details. */
   onTokenDetails?: (token: ViewToken) => void;
+  /** What a drag does: select and move tokens (the default), or measure. */
+  tool?: 'select' | 'measure';
+  /** The GM tapped a door: open or close it. */
+  onDoor?: (wall: ViewWall) => void;
 }
 
 interface Press {
@@ -41,7 +61,7 @@ interface Press {
   long: boolean;
 }
 
-export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps): ReactNode {
+export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onDoor }: SceneCanvasProps): ReactNode {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const camera = useRef<Camera | null>(null);
@@ -53,6 +73,9 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
   const selectedRef = useRef<string | null>(null);
   const [said, setSaid] = useState('');
   const touched = useRef(false);
+  const ruler = useRef<Ruler | null>(null);
+  const measuring = useRef(false);
+  const toolRef = useRef(tool);
 
   const refit = useCallback(() => {
     const element = canvas.current;
@@ -89,7 +112,9 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
       drag.current,
       selectedRef.current,
       () => window.requestAnimationFrame(() => drawRef.current()),
+      ruler.current,
     );
+    element.dataset.measure = ruler.current?.label ?? '';
     // The camera and selection, for tests and tools.
     element.dataset.camera = `${camera.current.zoom.toFixed(4)},${camera.current.x.toFixed(1)},${camera.current.y.toFixed(1)}`;
     element.dataset.selected = selectedRef.current ?? '';
@@ -107,6 +132,12 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
     },
     [draw],
   );
+
+  useEffect(() => {
+    toolRef.current = tool;
+    if (tool !== 'measure') ruler.current = null;
+    draw();
+  }, [tool, draw]);
 
   useEffect(() => {
     viewRef.current = view;
@@ -175,6 +206,13 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
       return;
     }
     const [x, y] = toScene(camera.current, sx, sy);
+    if (toolRef.current === 'measure') {
+      measuring.current = true;
+      ruler.current = { from: [x, y], to: [x, y], label: '' };
+      press.current = null;
+      draw();
+      return;
+    }
     const hit = tokenAt(viewRef.current.tokens, x, y, viewRef.current.grid_size, MIN_TARGET / camera.current.zoom);
     press.current = { sx, sy, hit, moved: false, long: false };
     if (hit && onTokenDetails) {
@@ -192,6 +230,15 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
     const last = pointers.current.get(event.pointerId);
     if (!last || !camera.current) return;
     const [sx, sy] = local(event);
+    if (measuring.current && ruler.current && pointers.current.size === 1) {
+      const current = viewRef.current;
+      const to = toScene(camera.current, sx, sy);
+      const measured = measure(ruler.current.from, to, current.grid_size, current.grid_distance, current.grid_units);
+      ruler.current = { from: ruler.current.from, to, label: measured.label };
+      pointers.current.set(event.pointerId, { x: sx, y: sy });
+      draw();
+      return;
+    }
     const started = press.current;
     if (started && !started.moved && Math.hypot(sx - started.sx, sy - started.sy) > TAP_SLOP) {
       started.moved = true;
@@ -224,6 +271,12 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
   const up = (event: PointerEvent<HTMLCanvasElement>): void => {
     pointers.current.delete(event.pointerId);
     cancelLong();
+    if (measuring.current) {
+      measuring.current = false;
+      if (ruler.current?.label) setSaid(`Measured ${ruler.current.label}`);
+      draw();
+      return;
+    }
     const held = drag.current;
     const tap = press.current;
     drag.current = null;
@@ -240,6 +293,15 @@ export function SceneCanvas({ view, onMove, onTokenDetails }: SceneCanvasProps):
       if (tap.hit && movable(current, tap.hit)) {
         select(tap.hit.id === chosen?.id ? null : tap.hit);
         return;
+      }
+      if (!tap.hit && !chosen && current.gm && onDoor) {
+        const [x, y] = toScene(camera.current, tap.sx, tap.sy);
+        const door = doorAt(current.walls, x, y, MIN_TARGET / camera.current.zoom);
+        if (door) {
+          onDoor(door);
+          setSaid(`Door ${door.door_state === 'open' ? 'closed' : 'opened'}`);
+          return;
+        }
       }
       if (chosen && !tap.hit) {
         const [x, y] = toScene(camera.current, tap.sx, tap.sy);

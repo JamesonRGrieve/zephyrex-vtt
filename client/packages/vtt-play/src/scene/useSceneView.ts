@@ -2,7 +2,12 @@
 import { useRoom } from '@zephyrex/rooms';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useClient, writeProblem } from 'zephyrex';
-import { viewSchema, type SceneViewData, type ViewToken } from './schemas';
+import { z } from 'zod';
+import { viewSchema, type SceneViewData, type ViewToken, type ViewWall } from './schemas';
+
+const storedWall = z.object({
+  scene_wall: z.object({ id: z.string(), created_at: z.string().nullish(), updated_at: z.string().nullish() }).passthrough(),
+});
 
 export type ViewState = { state: 'loading' } | { state: 'failed'; error: Error } | { state: 'ready'; view: SceneViewData };
 
@@ -57,11 +62,28 @@ export function useSceneView(sceneId: string, tokenId?: string) {
     await read();
   };
 
+  // The GM opens a closed (or locked, or barred) door and closes an open one; the room tells every view.
+  const toggleDoor = async (wall: ViewWall): Promise<void> => {
+    const next = wall.door_state === 'open' ? 'closed' : 'open';
+    // The stored wall first: the update carries its version, so a change made meanwhile isn't overwritten.
+    const failed = await writeProblem(
+      client
+        .get(`/v1/scene_wall/${wall.id}`)
+        .then((answer: unknown) =>
+          client.put(`/v1/scene_wall/${wall.id}`, { scene_wall: { door_state: next } }, storedWall.parse(answer).scene_wall),
+        ),
+      next === 'open' ? 'The door didn’t open' : 'The door didn’t close',
+    );
+    setProblem(failed);
+    await read();
+  };
+
   return {
     data,
     live,
     problem,
     move,
+    toggleDoor,
     retry: (): Promise<void> => {
       setData({ state: 'loading' });
       return read();
