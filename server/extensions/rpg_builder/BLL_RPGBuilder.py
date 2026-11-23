@@ -19,7 +19,7 @@ from zephyrex.extensions.genealogy.BLL_Genealogy import PersonModel
 from zephyrex.extensions.rpg_builder.Abilities import AbilityError, check_scores
 from zephyrex.extensions.rpg_builder.Npcs import pick
 from zephyrex.extensions.rpg_builder.Pregen import Document, Gap, name_key, parse_line, plan
-from zephyrex.extensions.rpg_dice.BLL_RPGDice import DiceManager, stat_name  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_dice.BLL_RPGDice import CampaignManager, DiceManager, stat_name  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.Packs import load_pack  # type: ignore[import-not-found]
@@ -165,10 +165,39 @@ class NpcSheetRequest(PlainModel):
     hint: str = Field("", description="A line about them, to help choose (\"a gruff tavern keeper\")")
     campaign_id: Optional[str] = Field(None, description="Checked against the person's campaign when given")
     replace: bool = Field(False, description="Overwrite a sheet the NPC already has")
+    option_id: Optional[str] = Field(None, description="The option to build from (npc_sheet_options); none picks the closest by role")
 
 
 class NpcSheetEnvelope(PlainModel):
     npc: NpcSheetRequest
+
+
+class NpcOptionsRequest(PlainModel):
+    campaign_id: str
+
+
+class NpcOptionsEnvelope(PlainModel):
+    npc_options: NpcOptionsRequest
+
+
+class NpcOptionOut(PlainModel):
+    """One thing the campaign's pack can build an NPC from: a stat block (srd-5e) for now."""
+
+    id: str
+    name: str
+    level_or_cr: Optional[float] = Field(None, description="Its challenge rating (a stat block) or level (a class build)")
+    class_name: Optional[str] = Field(None, serialization_alias="class", description="A class build's class; none for a stat block")
+    subclass: Optional[str] = None
+    summary: str = Field(description="What it is, for a model choosing among options: its numbers and what it's good at")
+
+
+class NpcOptionsOut(PlainModel):
+    system: Optional[str] = Field(None, description="The campaign's game system; none when it has no rules pack")
+    options: list[NpcOptionOut] = Field(default_factory=list, description="Empty when the pack has nothing to build NPCs from")
+
+
+class NpcOptionsResultEnvelope(PlainModel):
+    npc_options: NpcOptionsOut
 
 
 class NpcSheetOut(PlainModel):
@@ -407,6 +436,30 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         rows.create(person_id=person.id, trait_id=body.trait_id)
         return self.choices_for(person.id)
 
+    def npc_options_for(self, body: NpcOptionsRequest) -> NpcOptionsOut:
+        """What the campaign's pack can build an NPC from (srd-5e: the SRD's humanoid stat blocks), for
+        a caller to choose among and pass to npc_sheet as option_id. Empty when the pack has none, or
+        the campaign's system has no pack. The campaign's GM only."""
+        dice = self._dice()
+        campaign = dice._get(CampaignManager, "CampaignModel", body.campaign_id)
+        requester = str(self.requester.id)
+        if requester not in {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}:
+            raise HTTPException(status_code=404, detail={"message": "Request searched CampaignModel and could not find the required record."})
+        try:
+            pack = dice._pack_for(campaign)
+        except HTTPException:
+            return NpcOptionsOut()
+        names = {skill["slug"]: skill["name"] for skill in pack.get("skills", [])}
+        options = []
+        for block in (pack.get("npcs") or {}).get("blocks") or []:
+            skilled = ", ".join(names.get(slug, slug) for slug in block.get("skills") or {})
+            parts = [f"CR {block['cr']:g}" if block.get("cr") is not None else None, f"{block['hp']} HP" if block.get("hp") else None,
+                     f"AC {block['ac']}" if block.get("ac") else None, f"skilled in {skilled}" if skilled else None]
+            options.append(NpcOptionOut(
+                id=block["slug"], name=block["name"], level_or_cr=block.get("cr"), summary="; ".join(one for one in parts if one),
+            ))
+        return NpcOptionsOut(system=pack["system"], options=options)
+
     def npc_sheet_for(self, body: NpcSheetRequest) -> NpcSheetResultEnvelope:
         """An NPC's sheet from the closest compendium stat block of the campaign's pack (srd-5e: the
         SRD's humanoids) by role and hint, or the pack's generic block: its ability scores and skill
@@ -424,7 +477,13 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         abilities = self._abilities(person.id, campaign, gm, pack)
         if any(score is not None for _, _, score in abilities) and not body.replace:
             raise _refuse(f"{person.name or 'This character'} already has a sheet; pass replace to overwrite it")
-        block, source = pick(npcs["blocks"], npcs["generic"], body.role, body.hint)
+        if body.option_id is not None:
+            named = [one for one in npcs["blocks"] if one["slug"] == body.option_id]
+            if not named:
+                raise _refuse(f"{pack['system']} has no NPC option {body.option_id!r}; npc_sheet_options lists them")
+            block, source = named[0], "compendium"
+        else:
+            block, source = pick(npcs["blocks"], npcs["generic"], body.role, body.hint)
         rows = self._trusted(PersonTraitManager)
 
         def write(trait_id: str, **values: Any) -> None:
@@ -579,6 +638,20 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
     )
     async def npc_sheet_route(self, body: NpcSheetEnvelope) -> NpcSheetResultEnvelope:
         return self.npc_sheet_for(body.npc)
+
+    @custom_route(
+        method="POST",
+        path="/npc-options",
+        input_model=NpcOptionsEnvelope,
+        output_model=NpcOptionsResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Builder",),
+        summary="What the campaign's pack can build an NPC from, to choose among for npc-sheet (the campaign's GM)",
+    )
+    async def npc_options_route(self, body: NpcOptionsEnvelope) -> NpcOptionsResultEnvelope:
+        builder = BuilderManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+        return NpcOptionsResultEnvelope(npc_options=builder.npc_options_for(body.npc_options))
 
     @custom_route(
         method="POST",

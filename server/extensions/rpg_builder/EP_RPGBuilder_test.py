@@ -157,3 +157,31 @@ def test_an_npc_gets_the_closest_compendium_sheet(server: TestClient, world: dic
     )
     assert rest.status_code == 200, rest.text
     assert rest.json()["source_name"] == "Warrior Veteran"
+
+
+def test_npc_sheet_options_list_the_packs_blocks_to_choose_among(server: TestClient, world: dict[str, Any]) -> None:
+    gm, player = str(world["gm"].id), str(world["player"].id)
+    campaign_id = world["brann"]["campaign_id"]
+    listed = _run(RPGBuilderExtension.npc_sheet_options(gm, campaign_id))
+    assert listed["system"] == "srd-5e" and len(listed["options"]) == 26
+    guard = next(one for one in listed["options"] if one["id"] == "guard")
+    assert (guard["name"], guard["level_or_cr"], guard["class"], guard["subclass"]) == ("Guard", 0.125, None, None)
+    assert guard["summary"].startswith("CR 0.125; 11 HP; AC")
+    # The pick is the caller's: a named option builds that block whatever the role says.
+    smith = _create(server, world["gm"], "person", name="Mara", kind="npc", campaign_id=campaign_id)
+    made = _run(RPGBuilderExtension.npc_sheet(gm, smith["id"], "blacksmith", option_id="guard"))
+    assert made["source_name"] == "Guard" and made["sheet"]["source"] == "compendium"
+    with pytest.raises(HTTPException) as unknown:
+        _run(RPGBuilderExtension.npc_sheet(gm, smith["id"], "blacksmith", replace=True, option_id="dragon"))
+    assert unknown.value.status_code == 422 and "no NPC option 'dragon'" in unknown.value.detail["message"]
+    with pytest.raises(HTTPException) as stranger:
+        _run(RPGBuilderExtension.npc_sheet_options(player, campaign_id))
+    assert stranger.value.status_code == 404
+    # A pack with no blocks lists nothing; the route answers the same.
+    empty = server.post(
+        "/v1/builder/npc-options",
+        json={"npc_options": {"campaign_id": world["rhia"]["campaign_id"]}},
+        headers={"Authorization": f"Bearer {world['gm'].jwt}"},
+    )
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["npc_options"] == {"system": "percentile-test", "options": []}

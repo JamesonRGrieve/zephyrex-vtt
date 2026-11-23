@@ -5,7 +5,15 @@ as abilities an agent calls: read a character's options, roll their ability scor
 from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import ApplyRequest, BuilderManager, ChooseRequest, NpcSheetRequest, PregenRequest, RollRequest
+from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import (
+    ApplyRequest,
+    BuilderManager,
+    ChooseRequest,
+    NpcOptionsRequest,
+    NpcSheetRequest,
+    PregenRequest,
+    RollRequest,
+)
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -92,16 +100,27 @@ class RPGBuilderExtension(AbstractStaticExtension):
         return {"pregen": cls.builder(requester_id).build_pregen_for(body).model_dump()}
 
     @classmethod
+    @ability("npc_sheet_options")
+    async def npc_sheet_options(cls, requester_id: str, campaign_id: str) -> dict[str, Any]:
+        """What the campaign's pack can build an NPC from, for a caller to choose among (a decision
+        model picks by each option's summary) and pass to npc_sheet as option_id: {system, options:
+        [{id, name, level_or_cr, class, subclass, summary}]}. srd-5e offers the SRD's humanoid stat
+        blocks; empty when the pack has nothing to build NPCs from. The campaign's GM only."""
+        body = NpcOptionsRequest(campaign_id=campaign_id)
+        return cls.builder(requester_id).npc_options_for(body).model_dump(by_alias=True)
+
+    @classmethod
     @ability("npc_sheet")
     async def npc_sheet(
-        cls, requester_id: str, person_id: str, role: str, hint: str = "", replace: bool = False
+        cls, requester_id: str, person_id: str, role: str, hint: str = "", replace: bool = False, option_id: Optional[str] = None
     ) -> dict[str, Any]:
         """Give an NPC a sheet from the closest compendium stat block of the campaign's pack (srd-5e:
         the SRD's humanoids, by ``role`` and the ``hint`` line about them), or the pack's generic
         block (the Commoner): its ability scores and skill proficiencies become the NPC's, nothing
         invented. Returns {sheet: {person_id, system, source: compendium | template, entry_name,
-        has_sheet, hp, ac, cr}, sheet_id, source_name}; a 422 when the pack has no blocks. The GM only."""
-        body = NpcSheetRequest(person_id=person_id, role=role, hint=hint, replace=replace)
+        has_sheet, hp, ac, cr}, sheet_id, source_name}; a 422 when the pack has no blocks. ``option_id``
+        (one of npc_sheet_options' ids) builds from that option instead of the closest. The GM only."""
+        body = NpcSheetRequest(person_id=person_id, role=role, hint=hint, replace=replace, option_id=option_id)
         return cls.builder(requester_id).npc_sheet_for(body).model_dump()
 
     @classmethod
