@@ -20,6 +20,7 @@ from zephyrex.extensions.rpg_builder.Abilities import AbilityError, check_scores
 from zephyrex.extensions.rpg_builder.Npcs import pick
 from zephyrex.extensions.rpg_builder.Pregen import Document, Gap, name_key, parse_line, plan
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import CampaignManager, DiceManager, stat_name  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_dice.D20 import proficiency_bonus  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ModuleRecordManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_systems.Packs import load_pack  # type: ignore[import-not-found]
@@ -499,6 +500,24 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         for slug, rank in (block.get("skills") or {}).items():
             if slug in names:
                 write(dice._trait_for(stat_name(names[slug]), campaign, gm).id, rank=int(rank))
+        # What combat reads (rpg_combat): the block's weapons, its hit points and AC, and its
+        # Proficiency Bonus by its CR. A system without those templates (no 006 seed) skips them.
+        templates = {
+            (trait.kind, trait.slug): trait.id
+            for trait in self._live(self._trusted(TraitManager), game_system_id=dice.system_id_of(campaign))
+            if trait.campaign_id is None and trait.slug and trait.kind in ("weapon", "resource")
+        }
+        weapons = {one["name"].casefold(): one["slug"] for one in pack.get("weapons") or []}
+        for attack in block.get("attacks") or []:
+            slug = weapons.get(attack["name"].casefold())
+            if slug and ("weapon", slug) in templates:
+                write(templates[("weapon", slug)])
+        held = {"hit-points": block.get("hp"), "armor-class": block.get("ac")}
+        if block.get("cr") is not None:
+            held["proficiency-bonus"] = proficiency_bonus(pack, max(1, int(block["cr"])))
+        for slug, value in held.items():
+            if value is not None and ("resource", slug) in templates:
+                write(templates[("resource", slug)], value=float(value))
         sheet = NpcSheetOut(
             person_id=person.id,
             system=pack["system"],
@@ -568,7 +587,7 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         by_slug = {
             (trait.kind, trait.slug): trait.id
             for trait in self._live(traits, game_system_id=system.id)
-            if trait.campaign_id is None and trait.kind in ("characteristic", "skill") and trait.slug
+            if trait.campaign_id is None and trait.kind in ("characteristic", "skill", "resource") and trait.slug
         }
         rows = self._trusted(PersonTraitManager)
         existing = self._live(rows, person_id=person.id)
@@ -583,6 +602,11 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         for slug in result.skills:
             if ("skill", slug) in by_slug:
                 wanted.append({"trait_id": by_slug[("skill", slug)], "rank": 1})
+        # Combat reads these (rpg_combat): level-1 hit points, and the Proficiency Bonus at level 1.
+        resources = {"hit-points": result.hp, "proficiency-bonus": proficiency_bonus(pack, 1) if pack.get("proficiency") else None}
+        for slug, value in resources.items():
+            if value is not None and ("resource", slug) in by_slug:
+                wanted.append({"trait_id": by_slug[("resource", slug)], "value": float(value)})
         wanted = list({row["trait_id"]: row for row in wanted}.values())
 
         written = 0

@@ -6,7 +6,13 @@ read the order. The AI GM acts as the campaign's GM, under the same rules as a h
 from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_combat.BLL_RPGCombat import CombatantManager, EncounterManager, RollRequest
+from zephyrex.extensions.rpg_combat.BLL_RPGCombat import (
+    CombatActionRequest,
+    CombatOptionsRequest,
+    CombatantManager,
+    EncounterManager,
+    RollRequest,
+)
 from zephyrex.extensions.rpg_scene.BLL_RPGScene import SceneManager  # type: ignore[import-not-found]
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
@@ -85,6 +91,39 @@ class RPGCombatExtension(AbstractStaticExtension):
         if rolled.unrolled or not rolled.combatants:
             return rolled.model_dump()
         return encounters.start_for(encounter.id).model_dump()
+
+    @classmethod
+    @ability("combat_options")
+    async def combat_options(cls, requester_id: str, encounter_id: str, person_id: str) -> dict[str, Any]:
+        """A combatant's legal choices now, for a decision model to pick among: {turn, action_available,
+        reaction: {available, trigger}, actions: [{id, kind, name, needs_target, targets, slot_levels,
+        summary}], targets: [{person_id, name, hostile, hp}], reach: "unchecked", hp, hp_max}. Its
+        weapon attacks come from its sheet and the system pack; distance isn't checked yet. The
+        campaign's GM only."""
+        body = CombatOptionsRequest(person_id=person_id)
+        return cls.encounters(requester_id).combat_options_for(encounter_id, body).model_dump()
+
+    @classmethod
+    @ability("take_combat_action")
+    async def take_combat_action(
+        cls,
+        requester_id: str,
+        encounter_id: str,
+        person_id: str,
+        action_id: str,
+        target_ids: Optional[list[str]] = None,
+        slot_level: Optional[int] = None,
+        use_reaction: bool = False,
+    ) -> dict[str, Any]:
+        """Take one of combat_options' actions, resolved on the server by the pack's rules (an attack:
+        d20 + modifier + Proficiency Bonus against AC, a natural 20 a Critical Hit, the damage taken
+        from the target's hit points). Anything combat_options doesn't offer now is refused. Returns
+        {hit, critical, roll, total, target_ac, damage, damage_roll, target_hp, target_defeated, steps}.
+        The campaign's GM only."""
+        body = CombatActionRequest(
+            person_id=person_id, action_id=action_id, target_ids=target_ids or [], slot_level=slot_level, use_reaction=use_reaction
+        )
+        return cls.encounters(requester_id).take_combat_action_for(encounter_id, body).model_dump()
 
     @classmethod
     @ability("roll_initiative")

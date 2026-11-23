@@ -23,7 +23,7 @@ import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -200,6 +200,66 @@ def _skill_keys(root: Path) -> dict[str, str]:
     return {short: re.sub(r"([a-z])([A-Z])", r"\1-\2", full).lower() for short, full in found}
 
 
+# The Foundry system's weapon property keys, by the SRD's own names for them.
+WEAPON_PROPERTIES = {
+    "amm": "ammunition", "fin": "finesse", "hvy": "heavy", "lgt": "light", "lod": "loading",
+    "rch": "reach", "thr": "thrown", "two": "two-handed", "ver": "versatile",
+}
+WEAPON_CATEGORIES = {"simpleM": ("simple", True), "martialM": ("martial", True), "simpleR": ("simple", False), "martialR": ("martial", False)}
+
+
+def _dice(part: dict[str, Any]) -> Optional[str]:
+    """A damage part (number, denomination) as dice notation, or None when it has none."""
+    if not part or not part.get("number") or not part.get("denomination"):
+        return None
+    return f"{int(part['number'])}d{int(part['denomination'])}"
+
+
+def _weapon(document: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """A weapon document as the pack's weapon: its category, melee or ranged, damage, properties and
+    range, as the system's own data states them; None when it isn't a simple or martial weapon."""
+    system = document.get("system") or {}
+    category = WEAPON_CATEGORIES.get(((system.get("type") or {}).get("value")) or "")
+    damage = system.get("damage") or {}
+    dice = _dice(damage.get("base") or {})
+    if category is None or dice is None:
+        return None
+    attack = next((one for one in (system.get("activities") or {}).values() if one.get("type") == "attack"), {})
+    ability = ((attack.get("attack") or {}).get("ability")) or None
+    distance = system.get("range") or {}
+    return {
+        "name": document["name"],
+        "category": category[0],
+        "melee": category[1],
+        "damage": dice,
+        "damage_type": next(iter((damage.get("base") or {}).get("types") or []), None),
+        "versatile": _dice(damage.get("versatile") or {}),
+        "properties": sorted(WEAPON_PROPERTIES[key] for key in system.get("properties") or [] if key in WEAPON_PROPERTIES),
+        "range": {"normal": distance.get("value"), "long": distance.get("long")} if distance.get("value") else None,
+        # The attack's ability when its document names one; none is the rules' default
+        # (Strength in melee, Dexterity at range, either for a finesse weapon).
+        "ability": ability,
+    }
+
+
+def weapons(root: Path) -> list[dict[str, Any]]:
+    """The SRD's simple and martial weapons (the 2024 equipment pack, its non-magical ones), keyed by
+    slug with their compendium UUID: what a character's carried weapon attacks with."""
+    found = []
+    for path in sorted((root / "packs" / "_source" / "equipment24" / "weapons").rglob("*.yml")):
+        if path.name == "_folder.yml":
+            continue
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if not document or document.get("type") != "weapon" or "mgc" in ((document.get("system") or {}).get("properties") or []):
+            continue
+        weapon = _weapon(document)
+        if weapon is not None:
+            found.append({"slug": path.stem, **weapon, "uuid": f"Compendium.dnd5e.equipment24.Item.{document['_id']}"})
+    if not found:
+        raise RulesTextError("the equipment pack no longer holds the SRD's weapons")
+    return found
+
+
 def npc_stat_blocks(root: Path, abilities: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The SRD's humanoid stat blocks (Commoner, Guard, Bandit, Noble, Priest…), as the 2024 actor pack
     states them: ability scores, skill proficiencies (1, or 2 for Expertise), hit points, armour class
@@ -227,6 +287,8 @@ def npc_stat_blocks(root: Path, abilities: list[dict[str, Any]]) -> list[dict[st
                 "skills": {skills[key]: int(value["value"]) for key, value in (system.get("skills") or {}).items() if key in skills and value.get("value")},
                 "hp": (attributes.get("hp") or {}).get("max"),
                 "ac": (attributes.get("ac") or {}).get("flat"),
+                # The block's own weapon attacks (its items), as its document states them.
+                "attacks": [weapon for item in document.get("items") or [] if item.get("type") == "weapon" and (weapon := _weapon(item))],
                 "uuid": f"Compendium.dnd5e.actors24.Actor.{document['_id']}",
             }
         )
@@ -301,6 +363,21 @@ def test_pack(root: Path) -> dict[str, Any]:
     picks = {"Choose a Class": ["class"], "Character Origin": [origin.group(1), origin.group(2)]}
     if [name for _, name in steps[:3]] != ["Choose a Class", "Character Origin", "Ability Scores"]:
         raise RulesTextError("the SRD's creation steps no longer begin class, origin, ability scores")
+    equipment, damage_page = page("content24/chapter-6/equipment.yml"), page("content24/chapter-1/damage-and-healing.yml")
+    bonus = find(
+        creation,
+        r"Melee attack bonus = (\w+) modifier \+ Proficiency Bonus Ranged attack bonus = (\w+) modifier \+ Proficiency Bonus",
+        "a weapon's attack bonus",
+    )
+    finesse = find(equipment, r"Finesse When making an attack with a Finesse weapon, use your choice of your (\w+) or (\w+) modifier", "Finesse")
+    find(damage_page, r"When attacking with a weapon, you add your ability modifier—the same modifier used for the attack roll—to the damage roll", "a weapon's damage modifier")
+    natural = find(d20, r"If you roll a (\d+) on the d20 \(called a “natural \1”\) for an attack roll, the attack hits regardless", "a natural 20's hit")
+    miss = find(d20, r"If you roll a (\d+) on the d20 \(a “natural \1”\) for an attack roll, the attack misses regardless", "a natural 1's miss")
+    twice = find(damage_page, r"When you score a Critical Hit, you deal extra damage\. Roll the attack’s damage dice (twice)", "a Critical Hit's damage")
+    base_ac = find(
+        creation, r"Without armor or a shield, your base Armor Class is (\d+) plus your (\w+) modifier", "the base Armor Class"
+    )
+    find(creation, r"Hit Points? (?:and|&) Hit (?:Point )?Dice|Hit Point maximum", "Hit Points")
     attribution = find(legal, r"(This work includes material from the System Reference Document .*?legalcode) \.", "the attribution").group(1)
 
     return {
@@ -341,6 +418,27 @@ def test_pack(root: Path) -> dict[str, Any]:
         # The SRD's humanoid stat blocks, for an NPC's sheet (rpg_builder's npc_sheet); the Commoner
         # is the SRD's ordinary person, used when no other block fits.
         "npcs": {"blocks": npc_stat_blocks(root, abilities), "generic": "commoner", "cite": "Monsters › Humanoids (actors24)"},
+        # What a character has that combat changes or reads: Hit Points and Armor Class, as resource
+        # traits; without armour, AC is 10 plus the Dexterity modifier.
+        "resources": [
+            {"slug": "hit-points", "name": "Hit Points", "cite": "Rules Glossary › Hit Points"},
+            {"slug": "armor-class", "name": "Armor Class", "cite": "Rules Glossary › Armor Class"},
+            {"slug": "proficiency-bonus", "name": "Proficiency Bonus", "cite": "Playing the Game › D20 Tests › Proficiency"},
+        ],
+        "armor_class": {"base": int(base_ac.group(1)), "characteristic": by_name[base_ac.group(2)], "cite": "Creating a Character › Armor Class"},
+        # A weapon attack: its ability by melee or range (Finesse: either), the same modifier on the
+        # damage, a natural 20 a Critical Hit (the damage dice rolled twice), a natural 1 a miss.
+        "attack": {
+            "melee": by_name[bonus.group(1)],
+            "ranged": by_name[bonus.group(2)],
+            "finesse": [by_name[finesse.group(1)], by_name[finesse.group(2)]],
+            "damage_adds_modifier": True,
+            "critical": {"natural": int(natural.group(1)), "dice": {"twice": 2}[twice.group(1)]},
+            "miss": int(miss.group(1)),
+            "cite": "Creating a Character › Step 5; Equipment › Weapon Properties; Damage and Healing; D20 Tests › Rolling 20 or 1",
+        },
+        # The SRD's simple and martial weapons, for a character's attacks (rpg_combat).
+        "weapons": weapons(root),
         # Character creation's three methods (Step 3), from the same text the module's rules step reads.
         "ability_methods": {**rules(root)["ability_methods"], "cite": "Creating a Character › Generate Your Scores"},
         # The creation steps a builder walks, with the trait kinds each chooses (the module's 5e kinds).

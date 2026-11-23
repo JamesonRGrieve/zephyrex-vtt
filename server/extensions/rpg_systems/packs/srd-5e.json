@@ -138,6 +138,7 @@
         },
         "hp": 170,
         "ac": 17,
+        "attacks": [],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmArchmage000000"
       },
       {
@@ -159,6 +160,40 @@
         },
         "hp": 97,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Shortsword",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "finesse",
+              "light"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Light Crossbow",
+            "category": "simple",
+            "melee": false,
+            "damage": "1d8",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "loading",
+              "two-handed"
+            ],
+            "range": {
+              "normal": 80,
+              "long": 320
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmAssassin000000"
       },
       {
@@ -179,6 +214,39 @@
         },
         "hp": 52,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Scimitar",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "slashing",
+            "versatile": null,
+            "properties": [
+              "finesse",
+              "light"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Pistol",
+            "category": "martial",
+            "melee": false,
+            "damage": "1d10",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "loading"
+            ],
+            "range": {
+              "normal": 30,
+              "long": 90
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmBanditCaptain0"
       },
       {
@@ -196,6 +264,40 @@
         "skills": {},
         "hp": 11,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Scimitar",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "slashing",
+            "versatile": null,
+            "properties": [
+              "finesse",
+              "light"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Light Crossbow",
+            "category": "simple",
+            "melee": false,
+            "damage": "1d8",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "loading",
+              "two-handed"
+            ],
+            "range": {
+              "normal": 80,
+              "long": 320
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmBandit00000000"
       },
       {
@@ -213,6 +315,22 @@
         "skills": {},
         "hp": 67,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Greataxe",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d12",
+            "damage_type": "slashing",
+            "versatile": null,
+            "properties": [
+              "heavy",
+              "two-handed"
+            ],
+            "range": null,
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmBerserker00000"
       },
       {
@@ -230,6 +348,21 @@
         "skills": {},
         "hp": 4,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Club",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d4",
+            "damage_type": "bludgeoning",
+            "versatile": null,
+            "properties": [
+              "light"
+            ],
+            "range": null,
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmCommoner000000"
       },
       {
@@ -251,6 +384,21 @@
         },
         "hp": 44,
         "ac": 13,
+        "attacks": [
+          {
+            "name": "Pact Blade",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d8",
+            "damage_type": "slashing",
+            "versatile": null,
+            "properties": [
+              "versatile"
+            ],
+            "range": null,
+            "ability": "wis"
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmCultistFanatic"
       },
       {
@@ -271,6 +419,7 @@
         },
         "hp": 9,
         "ac": null,
+        "attacks": [],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmCultist0000000"
       },
       {
@@ -292,6 +441,7 @@
         },
         "hp": 44,
         "ac": null,
+        "attacks": [],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmDruid000000000"
       },
       {
@@ -312,6 +462,25 @@
         },
         "hp": 112,
         "ac": 16,
+        "attacks": [
+          {
+            "name": "Spear",
+            "category": "simple",
+            "melee": true,
+            "damage": "2d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "thrown",
+              "versatile"
+            ],
+            "range": {
+              "normal": 20,
+              "long": 60
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmGladiator00000"
       },
       {
@@ -332,6 +501,35 @@
         },
         "hp": 75,
         "ac": 18,
+        "attacks": [
+          {
+            "name": "Javelin",
+            "category": "simple",
+            "melee": true,
+            "damage": "3d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "thrown"
+            ],
+            "range": {
+              "normal": 30,
+              "long": 120
+            },
+            "ability": null
+          },
+          {
+            "name": "Longsword",
+            "category": "martial",
+            "melee": true,
+            "damage": "2d10",
+            "damage_type": "slashing",
+            "versatile": "2d10",
+            "properties": [],
+            "range": null,
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmGuardCaptain00"
       },
       {
@@ -351,6 +549,25 @@
         },
         "hp": 11,
         "ac": 16,
+        "attacks": [
+          {
+            "name": "Spear",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "thrown",
+              "versatile"
+            ],
+            "range": {
+              "normal": 20,
+              "long": 60
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmGuard000000000"
       },
       {
@@ -368,6 +585,41 @@
         "skills": {},
         "hp": 52,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Greatsword",
+            "category": "martial",
+            "melee": true,
+            "damage": "2d6",
+            "damage_type": "slashing",
+            "versatile": null,
+            "properties": [
+              "heavy",
+              "two-handed"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Heavy Crossbow",
+            "category": "martial",
+            "melee": false,
+            "damage": "2d10",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "heavy",
+              "loading",
+              "two-handed"
+            ],
+            "range": {
+              "normal": 100,
+              "long": 400
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmKnight00000000"
       },
       {
@@ -389,6 +641,7 @@
         },
         "hp": 81,
         "ac": null,
+        "attacks": [],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmMage0000000000"
       },
       {
@@ -410,6 +663,21 @@
         },
         "hp": 9,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Rapier",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d8",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "finesse"
+            ],
+            "range": null,
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmNoble000000000"
       },
       {
@@ -430,6 +698,38 @@
         },
         "hp": 84,
         "ac": 17,
+        "attacks": [
+          {
+            "name": "Rapier",
+            "category": "martial",
+            "melee": true,
+            "damage": "2d8",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "finesse"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Pistol",
+            "category": "martial",
+            "melee": false,
+            "damage": "2d10",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "loading"
+            ],
+            "range": {
+              "normal": 30,
+              "long": 90
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmPirateCaptain0"
       },
       {
@@ -447,6 +747,26 @@
         "skills": {},
         "hp": 33,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Dagger",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d4",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "finesse",
+              "light",
+              "thrown"
+            ],
+            "range": {
+              "normal": 20,
+              "long": 60
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmPirate00000000"
       },
       {
@@ -467,6 +787,19 @@
         },
         "hp": 11,
         "ac": 13,
+        "attacks": [
+          {
+            "name": "Mace",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "bludgeoning",
+            "versatile": null,
+            "properties": [],
+            "range": null,
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmPriestAcolyte0"
       },
       {
@@ -488,6 +821,19 @@
         },
         "hp": 38,
         "ac": 13,
+        "attacks": [
+          {
+            "name": "Mace",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "bludgeoning",
+            "versatile": null,
+            "properties": [],
+            "range": null,
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmPriest00000000"
       },
       {
@@ -510,6 +856,40 @@
         },
         "hp": 16,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Shortsword",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "finesse",
+              "light"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Longbow",
+            "category": "martial",
+            "melee": false,
+            "damage": "1d8",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "heavy",
+              "two-handed"
+            ],
+            "range": {
+              "normal": 150,
+              "long": 600
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmScout000000000"
       },
       {
@@ -534,6 +914,40 @@
         },
         "hp": 27,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Shortsword",
+            "category": "martial",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "finesse",
+              "light"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Hand Crossbow",
+            "category": "martial",
+            "melee": false,
+            "damage": "1d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "light",
+              "loading"
+            ],
+            "range": {
+              "normal": 30,
+              "long": 120
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmSpy00000000000"
       },
       {
@@ -551,6 +965,40 @@
         "skills": {},
         "hp": 82,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Warhammer",
+            "category": "martial",
+            "melee": true,
+            "damage": "2d8",
+            "damage_type": "bludgeoning",
+            "versatile": null,
+            "properties": [
+              "versatile"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Heavy Crossbow",
+            "category": "martial",
+            "melee": false,
+            "damage": "2d10",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "heavy",
+              "loading",
+              "two-handed"
+            ],
+            "range": {
+              "normal": 100,
+              "long": 400
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmToughBoss00000"
       },
       {
@@ -568,6 +1016,38 @@
         "skills": {},
         "hp": 32,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Mace",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "bludgeoning",
+            "versatile": null,
+            "properties": [],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Heavy Crossbow",
+            "category": "martial",
+            "melee": false,
+            "damage": "1d10",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "heavy",
+              "loading",
+              "two-handed"
+            ],
+            "range": {
+              "normal": 100,
+              "long": 400
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmTough000000000"
       },
       {
@@ -589,6 +1069,26 @@
         },
         "hp": 65,
         "ac": 15,
+        "attacks": [
+          {
+            "name": "Umbral Dagger",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d4",
+            "damage_type": null,
+            "versatile": null,
+            "properties": [
+              "finesse",
+              "light",
+              "thrown"
+            ],
+            "range": {
+              "normal": 20,
+              "long": 60
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmVampireFamilia"
       },
       {
@@ -606,6 +1106,25 @@
         "skills": {},
         "hp": 9,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Spear",
+            "category": "simple",
+            "melee": true,
+            "damage": "1d6",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "thrown",
+              "versatile"
+            ],
+            "range": {
+              "normal": 20,
+              "long": 60
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmWarriorInfantr"
       },
       {
@@ -626,12 +1145,714 @@
         },
         "hp": 65,
         "ac": null,
+        "attacks": [
+          {
+            "name": "Greatsword",
+            "category": "martial",
+            "melee": true,
+            "damage": "2d6",
+            "damage_type": "slashing",
+            "versatile": null,
+            "properties": [
+              "heavy",
+              "two-handed"
+            ],
+            "range": null,
+            "ability": null
+          },
+          {
+            "name": "Heavy Crossbow",
+            "category": "martial",
+            "melee": false,
+            "damage": "2d10",
+            "damage_type": "piercing",
+            "versatile": null,
+            "properties": [
+              "ammunition",
+              "heavy",
+              "loading",
+              "two-handed"
+            ],
+            "range": {
+              "normal": 100,
+              "long": 400
+            },
+            "ability": null
+          }
+        ],
         "uuid": "Compendium.dnd5e.actors24.Actor.mmWarriorVeteran"
       }
     ],
     "generic": "commoner",
     "cite": "Monsters › Humanoids (actors24)"
   },
+  "resources": [
+    {
+      "slug": "hit-points",
+      "name": "Hit Points",
+      "cite": "Rules Glossary › Hit Points"
+    },
+    {
+      "slug": "armor-class",
+      "name": "Armor Class",
+      "cite": "Rules Glossary › Armor Class"
+    },
+    {
+      "slug": "proficiency-bonus",
+      "name": "Proficiency Bonus",
+      "cite": "Playing the Game › D20 Tests › Proficiency"
+    }
+  ],
+  "armor_class": {
+    "base": 10,
+    "characteristic": "dexterity",
+    "cite": "Creating a Character › Armor Class"
+  },
+  "attack": {
+    "melee": "strength",
+    "ranged": "dexterity",
+    "finesse": [
+      "strength",
+      "dexterity"
+    ],
+    "damage_adds_modifier": true,
+    "critical": {
+      "natural": 20,
+      "dice": 2
+    },
+    "miss": 1,
+    "cite": "Creating a Character › Step 5; Equipment › Weapon Properties; Damage and Healing; D20 Tests › Rolling 20 or 1"
+  },
+  "weapons": [
+    {
+      "slug": "battleaxe",
+      "name": "Battleaxe",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "slashing",
+      "versatile": "1d10",
+      "properties": [
+        "versatile"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepBattleaxe0"
+    },
+    {
+      "slug": "flail",
+      "name": "Flail",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepFlail00000"
+    },
+    {
+      "slug": "glaive",
+      "name": "Glaive",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d10",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "heavy",
+        "reach",
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepGlaive0000"
+    },
+    {
+      "slug": "greataxe",
+      "name": "Greataxe",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d12",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "heavy",
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepGreataxe00"
+    },
+    {
+      "slug": "greatsword",
+      "name": "Greatsword",
+      "category": "martial",
+      "melee": true,
+      "damage": "2d6",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "heavy",
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepGreatsword"
+    },
+    {
+      "slug": "halberd",
+      "name": "Halberd",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d10",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "heavy",
+        "reach",
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepHalberd000"
+    },
+    {
+      "slug": "lance",
+      "name": "Lance",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d10",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "heavy",
+        "reach",
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepLance00000"
+    },
+    {
+      "slug": "longsword",
+      "name": "Longsword",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "slashing",
+      "versatile": "1d10",
+      "properties": [
+        "versatile"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepLongsword0"
+    },
+    {
+      "slug": "maul",
+      "name": "Maul",
+      "category": "martial",
+      "melee": true,
+      "damage": "2d6",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [
+        "heavy",
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepMaul000000"
+    },
+    {
+      "slug": "morningstar",
+      "name": "Morningstar",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepMorningsta"
+    },
+    {
+      "slug": "pike",
+      "name": "Pike",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d10",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "heavy",
+        "reach",
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepPike000000"
+    },
+    {
+      "slug": "rapier",
+      "name": "Rapier",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "finesse"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepRapier0000"
+    },
+    {
+      "slug": "scimitar",
+      "name": "Scimitar",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d6",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "finesse",
+        "light"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepScimitar00"
+    },
+    {
+      "slug": "shortsword",
+      "name": "Shortsword",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d6",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "finesse",
+        "light"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepShortsword"
+    },
+    {
+      "slug": "trident",
+      "name": "Trident",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "thrown",
+        "versatile"
+      ],
+      "range": {
+        "normal": 20,
+        "long": 60
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepTrident000"
+    },
+    {
+      "slug": "war-pick",
+      "name": "War Pick",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "versatile"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepWarPick000"
+    },
+    {
+      "slug": "warhammer",
+      "name": "Warhammer",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [
+        "versatile"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepWarhammer0"
+    },
+    {
+      "slug": "whip",
+      "name": "Whip",
+      "category": "martial",
+      "melee": true,
+      "damage": "1d4",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "finesse",
+        "reach"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepWhip000000"
+    },
+    {
+      "slug": "hand-crossbow",
+      "name": "Hand Crossbow",
+      "category": "martial",
+      "melee": false,
+      "damage": "1d6",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "ammunition",
+        "light",
+        "loading"
+      ],
+      "range": {
+        "normal": 30,
+        "long": 120
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepHandCrossb"
+    },
+    {
+      "slug": "heavy-crossbow",
+      "name": "Heavy Crossbow",
+      "category": "martial",
+      "melee": false,
+      "damage": "1d10",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "ammunition",
+        "heavy",
+        "loading",
+        "two-handed"
+      ],
+      "range": {
+        "normal": 100,
+        "long": 400
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepHeavyCross"
+    },
+    {
+      "slug": "longbow",
+      "name": "Longbow",
+      "category": "martial",
+      "melee": false,
+      "damage": "1d8",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "ammunition",
+        "heavy",
+        "two-handed"
+      ],
+      "range": {
+        "normal": 150,
+        "long": 600
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepLongbow000"
+    },
+    {
+      "slug": "musket",
+      "name": "Musket",
+      "category": "martial",
+      "melee": false,
+      "damage": "1d12",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "ammunition",
+        "loading",
+        "two-handed"
+      ],
+      "range": {
+        "normal": 40,
+        "long": 120
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepMusket0000"
+    },
+    {
+      "slug": "pistol",
+      "name": "Pistol",
+      "category": "martial",
+      "melee": false,
+      "damage": "1d10",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "ammunition",
+        "loading"
+      ],
+      "range": {
+        "normal": 30,
+        "long": 90
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepPistol0000"
+    },
+    {
+      "slug": "club",
+      "name": "Club",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d4",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [
+        "light"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepClub000000"
+    },
+    {
+      "slug": "dagger",
+      "name": "Dagger",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d4",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "finesse",
+        "light",
+        "thrown"
+      ],
+      "range": {
+        "normal": 20,
+        "long": 60
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepDagger0000"
+    },
+    {
+      "slug": "greatclub",
+      "name": "Greatclub",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d8",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [
+        "two-handed"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepGreatclub0"
+    },
+    {
+      "slug": "handaxe",
+      "name": "Handaxe",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d6",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "light",
+        "thrown"
+      ],
+      "range": {
+        "normal": 20,
+        "long": 60
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepHandaxe000"
+    },
+    {
+      "slug": "javelin",
+      "name": "Javelin",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d6",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "thrown"
+      ],
+      "range": {
+        "normal": 30,
+        "long": 120
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepJavelin000"
+    },
+    {
+      "slug": "light-hammer",
+      "name": "Light Hammer",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d4",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [
+        "light",
+        "thrown"
+      ],
+      "range": {
+        "normal": 20,
+        "long": 60
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepLightHamme"
+    },
+    {
+      "slug": "mace",
+      "name": "Mace",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d6",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepMace000000"
+    },
+    {
+      "slug": "quarterstaff",
+      "name": "Quarterstaff",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d6",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [
+        "versatile"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepQuartersta"
+    },
+    {
+      "slug": "sickle",
+      "name": "Sickle",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d4",
+      "damage_type": "slashing",
+      "versatile": null,
+      "properties": [
+        "light"
+      ],
+      "range": null,
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepSickle0000"
+    },
+    {
+      "slug": "spear",
+      "name": "Spear",
+      "category": "simple",
+      "melee": true,
+      "damage": "1d6",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "thrown",
+        "versatile"
+      ],
+      "range": {
+        "normal": 20,
+        "long": 60
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepSpear00000"
+    },
+    {
+      "slug": "dart",
+      "name": "Dart",
+      "category": "simple",
+      "melee": false,
+      "damage": "1d4",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "finesse",
+        "thrown"
+      ],
+      "range": {
+        "normal": 20,
+        "long": 60
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepDart000000"
+    },
+    {
+      "slug": "light-crossbow",
+      "name": "Light Crossbow",
+      "category": "simple",
+      "melee": false,
+      "damage": "1d8",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "ammunition",
+        "loading",
+        "two-handed"
+      ],
+      "range": {
+        "normal": 80,
+        "long": 320
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepLightCross"
+    },
+    {
+      "slug": "shortbow",
+      "name": "Shortbow",
+      "category": "simple",
+      "melee": false,
+      "damage": "1d6",
+      "damage_type": "piercing",
+      "versatile": null,
+      "properties": [
+        "ammunition",
+        "two-handed"
+      ],
+      "range": {
+        "normal": 80,
+        "long": 320
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepShortbow00"
+    },
+    {
+      "slug": "sling",
+      "name": "Sling",
+      "category": "simple",
+      "melee": false,
+      "damage": "1d4",
+      "damage_type": "bludgeoning",
+      "versatile": null,
+      "properties": [
+        "ammunition"
+      ],
+      "range": {
+        "normal": 30,
+        "long": 120
+      },
+      "ability": null,
+      "uuid": "Compendium.dnd5e.equipment24.Item.phbwepSling00000"
+    }
+  ],
   "ability_methods": {
     "standard_array": [
       15,

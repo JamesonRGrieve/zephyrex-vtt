@@ -20,7 +20,9 @@ from pydantic import BaseModel as PlainModel
 from pydantic import Field
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager, PersonModel
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_combat.Attacks import Attack, armor_class, attacks_for, resolve
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import DiceManager, InitiativeRequest, live_draw  # type: ignore[import-not-found]
+from zephyrex.extensions.rpg_traits.BLL_RPGTraits import PersonTraitManager, TraitManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_scene.BLL_RPGScene import SceneManager, SceneModel, SceneTokenManager, SceneTokenModel  # type: ignore[import-not-found]
 from zephyrex.lib.CustomRoute import ExposeIn, custom_route
 from zephyrex.lib.Environment import env
@@ -79,6 +81,10 @@ class CombatantModel(
     roll_off: Optional[int] = Field(None, description="A d10, for ties the characteristic leaves")
     is_defeated: Optional[bool] = Field(False, description="Out of the fight: skipped when the turn passes")
     is_hidden: Optional[bool] = Field(False, description="The GM's alone (an ambusher not yet seen)")
+    hp: Optional[int] = Field(None, description="Hit points now, in this fight; from the sheet when first needed")
+    hp_max: Optional[int] = Field(None, description="The hit point maximum, from the sheet")
+    reaction_round: Optional[int] = Field(None, description="The round its reaction was used in; free again the next round")
+    action_round: Optional[int] = Field(None, description="The round it took its action in, on its turn")
     table_comment: ClassVar[str] = "A character in an encounter, with their initiative"
 
     class Create(
@@ -195,6 +201,87 @@ class CurrentEnvelope(PlainModel):
 
 class CurrentOut(PlainModel):
     encounter: Optional[OrderOut]
+
+
+class CombatOptionsRequest(PlainModel):
+    person_id: str
+
+
+class CombatOptionsEnvelope(PlainModel):
+    combat_options: CombatOptionsRequest
+
+
+class ReactionOut(PlainModel):
+    available: bool
+    trigger: Optional[str] = Field(None, description="What would provoke it; none until triggers are modelled")
+
+
+class CombatActionOut(PlainModel):
+    id: str
+    kind: Literal["attack", "spell", "other"]
+    name: str
+    needs_target: bool
+    targets: list[str] = Field(default_factory=list, description="The person ids it may target")
+    slot_levels: list[int] = Field(default_factory=list, description="A spell's castable slot levels (spells come later)")
+    summary: str
+
+
+class CombatTargetOut(PlainModel):
+    person_id: str
+    name: str
+    hostile: bool
+    hp: Optional[int] = None
+
+
+class CombatOptionsOut(PlainModel):
+    encounter_id: str
+    person_id: str
+    turn: bool = Field(description="Whether it's this combatant's turn")
+    action_available: bool = Field(description="Its turn, and its action not yet taken this round")
+    reaction: ReactionOut
+    actions: list[CombatActionOut]
+    targets: list[CombatTargetOut]
+    reach: Literal["unchecked"] = Field("unchecked", description="Distance isn't checked yet: every target is offered")
+    hp: Optional[int] = None
+    hp_max: Optional[int] = None
+
+
+class CombatOptionsResultEnvelope(PlainModel):
+    combat_options: CombatOptionsOut
+
+
+class CombatActionRequest(PlainModel):
+    person_id: str
+    action_id: str
+    target_ids: list[str] = Field(default_factory=list, max_length=1)
+    slot_level: Optional[int] = None
+    use_reaction: bool = Field(False, description="Take it as the combatant's reaction, off its turn")
+
+
+class CombatActionEnvelope(PlainModel):
+    combat_action: CombatActionRequest
+
+
+class CombatActionResultOut(PlainModel):
+    encounter_id: str
+    person_id: str
+    action_id: str
+    name: str
+    target_id: Optional[str] = None
+    hit: bool
+    critical: bool
+    roll: int
+    total: int
+    target_ac: int
+    damage: int
+    damage_roll: Optional[dict[str, Any]] = None
+    target_hp: Optional[int] = Field(None, description="The target's hit points after the damage")
+    target_defeated: bool = False
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CombatActionResultEnvelope(PlainModel):
+    combat_action: CombatActionResultOut
 
 
 class _Combat:
@@ -378,6 +465,175 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
             return self.order_for(found[0].id)
         except HTTPException:
             return None
+
+    # Combat choices (rpg-ai's decision models pick only among these) and their resolution.
+
+    def _sheet(self, person: Any, system_id: str) -> tuple[dict[str, float], dict[str, float], list[str]]:
+        """The person's ability scores and resources by slug, and the weapons on their sheet."""
+        traits = {trait.id: trait for trait in _live(self._trusted(TraitManager), game_system_id=system_id) if trait.campaign_id is None}
+        scores: dict[str, float] = {}
+        resources: dict[str, float] = {}
+        weapons: list[str] = []
+        for row in _live(self._trusted(PersonTraitManager), person_id=person.id):
+            trait = traits.get(row.trait_id)
+            if trait is None or not trait.slug:
+                continue
+            if trait.kind == "characteristic" and row.value is not None:
+                scores[trait.slug] = float(row.value)
+            elif trait.kind == "resource" and row.value is not None:
+                resources[trait.slug] = float(row.value)
+            elif trait.kind == "weapon":
+                weapons.append(trait.slug)
+        return scores, resources, weapons
+
+    def _fighter(self, encounter: Any, campaign: Any, person_id: str) -> tuple[Any, Any, dict[str, Any], list[Attack], int]:
+        """A combatant's row, person, pack, attacks and AC, its hit points filled from the sheet."""
+        combatant = next(
+            (one for one in _live(self._trusted(CombatantManager), encounter_id=encounter.id) if one.person_id == person_id), None
+        )
+        if combatant is None:
+            raise _refuse("That character isn't in this encounter")
+        dice = DiceManager(requester_id=env("ROOT_ID"), model_registry=self.model_registry)
+        pack = dice._pack_for(campaign)
+        if not pack.get("attack"):
+            raise _refuse(f"{pack['system']}'s pack has no attack rules yet")
+        person = self._find(PersonManager, person_id)
+        scores, resources, carried = self._sheet(person, str(dice.system_id_of(campaign)))
+        by_slug = {one["slug"]: one for one in pack.get("weapons") or []}
+        weapons = [by_slug[slug] for slug in carried if slug in by_slug]
+        # The Proficiency Bonus on the sheet (an NPC's, by its CR), else by the character's Level.
+        bonus = resources.get("proficiency-bonus")
+        level = None if bonus is not None else dice._level(person_id, campaign, True)
+        attacks = attacks_for(pack, weapons, scores, proficient=True, level=level)
+        if bonus is not None:
+            for one in attacks:
+                one.to_hit += int(bonus)
+                one.steps = [
+                    step if step["step"] != "proficiency" else {"step": "proficiency", "value": int(bonus)} for step in one.steps
+                ]
+        if combatant.hp_max is None and resources.get("hit-points") is not None:
+            hp = int(resources["hit-points"])
+            self._trusted(CombatantManager).update_trusted(id=combatant.id, hp=hp, hp_max=hp)
+            combatant = self._find(CombatantManager, combatant.id)
+        return combatant, person, pack, attacks, armor_class(pack, scores, resources.get("armor-class"))
+
+    def _side(self, combatant: Any, person: Any) -> str:
+        """Whose side a combatant fights on: its token's disposition, else a player character friendly
+        and anyone else hostile."""
+        token = self._find(SceneTokenManager, getattr(combatant, "scene_token_id", None))
+        if token is not None and getattr(token, "disposition", None):
+            return str(token.disposition)
+        return "friendly" if getattr(person, "kind", None) == "pc" else "hostile"
+
+    def combat_options_for(self, encounter_id: str, body: CombatOptionsRequest) -> CombatOptionsOut:
+        """A combatant's legal choices now, from its sheet and the system pack: whether it's its turn
+        and its action is free, its reaction, its weapon attacks, and the other combatants it may
+        target (distance isn't checked yet). The campaign's GM only."""
+        encounter, campaign = self._gm_encounter(encounter_id)
+        combatant, person, _, attacks, _ = self._fighter(encounter, campaign, body.person_id)
+        side = self._side(combatant, person)
+        round_now = int(encounter.round or 0)
+        targets = []
+        for other in _live(self._trusted(CombatantManager), encounter_id=encounter.id):
+            if other.id == combatant.id or other.is_defeated or other.person_id is None:
+                continue
+            who = self._find(PersonManager, other.person_id)
+            if who is None:
+                continue
+            theirs = self._side(other, who)
+            hostile = "neutral" not in (side, theirs) and theirs != side
+            targets.append(CombatTargetOut(person_id=who.id, name=other.name or who.name or "", hostile=hostile, hp=other.hp))
+        turn = encounter.status == "running" and encounter.current_combatant_id == combatant.id
+        ids = [one.person_id for one in targets]
+        return CombatOptionsOut(
+            encounter_id=encounter.id,
+            person_id=body.person_id,
+            turn=turn,
+            action_available=turn and combatant.action_round != round_now,
+            reaction=ReactionOut(available=encounter.status == "running" and combatant.reaction_round != round_now),
+            actions=[
+                CombatActionOut(id=one.id, kind="attack", name=one.name, needs_target=True, targets=ids, summary=one.summary())
+                for one in attacks
+            ],
+            targets=targets,
+            hp=combatant.hp,
+            hp_max=combatant.hp_max,
+        )
+
+    def take_combat_action_for(self, encounter_id: str, body: CombatActionRequest) -> CombatActionResultOut:
+        """Resolve one of combat_options' actions by the pack's rules, on the server: an attack roll
+        against the target's AC and, on a hit, the damage taken from its hit points (at 0 it's
+        defeated). Refused when the choice isn't one combat_options offers now. The GM only."""
+        encounter, campaign = self._gm_encounter(encounter_id)
+        options = self.combat_options_for(encounter_id, CombatOptionsRequest(person_id=body.person_id))
+        action = next((one for one in options.actions if one.id == body.action_id), None)
+        if action is None:
+            raise _refuse("That isn't one of this combatant's actions now; combat_options lists them")
+        if body.use_reaction:
+            if not options.reaction.available:
+                raise _refuse("Its reaction is already used this round")
+        elif not options.action_available:
+            raise _refuse("It isn't this combatant's turn, or its action is already taken this round")
+        if body.slot_level is not None:
+            raise _refuse("A weapon attack takes no spell slot")
+        if len(body.target_ids) != 1 or body.target_ids[0] not in action.targets:
+            raise _refuse("Name one target from the action's targets")
+        combatant, _, pack, attacks, _ = self._fighter(encounter, campaign, body.person_id)
+        attack = next(one for one in attacks if one.id == body.action_id)
+        target, _, _, _, target_ac = self._fighter(encounter, campaign, body.target_ids[0])
+        outcome = resolve(pack, attack, target_ac, live_draw)
+        round_now = int(encounter.round or 0)
+        combatants = self._trusted(CombatantManager)
+        combatants.update_trusted(id=combatant.id, **({"reaction_round": round_now} if body.use_reaction else {"action_round": round_now}))
+        hp = target.hp
+        defeated = bool(target.is_defeated)
+        if outcome.hit and hp is not None:
+            hp = max(0, hp - outcome.damage)
+            defeated = hp == 0
+            combatants.update_trusted(id=target.id, hp=hp, is_defeated=defeated)
+        return CombatActionResultOut(
+            encounter_id=encounter.id,
+            person_id=body.person_id,
+            action_id=action.id,
+            name=action.name,
+            target_id=body.target_ids[0],
+            hit=outcome.hit,
+            critical=outcome.critical,
+            roll=outcome.roll,
+            total=outcome.total,
+            target_ac=target_ac,
+            damage=outcome.damage,
+            damage_roll=outcome.damage_roll,
+            target_hp=hp,
+            target_defeated=defeated,
+            steps=outcome.steps,
+        )
+
+    @custom_route(
+        method="POST",
+        path="/{encounter_id}/options",
+        input_model=CombatOptionsEnvelope,
+        output_model=CombatOptionsResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Combat",),
+        summary="A combatant's legal choices now: its turn, reaction, attacks and targets (the campaign's GM)",
+    )
+    async def options_route(self, encounter_id: str, body: CombatOptionsEnvelope) -> CombatOptionsResultEnvelope:
+        return CombatOptionsResultEnvelope(combat_options=self.combat_options_for(encounter_id, body.combat_options))
+
+    @custom_route(
+        method="POST",
+        path="/{encounter_id}/action",
+        input_model=CombatActionEnvelope,
+        output_model=CombatActionResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Combat",),
+        summary="Take one of combat_options' actions, resolved by the pack's rules on the server (the campaign's GM)",
+    )
+    async def action_route(self, encounter_id: str, body: CombatActionEnvelope) -> CombatActionResultEnvelope:
+        return CombatActionResultEnvelope(combat_action=self.take_combat_action_for(encounter_id, body.combat_action))
 
     @custom_route(
         method="GET",

@@ -115,7 +115,7 @@ def test_a_dry_run_reports_the_sheet_and_every_open_choice_and_writes_nothing(se
 def test_a_build_writes_the_sheet_once_and_a_rebuild_needs_replace(server: TestClient, world: dict[str, Any]) -> None:
     first = _build(server, world["owner"], world["current"]["id"])
     assert first.status_code == 200, first.text
-    assert first.json()["pregen"]["written"] == 3 + 2 + 6 + 2  # origins, features, abilities, skills
+    assert first.json()["pregen"]["written"] == 3 + 2 + 6 + 2 + 2  # origins, features, abilities, skills, HP and PB
     registry = world["registry"]
     rows = PersonTraitManager(requester_id=env("ROOT_ID"), model_registry=registry)
     traits = TraitManager(requester_id=env("ROOT_ID"), model_registry=registry)
@@ -127,7 +127,7 @@ def test_a_build_writes_the_sheet_once_and_a_rebuild_needs_replace(server: TestC
     assert again.status_code == 422 and "already has a sheet" in again.text
     replaced = _build(server, world["owner"], world["current"]["id"], replace=True)
     assert replaced.status_code == 200 and replaced.json()["pregen"]["has_sheet"]
-    assert len(list(rows.list(filters=live, person_id=world["current"]["id"]))) == 13
+    assert len(list(rows.list(filters=live, person_id=world["current"]["id"]))) == 15
 
 
 def test_another_edition_is_reported_not_built(server: TestClient, world: dict[str, Any]) -> None:
