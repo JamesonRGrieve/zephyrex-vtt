@@ -283,6 +283,9 @@ class TestRequest(PlainModel):
     # Which specialisation of a specialist skill (Lore: "Stars"); required for those, refused
     # for the rest. Matched case-insensitively against the character's own.
     specialisation: Optional[str] = Field(None, max_length=100)
+    # Advantage or Disadvantage, for a pack whose test has them (the 5e SRD: two d20s, the higher or
+    # the lower kept); refused for a pack without.
+    advantage: Optional[Literal["advantage", "disadvantage"]] = None
 
 
 class TestEnvelope(PlainModel):
@@ -307,6 +310,8 @@ class TestOut(PlainModel):
     total: Optional[int] = Field(None, description="A d20 test's roll plus its modifiers (none for d100 roll-under)")
     test_kind: str = Field("d100-under", description="The pack's test: d100-under (percentile) or d20-over (5e)")
     no_sheet: bool = Field(False, description="Rolled for a character with no value for it, as the pack's rules say")
+    advantage: Optional[Literal["advantage", "disadvantage"]] = Field(None, description="Rolled with Advantage or Disadvantage")
+    rolls: list[int] = Field(default_factory=list, description="Every die rolled for the test; ``roll`` is the one kept")
 
 
 class TestResultEnvelope(PlainModel):
@@ -877,11 +882,21 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             stat = StatOut(name=stat_name(trait.name or ""), trait_id=trait.id, base=score, value=score, steps=[])
         else:
             stat = self._resolve(person.id, trait, [], self._worn_items(person.id), gm)
+        die = int(pack["test"].get("die", 20))
+        rolls = [live_draw(die)]
+        if body.advantage is not None:
+            rule = pack["test"].get("advantage")
+            if not rule:
+                raise HTTPException(status_code=422, detail={"message": f"{pack['system']}'s test has no {body.advantage}"})
+            rolls = [live_draw(die) for _ in range(int(rule["dice"]))]
+        kept = rolls[0]
+        if body.advantage is not None:
+            kept = max(rolls) if pack["test"]["advantage"][body.advantage] == "higher" else min(rolls)
         try:
             outcome = d20_test(
                 pack,
                 score=None if no_sheet else stat.value,
-                roll=live_draw(int(pack["test"].get("die", 20))),
+                roll=kept,
                 skill_rank=rank,
                 level=self._level(person.id, campaign, gm) if rank else None,
                 difficulty=body.difficulty,
@@ -907,6 +922,8 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             total=outcome.total,
             test_kind="d20-over",
             no_sheet=no_sheet,
+            advantage=body.advantage,
+            rolls=rolls,
         )
 
     def test_for(self, body: TestRequest) -> TestOut:
@@ -936,6 +953,8 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         no_sheet = not self._person_values(person.id, trait.id)
         if pack["test"]["kind"] == "d20-over":
             return self._d20_test(body, person, campaign, gm, pack, skill, trait, rank, no_sheet)
+        if body.advantage is not None:
+            raise HTTPException(status_code=422, detail={"message": f"{pack['system']}'s test has no {body.advantage}"})
         if no_sheet and pack["test"].get("no_sheet_score") is None:
             # The pack's rulebook states no average to test a sheetless character at (not every rulebook does):
             # a value is needed, never a made-up number.
@@ -976,6 +995,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             degrees=outcome.degrees,
             natural=outcome.natural,
             steps=outcome.steps,
+            rolls=[outcome.roll],
         )
 
     def initiative_for(self, body: InitiativeRequest) -> InitiativeOut:

@@ -8,10 +8,16 @@
     "die": 20,
     "modifier": "(score − 10) / 2, rounded down",
     "no_sheet_score": 10,
+    "advantage": {
+      "dice": 2,
+      "advantage": "higher",
+      "disadvantage": "lower"
+    },
     "cite": {
       "core_mechanic": "Playing the Game › D20 Tests",
       "modifier": "Playing the Game › Ability Scores and Modifiers",
-      "no_sheet_score": "Playing the Game › Ability Scores (10–11: the human average)"
+      "no_sheet_score": "Playing the Game › Ability Scores (10–11: the human average)",
+      "advantage": "Playing the Game › D20 Tests › Advantage and Disadvantage"
     }
   },
   "initiative": {

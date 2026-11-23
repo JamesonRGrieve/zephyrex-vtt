@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -91,7 +91,8 @@ describe('the dice tray', () => {
       test: { person_id: 'p1', modifiers: [20], name: 'awareness', difficulty: 'hard' },
     });
     const status = await screen.findByRole('status');
-    expect(status).toHaveTextContent('Success: rolled 23 against 40, 2 degrees of success');
+    expect(status).toHaveTextContent('Success');
+    expect(status).toHaveTextContent('rolled 23 against 40, 2 degrees of success');
     expect(status).toHaveTextContent('difficulty: -20');
   });
 
@@ -104,10 +105,12 @@ describe('the dice tray', () => {
     render(<DiceTray personId='p1' />);
     expect(await screen.findByText(/no rules pack yet/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Test')).toBeNull();
-    const dice = screen.getByLabelText('Dice');
-    await userEvent.clear(dice);
-    await userEvent.type(dice, '2d6');
-    await userEvent.click(screen.getByRole('button', { name: 'Roll' }));
+    // The rack starts on the system's die (a d20 with no pack); swap it for two d6.
+    await userEvent.click(screen.getByRole('button', { name: 'Remove a d20' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add a d6' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add a d6' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Roll 2d6' }));
+    expect(post).toHaveBeenLastCalledWith('/v1/dice/roll', { roll: { formula: '2d6' } });
     expect(await screen.findByRole('status')).toHaveTextContent('9 (2d6)');
   });
 
@@ -138,6 +141,7 @@ describe('the dice tray', () => {
           test_kind: 'd20-over',
           total: 12,
           no_sheet: true,
+          rolls: [12],
           steps: [
             { step: 'no_sheet', value: 10 },
             { step: 'ability_modifier', value: 0 },
@@ -146,7 +150,8 @@ describe('the dice tray', () => {
         }}
       />,
     );
-    expect(screen.getByRole('status')).toHaveTextContent('Failure: rolled 12 + 0 = 12 against DC 15');
+    expect(screen.getByRole('status')).toHaveTextContent('Failure');
+    expect(screen.getByRole('status')).toHaveTextContent('rolled 12 + 0 = 12 against DC 15');
     expect(screen.getByText('No sheet: tested at the rules’ average.')).toBeInTheDocument();
   });
 
@@ -198,6 +203,79 @@ describe('the dice tray', () => {
     await userEvent.type(await screen.findByLabelText('Other modifiers'), 'lots');
     expect(screen.getByRole('button', { name: 'Roll the test' })).toBeDisabled();
     expect(screen.getByText('Whole numbers only, separated by commas.')).toBeInTheDocument();
+  });
+
+  it('builds a 5e roll on the rack: a d20 with Advantage and a modifier', async () => {
+    post.mockImplementation((path: string) =>
+      path === '/v1/dice/test-options'
+        ? Promise.reject(problem(422))
+        : Promise.resolve({ roll: { formula: '2d20kh1+2', total: 19, terms: [], stats: {} } }),
+    );
+    render(<DiceTray personId='p1' />);
+    await screen.findByText(/no rules pack yet/);
+    await userEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Advantage on the d20' })).getByRole('radio', { name: 'Advantage' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Raise the modifier' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Raise the modifier' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Roll 2d20kh1+2' }));
+    expect(post).toHaveBeenLastCalledWith('/v1/dice/roll', { roll: { formula: '2d20kh1+2' } });
+  });
+
+  it('sends Advantage with a 5e test and shows both d20s, the dropped one struck', async () => {
+    const d20 = {
+      options: {
+        ...OPTIONS.options,
+        test_kind: 'd20-over',
+        difficulties: [{ slug: 'medium', modifier: 0, dc: 15 }],
+        default_difficulty: 'medium',
+      },
+    };
+    post.mockImplementation((path: string) =>
+      path === '/v1/dice/test-options'
+        ? Promise.resolve(d20)
+        : Promise.resolve({
+            test: {
+              ...RESULT.test,
+              system: 'srd-5e',
+              test_kind: 'd20-over',
+              roll: 17,
+              total: 17,
+              target: 15,
+              degrees: 0,
+              advantage: 'advantage',
+              rolls: [4, 17],
+              steps: [],
+            },
+          }),
+    );
+    render(<DiceTray personId='p1' />);
+    const edge = await screen.findByRole('radiogroup', { name: 'Advantage' });
+    await userEvent.click(within(edge).getByRole('radio', { name: 'Advantage' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Roll the test' }));
+    expect(post).toHaveBeenLastCalledWith('/v1/dice/test', {
+      test: { person_id: 'p1', modifiers: [], name: 'might', difficulty: 'medium', advantage: 'advantage' },
+    });
+    const card = await screen.findByRole('status');
+    expect(card).toHaveTextContent('(Advantage)');
+    expect(screen.getByRole('list', { name: 'The d20s rolled' })).toHaveTextContent('4 (dropped)17');
+  });
+
+  it('keeps the last rolls, newest first', async () => {
+    let total = 0;
+    post.mockImplementation((path: string) =>
+      path === '/v1/dice/test-options'
+        ? Promise.reject(problem(422))
+        : Promise.resolve({ roll: { formula: '1d20', total: (total += 1), terms: [], stats: {} } }),
+    );
+    render(<DiceTray personId='p1' />);
+    await screen.findByText(/no rules pack yet/);
+    await userEvent.click(screen.getByRole('button', { name: 'Roll 1d20' }));
+    await screen.findByText('1d20: 1');
+    await userEvent.click(screen.getByRole('button', { name: 'Roll 1d20' }));
+    const history = await screen.findByRole('region', { name: 'Roll history' });
+    await waitFor(() => expect(history.querySelectorAll('li')).toHaveLength(2));
+    expect([...history.querySelectorAll('li')].map((one) => one.textContent)).toEqual(['1d20: 2', '1d20: 1']);
   });
 
   it('starts the free roll on the system’s die: a d20 for 5e or no pack, a d100 for the percentile packs', () => {

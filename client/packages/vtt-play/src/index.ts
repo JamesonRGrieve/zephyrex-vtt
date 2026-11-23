@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /** Zephyrex VTT's embeddable play UI. */
-export { DiceResult, DiceTray, parseModifiers, type DiceTrayProps } from './dice/DiceTray';
+export {
+  DiceHistory,
+  DiceResult,
+  DiceTray,
+  DiceTrayView,
+  parseModifiers,
+  type DiceTrayProps,
+  type DiceTrayState,
+} from './dice/DiceTray';
+export { DiceRack, type DiceRackProps } from './dice/DiceRack';
+export { formulaOf, type Pool } from './dice/pool';
 export { DiceReplay, readResult, type DiceReplayProps } from './dice/DiceReplay';
 export { useDiceTray, type OptionsState, type TestInput } from './dice/useDiceTray';
 export type { RollResult, TestOptions, TestResult } from './dice/schemas';

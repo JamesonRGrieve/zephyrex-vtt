@@ -88,6 +88,23 @@ def test_a_check_is_d20_plus_the_ability_modifier_against_the_dc(world: dict[str
     assert {"step": "proficiency", "rank": 1, "value": 0, "rule": "no level on the sheet"} in skill["steps"]
 
 
+def test_advantage_keeps_the_higher_of_two_d20s_and_disadvantage_the_lower(world: dict[str, Any]) -> None:
+    for _ in range(20):
+        up = _test(world["player"], world["fighter"], "strength", advantage="advantage")
+        assert len(up["rolls"]) == 2 and up["roll"] == max(up["rolls"]) and up["advantage"] == "advantage"
+        assert up["total"] == up["roll"] + 3
+        down = _test(world["player"], world["fighter"], "strength", advantage="disadvantage")
+        assert len(down["rolls"]) == 2 and down["roll"] == min(down["rolls"])
+    plain = _test(world["player"], world["fighter"], "strength")
+    assert plain["rolls"] == [plain["roll"]] and plain["advantage"] is None
+
+
+def test_a_pack_without_advantage_refuses_it(world: dict[str, Any]) -> None:
+    with pytest.raises(HTTPException) as refused:
+        _test(world["gm"], world["acolyte"], "might", advantage="advantage")
+    assert refused.value.status_code == 422 and "no advantage" in str(refused.value.detail)
+
+
 def test_no_sheet_still_gets_the_systems_test_a_plain_d20(world: dict[str, Any]) -> None:
     for _ in range(10):
         plain = _test(world["gm"], world["villager"], "persuasion", difficulty="easy")

@@ -31,7 +31,8 @@ describe('a replayed roll', () => {
 
   it('shows the result card with no new roll', () => {
     render(<DiceReplay result={{ test: TEST }} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Success: rolled 23 against 55, 4 degrees of success');
+    expect(screen.getByRole('status')).toHaveTextContent('Success');
+    expect(screen.getByRole('status')).toHaveTextContent('rolled 23 against 55, 4 degrees of success');
   });
 
   it('says when it isn’t a roll', () => {

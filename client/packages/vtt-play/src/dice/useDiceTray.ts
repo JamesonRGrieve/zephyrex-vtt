@@ -23,7 +23,12 @@ export interface TestInput {
   modifiers?: number[];
   /** Which one of a specialist skill (Lore: "Stars"). */
   specialisation?: string;
+  /** 5e: Advantage or Disadvantage. */
+  advantage?: 'advantage' | 'disadvantage';
 }
+
+/** The tray keeps this many past results, newest first. */
+export const HISTORY = 10;
 
 function status(error: unknown): number | undefined {
   const found = (error as { status?: unknown } | null)?.status;
@@ -39,10 +44,12 @@ export function useDiceTray(personId: string) {
   const client = useClient();
   const [options, setOptions] = useState<OptionsState>({ state: 'loading' });
   const [result, setResult] = useState<TestResult | RollResult | null>(null);
+  const [history, setHistory] = useState<(TestResult | RollResult)[]>([]);
   // A new seed with each result: the dice's tumble, shared by every seat that replays it.
   const [seed, setSeed] = useState(0);
   const show = (next: TestResult | RollResult): void => {
     setResult(next);
+    setHistory((past) => [next, ...past].slice(0, HISTORY));
     setSeed(Math.floor(Math.random() * 2 ** 31));
   };
   const [problem, setProblem] = useState<string | null>(null);
@@ -91,6 +98,7 @@ export function useDiceTray(personId: string) {
     options,
     retry,
     result,
+    history,
     seed,
     problem,
     busy,

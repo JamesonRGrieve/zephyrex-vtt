@@ -51,11 +51,20 @@ export const testResultSchema = z.object({
     test_kind: z.enum(['d100-under', 'd20-over']).default('d100-under'),
     total: z.number().nullish(),
     no_sheet: z.boolean().default(false),
+    // 5e: rolled with Advantage or Disadvantage; every die rolled (``roll`` is the one kept).
+    advantage: z.enum(['advantage', 'disadvantage']).nullish(),
+    rolls: z.array(z.number()).default([]),
   }),
 });
 export type TestResult = z.infer<typeof testResultSchema>['test'];
 
+const term = z.object({
+  notation: z.string(),
+  dice: z.array(z.object({ value: z.number(), kept: z.boolean().default(true) }).passthrough()).default([]),
+  value: z.number().optional(),
+});
+
 export const rollResultSchema = z.object({
-  roll: z.object({ formula: z.string(), total: z.number() }).passthrough(),
+  roll: z.object({ formula: z.string(), total: z.number(), terms: z.array(term).default([]) }).passthrough(),
 });
 export type RollResult = z.infer<typeof rollResultSchema>['roll'];

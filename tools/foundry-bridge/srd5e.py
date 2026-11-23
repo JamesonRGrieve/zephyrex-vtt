@@ -285,6 +285,14 @@ def test_pack(root: Path) -> dict[str, Any]:
         for levels, bonus in re.findall(r"(Up to \d+|\d+–\d+) (\+\d+)", proficiency.group(1))
     ]
     find(d20, r"expertise\]? feature doubles the Proficiency Bonus", "that Expertise doubles the Proficiency Bonus")
+    advantage = find(
+        d20,
+        r"roll (\w+) d20s, but you use the number from only one of them—the (higher|lower) one if you have Advantage or the (higher|lower) one if you have Disadvantage",
+        "how Advantage and Disadvantage are rolled",
+    )
+    dice = {"two": 2, "three": 3}.get(advantage.group(1))
+    if dice is None:
+        raise RulesTextError(f"Advantage rolls {advantage.group(1)} d20s, a count the pack can't read")
     average = find(playing, r"(\d+)–\d+ This represents the human average", "the human-average score")
     initiative = find(combat, r"they make a " + _ABILITY + r" check that determines their place in the Initiative order", "how Initiative is rolled")
     creation = page(CREATION_PAGE)
@@ -308,10 +316,13 @@ def test_pack(root: Path) -> dict[str, Any]:
             "die": 20,
             "modifier": "(score − 10) / 2, rounded down",
             "no_sheet_score": int(average.group(1)),
+            # Advantage and Disadvantage: roll this many d20s and keep the higher or the lower.
+            "advantage": {"dice": dice, "advantage": advantage.group(2), "disadvantage": advantage.group(3)},
             "cite": {
                 "core_mechanic": "Playing the Game › D20 Tests",
                 "modifier": "Playing the Game › Ability Scores and Modifiers",
                 "no_sheet_score": "Playing the Game › Ability Scores (10–11: the human average)",
+                "advantage": "Playing the Game › D20 Tests › Advantage and Disadvantage",
             },
         },
         "initiative": {

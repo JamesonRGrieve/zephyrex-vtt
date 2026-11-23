@@ -2,9 +2,10 @@
 'use client';
 /**
  * The dice tray: a test under the campaign's rules pack (a characteristic or skill, a difficulty,
- * extra modifiers) or a dice formula, rolled on the server, with the result and how its target was
- * reached. rpg-ai's "Roll it" opens it prefilled (`prefill`). A campaign whose system has no rules
- * pack offers formulas only.
+ * modifiers, and for 5e Advantage or Disadvantage) or dice from the rack, rolled on the server;
+ * the result as a large card with how it was reached, the dice tumbling in 3D, and the last few
+ * rolls. rpg-ai's "Roll it" opens it prefilled (`prefill`). A campaign whose system has no rules
+ * pack offers the rack only. DiceTrayView is the tray without its data, for a story.
  */
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { chipGroup } from 'zephyrex/hooks/chipKeys';
@@ -17,6 +18,8 @@ import { SkeletonRows } from 'zephyrex/ui/skeleton';
 import type { RollResult, TestOptions, TestResult } from './schemas';
 import { canDrawDice } from '../dice3d/canDraw';
 import { useDiceAnimation } from '../dice3d/useDiceAnimation';
+import { DiceRack } from './DiceRack';
+import { poolOf, type Pool } from './pool';
 import { useDiceTray, type TestInput } from './useDiceTray';
 
 // three.js and cannon-es load only when a tray first shows a result.
@@ -27,6 +30,8 @@ export interface DiceTrayProps {
   prefill?: TestInput;
   onResult?: (result: TestResult | RollResult) => void;
 }
+
+export type DiceTrayState = ReturnType<typeof useDiceTray>;
 
 const DIFFICULTY_LABELS: Record<string, string> = { 'very-hard': 'Very hard' };
 
@@ -49,31 +54,75 @@ function isTest(result: TestResult | RollResult): result is TestResult {
   return 'degrees' in result;
 }
 
-/** A roll's result card: a test's outcome, degrees and the steps that made its target, or a formula's total. */
+/** One die as a chip: a dropped one (kept low or high away) struck through. */
+function DieChip({ value, dropped }: { value: number; dropped?: boolean }): ReactNode {
+  return (
+    <li
+      className={`flex size-9 items-center justify-center rounded-md border text-sm font-semibold tabular-nums ${dropped ? 'text-muted-foreground line-through opacity-60' : 'bg-card'}`}
+    >
+      {value}
+      {dropped && <span className='sr-only'> (dropped)</span>}
+    </li>
+  );
+}
+
+/** A roll's result card: the total large, then a test's outcome and how its target was made, or a formula's dice. */
 export function DiceResult({ result }: { result: TestResult | RollResult }): ReactNode {
   if (!isTest(result)) {
     return (
-      <p role='status' className='text-lg'>
-        <span className='font-semibold'>{result.total}</span>{' '}
-        <span className='text-muted-foreground'>({result.formula})</span>
-      </p>
+      <div role='status' className='bg-card space-y-2 rounded-xl border p-4'>
+        <p className='flex items-baseline gap-3'>
+          <span className='text-5xl font-bold tabular-nums'>{result.total}</span>{' '}
+          <span className='text-muted-foreground'>({result.formula})</span>
+        </p>
+        {result.terms.some((term) => term.dice.length > 0) && (
+          <div className='space-y-1'>
+            {result.terms
+              .filter((term) => term.dice.length > 0)
+              .map((term, index) => (
+                <div key={index} className='flex flex-wrap items-center gap-2'>
+                  <span className='text-muted-foreground w-16 text-xs'>{term.notation}</span>
+                  <ul className='flex flex-wrap gap-1' aria-label={`${term.notation} dice`}>
+                    {term.dice.map((die, at) => (
+                      <DieChip key={at} value={die.value} dropped={!die.kept} />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
     );
   }
   const outcome = result.success ? 'Success' : 'Failure';
+  const tone = result.success ? 'text-primary' : 'text-destructive';
   const degrees = `${result.degrees} degree${result.degrees === 1 ? '' : 's'} of ${result.success ? 'success' : 'failure'}`;
   const added = (result.total ?? result.roll) - result.roll;
+  const edged = result.advantage != null && result.rolls.length > 1;
   return (
-    <div role='status' className='space-y-1'>
+    <div role='status' className='bg-card space-y-2 rounded-xl border p-4'>
+      <p className='flex items-baseline gap-3'>
+        <span className='text-5xl font-bold tabular-nums'>{result.total ?? result.roll}</span>
+        <span className={`text-2xl font-bold ${tone}`}>{outcome}</span>
+      </p>
       {result.test_kind === 'd20-over' ? (
         <p className='text-lg'>
-          <span className='font-semibold'>{outcome}</span>: rolled {result.roll} {added < 0 ? '−' : '+'} {Math.abs(added)} ={' '}
-          {result.total ?? result.roll} against DC {result.target}
+          rolled {result.roll} {added < 0 ? '−' : '+'} {Math.abs(added)} = {result.total ?? result.roll} against DC{' '}
+          {result.target}
+          {edged ? ` (${result.advantage === 'advantage' ? 'Advantage' : 'Disadvantage'})` : ''}
         </p>
       ) : (
         <p className='text-lg'>
-          <span className='font-semibold'>{outcome}</span>: rolled {result.roll} against {result.target}, {degrees}
+          rolled {result.roll} against {result.target}, {degrees}
           {result.natural ? ` (a natural ${result.natural === 'success' ? '1' : '100'})` : ''}
         </p>
+      )}
+      {edged && (
+        <ul className='flex gap-1' aria-label='The d20s rolled'>
+          {result.rolls.map((value, at) => (
+            <DieChip key={at} value={value} dropped={at !== result.rolls.indexOf(result.roll)} />
+          ))}
+        </ul>
       )}
       {result.no_sheet && <p className='text-muted-foreground text-sm'>No sheet: tested at the rules’ average.</p>}
       <ul className='text-muted-foreground text-sm'>
@@ -86,6 +135,35 @@ export function DiceResult({ result }: { result: TestResult | RollResult }): Rea
     </div>
   );
 }
+
+/** One line for a past roll. */
+export function summary(result: TestResult | RollResult): string {
+  if (!isTest(result)) return `${result.formula}: ${result.total}`;
+  return `${result.name}: ${result.total ?? result.roll}, ${result.success ? 'success' : 'failure'}`;
+}
+
+/** The last rolls, newest first. */
+export function DiceHistory({ entries }: { entries: (TestResult | RollResult)[] }): ReactNode {
+  if (entries.length === 0) return null;
+  return (
+    <section aria-label='Roll history' className='space-y-1'>
+      <h3 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>Recent rolls</h3>
+      <ol className='divide-y rounded-lg border text-sm'>
+        {entries.map((entry, index) => (
+          <li key={index} className='flex min-h-11 items-center px-3 tabular-nums'>
+            {summary(entry)}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+const EDGES = [
+  { edge: undefined, label: 'Normal' },
+  { edge: 'advantage', label: 'Advantage' },
+  { edge: 'disadvantage', label: 'Disadvantage' },
+] as const;
 
 function TestForm({
   options,
@@ -102,15 +180,25 @@ function TestForm({
   const [difficulty, setDifficulty] = useState(prefill?.difficulty ?? options.default_difficulty);
   const [modifiers, setModifiers] = useState((prefill?.modifiers ?? []).map(signed).join(', '));
   const [specialisation, setSpecialisation] = useState(prefill?.specialisation ?? '');
+  const [edge, setEdge] = useState<TestInput['advantage']>(prefill?.advantage);
   const skill = options.skills.find((one) => one.slug === name);
   const specialist = skill?.untrainable === true;
+  const d20 = options.test_kind === 'd20-over';
   const chips = useRef<HTMLDivElement>(null);
+  const edges = useRef<HTMLDivElement>(null);
   useEffect(() => chipGroup(chips.current), []);
+  useEffect(() => chipGroup(edges.current), [d20]);
   const parsed = parseModifiers(modifiers);
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     if (parsed === null || !name || (specialist && !specialisation.trim())) return;
-    onTest({ name, difficulty, modifiers: parsed, ...(specialist ? { specialisation: specialisation.trim() } : {}) });
+    onTest({
+      name,
+      difficulty,
+      modifiers: parsed,
+      ...(specialist ? { specialisation: specialisation.trim() } : {}),
+      ...(d20 && edge ? { advantage: edge } : {}),
+    });
   };
   return (
     <form onSubmit={submit} className='space-y-3'>
@@ -169,25 +257,38 @@ function TestForm({
           ))}
         </div>
       </fieldset>
+      {d20 && (
+        <div ref={edges} role='radiogroup' aria-label='Advantage' className='flex flex-wrap gap-2'>
+          {EDGES.map((one) => (
+            <ChoiceChip key={one.label} checked={edge === one.edge} onClick={() => setEdge(one.edge)}>
+              {one.label}
+            </ChoiceChip>
+          ))}
+        </div>
+      )}
       <div className='space-y-1'>
         <Label htmlFor='dice-tray-modifiers'>Other modifiers</Label>
         <Input
           id='dice-tray-modifiers'
           value={modifiers}
-          placeholder='+10, -20'
+          placeholder={d20 ? '+2, -1' : '+10, -20'}
           inputMode='numeric'
           aria-invalid={parsed === null}
           aria-describedby='dice-tray-modifiers-help'
           onChange={(event) => setModifiers(event.target.value)}
         />
         <p id='dice-tray-modifiers-help' className='text-muted-foreground text-xs'>
-          {parsed === null ? 'Whole numbers only, separated by commas.' : 'Added together, then held within ±60.'}
+          {parsed === null
+            ? 'Whole numbers only, separated by commas.'
+            : d20
+              ? 'Added to the roll.'
+              : 'Added together, then held within ±60.'}
         </p>
       </div>
       <Button
         type='submit'
         disabled={busy || parsed === null || !name || (specialist && !specialisation.trim())}
-        className='min-h-11'
+        className='min-h-11 w-full'
       >
         Roll the test
       </Button>
@@ -200,44 +301,24 @@ export function defaultFormula(options: TestOptions | null): string {
   return options !== null && options.test_kind === 'd100-under' ? '1d100' : '1d20';
 }
 
-function FormulaForm({
-  busy,
-  onRoll,
-  initial,
-}: {
-  busy: boolean;
-  onRoll: (formula: string) => void;
-  initial: string;
-}): ReactNode {
-  const [formula, setFormula] = useState(initial);
+function FreeRoll({ tray }: { tray: DiceTrayState }): ReactNode {
+  const [pool, setPool] = useState<Pool>(() =>
+    poolOf(defaultFormula(tray.options.state === 'ready' ? tray.options.options : null)),
+  );
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (formula.trim()) onRoll(formula.trim());
-      }}
-      className='flex flex-wrap items-end gap-2'
-    >
-      <div className='min-w-0 flex-1 space-y-1'>
-        <Label htmlFor='dice-tray-formula'>Dice</Label>
-        <Input id='dice-tray-formula' value={formula} onChange={(event) => setFormula(event.target.value)} />
-      </div>
-      <Button type='submit' disabled={busy || !formula.trim()} className='min-h-11'>
-        Roll
-      </Button>
-    </form>
+    <section aria-label='Roll dice' className='space-y-2'>
+      <h3 className='text-sm font-medium'>Roll dice</h3>
+      <DiceRack pool={pool} onChange={setPool} onRoll={tray.roll} busy={tray.busy} />
+    </section>
   );
 }
 
-export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactNode {
-  const tray = useDiceTray(personId);
+/** The tray with its data passed in: the hook's state (DiceTray) or a story's. */
+export function DiceTrayView({ tray, prefill }: { tray: DiceTrayState; prefill?: TestInput }): ReactNode {
   const { result } = tray;
   const motion = useDiceAnimation();
-  useEffect(() => {
-    if (result !== null) onResult?.(result);
-  }, [result, onResult]);
   return (
-    <section aria-label='Dice tray' className='space-y-4'>
+    <section aria-label='Dice tray' className='space-y-5'>
       {tray.options.state === 'loading' && <SkeletonRows rows={3} label='Loading the test choices' />}
       {tray.options.state === 'failed' && (
         <LoadProblem what='the test choices' error={tray.options.error} onRetry={tray.retry} />
@@ -249,28 +330,22 @@ export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactN
             : 'This campaign’s game system has no rules pack yet, so roll the dice yourself.'}
         </p>
       )}
-      {tray.options.state === 'ready' && (
-        <TestForm options={tray.options.options} prefill={prefill} busy={tray.busy} onTest={tray.test} />
-      )}
-      {tray.options.state !== 'loading' && (
-        <FormulaForm
-          key={tray.options.state}
-          busy={tray.busy}
-          onRoll={tray.roll}
-          initial={defaultFormula(tray.options.state === 'ready' ? tray.options.options : null)}
-        />
-      )}
-      {tray.problem !== null && (
-        <p role='alert' className='text-destructive text-sm'>
-          {tray.problem}
-        </p>
-      )}
       {result !== null && <DiceResult result={result} />}
       {result !== null && canDrawDice() && (
         <Suspense fallback={null}>
           <DiceStage result={result} seed={tray.seed} animate={motion.animate} />
         </Suspense>
       )}
+      {tray.problem !== null && (
+        <p role='alert' className='text-destructive text-sm'>
+          {tray.problem}
+        </p>
+      )}
+      {tray.options.state === 'ready' && (
+        <TestForm options={tray.options.options} prefill={prefill} busy={tray.busy} onTest={tray.test} />
+      )}
+      {tray.options.state !== 'loading' && <FreeRoll key={tray.options.state} tray={tray} />}
+      <DiceHistory entries={tray.history} />
       <label className='text-muted-foreground flex min-h-11 items-center gap-2 text-sm'>
         <input
           type='checkbox'
@@ -283,4 +358,13 @@ export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactN
       </label>
     </section>
   );
+}
+
+export function DiceTray({ personId, prefill, onResult }: DiceTrayProps): ReactNode {
+  const tray = useDiceTray(personId);
+  const { result } = tray;
+  useEffect(() => {
+    if (result !== null) onResult?.(result);
+  }, [result, onResult]);
+  return <DiceTrayView tray={tray} prefill={prefill} />;
 }

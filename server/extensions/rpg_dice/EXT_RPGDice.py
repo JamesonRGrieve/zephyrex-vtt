@@ -2,7 +2,7 @@
 """rpg_dice extension: the referee's dice, as routes (BLL_RPGDice) and as abilities a framework agent
 calls (the AI GM's ``roll`` and ``check``, A21): mechanics come from here, never from a model."""
 
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import InitiativeRequest, SheetRequest, TestOptionsRequest, TestRequest, CheckRequest, DiceManager
@@ -88,11 +88,13 @@ class RPGDiceExtension(AbstractStaticExtension):
         difficulty: Optional[str] = None,
         modifiers: Optional[list[int]] = None,
         specialisation: Optional[str] = None,
+        advantage: Optional[Literal["advantage", "disadvantage"]] = None,
     ) -> dict[str, Any]:
         """Roll a test under the campaign's system pack, on the server: ``name`` is a characteristic
         or skill slug (as test_options lists them), ``difficulty`` one of the pack's (its default when
         none), ``modifiers`` extra +/- numbers, ``specialisation`` which one of a specialist skill
-        (lore: "Stars"; required for those). The result has the target,
+        (lore: "Stars"; required for those), ``advantage`` "advantage" or "disadvantage" where the pack
+        has them (5e: two d20s, the higher or lower kept; every die is in ``rolls``). The result has the target,
         the roll, success, the degrees of success or failure, a natural 1 or 100, and how the target
         was reached. For the campaign's GM or the character's own player."""
         body = TestRequest(
@@ -101,14 +103,17 @@ class RPGDiceExtension(AbstractStaticExtension):
             difficulty=difficulty,
             modifiers=modifiers or [],
             specialisation=specialisation,
+            advantage=advantage,
         )
         return cls.dice(requester_id).test_for(body).model_dump()
 
     @classmethod
     @ability("initiative")
     async def initiative(cls, requester_id: str, person_id: str) -> dict[str, Any]:
-        """Roll a character's initiative under the campaign's system pack, on the server ([redacted]: 1d10 + Agility bonus): the roll, the bonus, the total, and the characteristic's
-        value, which breaks ties. For the campaign's GM or the character's own player."""
+        """Roll a character's initiative under the campaign's system pack, on the server (a percentile
+        pack: 1d10 + a characteristic's tens; 5e: a Dexterity check): the roll, the bonus, the total,
+        and the characteristic's value, which breaks ties. For the campaign's GM or the character's
+        own player."""
         return cls.dice(requester_id).initiative_for(InitiativeRequest(person_id=person_id)).model_dump()
 
     @classmethod
