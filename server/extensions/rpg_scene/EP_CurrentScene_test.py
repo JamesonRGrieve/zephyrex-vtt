@@ -262,3 +262,23 @@ def test_the_gm_moves_a_token_to_another_scene(server: TestClient) -> None:
     listed = server.get("/v1/scene_token", params={"scene_id": tavern["id"]}, headers=_headers(gm))
     assert listed.status_code == 200, listed.text
     assert [one["id"] for one in listed.json()["scene_tokens"]] == [moved.json()["token_id"]]
+
+
+def test_the_gm_takes_a_person_off_a_scene_leaving_their_location(server: TestClient) -> None:
+    gm, player = create_user(server), create_user(server)
+    campaign = _create(server, gm, "campaign", name="Saltmere", user_id=gm.id)
+    hesk = _create(server, gm, "person", name="Old Hesk", kind="npc", campaign_id=campaign["id"])
+    ferry = _create(server, gm, "scene", name="Ferry", campaign_id=campaign["id"], width=600, height=400)
+    placed = asyncio.run(RPGSceneExtension.place_person(str(gm.id), ferry["id"], hesk["id"]))
+    where = server.get(f"/v1/person/{hesk['id']}", headers=_headers(gm)).json()["person"].get("location_id")
+
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(RPGSceneExtension.remove_person_from_scene(str(player.id), ferry["id"], hesk["id"]))
+    assert refused.value.status_code == 404
+    gone = server.post(f"/v1/scene/{ferry['id']}/remove", json={"remove": {"person_id": hesk["id"]}}, headers=_headers(gm))
+    assert gone.status_code == 200, gone.text
+    assert gone.json() == {"scene_id": ferry["id"], "person_id": hesk["id"], "removed": True}
+    assert asyncio.run(RPGSceneExtension.scene_tokens(str(gm.id), ferry["id"])) == []
+    assert placed["token_id"] and server.get(f"/v1/person/{hesk['id']}", headers=_headers(gm)).json()["person"].get("location_id") == where
+    again = asyncio.run(RPGSceneExtension.remove_person_from_scene(str(gm.id), ferry["id"], hesk["id"]))
+    assert again["removed"] is False

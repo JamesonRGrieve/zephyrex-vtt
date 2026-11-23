@@ -103,6 +103,16 @@ class RPGSceneExtension(AbstractStaticExtension):
         return cls.scenes(requester_id).place_person_for(scene_id, body).model_dump()
 
     @classmethod
+    @ability("remove_person_from_scene")
+    async def remove_person_from_scene(cls, requester_id: str, scene_id: str, person_id: str) -> dict[str, Any]:
+        """Take a person's token off a scene (they left, the story not saying where): their wiki
+        location is left as it is. Returns {scene_id, person_id, removed}; removed is false when they
+        had no token there. The campaign's GM only."""
+        from zephyrex.extensions.rpg_scene.BLL_RPGScene import RemoveRequest
+
+        return cls.scenes(requester_id).remove_person_for(scene_id, RemoveRequest(person_id=person_id)).model_dump()
+
+    @classmethod
     @ability("copy_scenes")
     async def copy_scenes(
         cls, requester_id: str, from_campaign_id: str, to_campaign_id: str, id_map: dict[str, str] | None = None

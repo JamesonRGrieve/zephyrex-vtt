@@ -778,6 +778,20 @@ class PlaceEnvelope(PlainModel):
     place: PlaceRequest
 
 
+class RemoveRequest(PlainModel):
+    person_id: str
+
+
+class RemoveEnvelope(PlainModel):
+    remove: RemoveRequest
+
+
+class RemoveOut(PlainModel):
+    scene_id: str
+    person_id: str
+    removed: bool = Field(description="Whether they had a token on the scene to take off")
+
+
 class CopyRequest(PlainModel):
     from_campaign_id: str
     to_campaign_id: str
@@ -1429,6 +1443,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         self._trusted(SceneTokenManager).update_trusted(id=token.id, scene_id=there.id, scene_level_id=None, x=x, y=y)
         return PilotOut(person_id="", token_id=token.id, scene_id=there.id, x=x, y=y)
 
+    def remove_person_for(self, scene_id: str, body: RemoveRequest) -> RemoveOut:
+        """Take a person's token off a scene (someone leaves, the story not saying where): their wiki
+        location is left as it is. False when they had no token there. The campaign's GM only."""
+        scene = self._get(SceneManager, scene_id)
+        campaign = None if scene is None or scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        if scene is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("SceneModel")
+        tokens = self._trusted(SceneTokenManager)
+        held = _live(tokens, scene_id=scene.id, person_id=body.person_id)
+        for token in held:
+            tokens.delete(id=token.id)
+        return RemoveOut(scene_id=scene.id, person_id=body.person_id, removed=bool(held))
+
     def place_person_for(self, scene_id: str, body: PlaceRequest) -> PilotOut:
         """Put a person of the campaign on a scene (an NPC the GM just authored): on the nearest free
         cell beside ``near_person_id``'s token there, else at the point given, else at the scene's
@@ -1503,6 +1530,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
     )
     async def place_route(self, scene_id: str, body: PlaceEnvelope) -> PilotOut:
         return self.place_person_for(scene_id, body.place)
+
+    @custom_route(
+        method="POST",
+        path="/{scene_id}/remove",
+        input_model=RemoveEnvelope,
+        output_model=RemoveOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Take a person's token off a scene, their wiki location left as it is (the campaign's GM)",
+    )
+    async def remove_route(self, scene_id: str, body: RemoveEnvelope) -> RemoveOut:
+        return self.remove_person_for(scene_id, body.remove)
 
     @custom_route(
         method="POST",
