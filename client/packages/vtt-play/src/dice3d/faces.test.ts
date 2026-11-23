@@ -2,7 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { diceFor, facesOf, geometryOf, relabel, rotate, upFace, type DieKind, type Quat, type Vec3 } from './faces';
 
-const KINDS: DieKind[] = ['d6', 'd10', 'd10-tens', 'd20'];
+/** Every die; the ones read by their top face (all but the d4, which is read by the face it rests on). */
+const ALL: DieKind[] = ['d4', 'd6', 'd8', 'd10', 'd10-tens', 'd12', 'd20'];
+const KINDS: DieKind[] = ALL.filter((kind) => kind !== 'd4');
 
 /** The rotation taking unit vector ``from`` onto +y. */
 function toUp([x, y, z]: Vec3): Quat {
@@ -18,7 +20,7 @@ function toUp([x, y, z]: Vec3): Quat {
 }
 
 describe('the dice', () => {
-  it.each(KINDS)('a %s has one distinct unit normal per face', (kind) => {
+  it.each(ALL)('a %s has one distinct unit normal per face', (kind) => {
     const faces = facesOf(kind);
     expect(faces.normals).toHaveLength(faces.labels.length);
     for (const normal of faces.normals) expect(Math.hypot(...normal)).toBeCloseTo(1, 9);
@@ -26,7 +28,7 @@ describe('the dice', () => {
     expect(keys.size).toBe(faces.normals.length);
   });
 
-  it.each(KINDS)('a %s is a closed convex solid whose every face is flat', (kind) => {
+  it.each(ALL)('a %s is a closed convex solid whose every face is flat', (kind) => {
     const { vertices, faces } = geometryOf(kind);
     const { normals } = facesOf(kind);
     expect(faces).toHaveLength(normals.length);
@@ -66,6 +68,23 @@ describe('the dice', () => {
     });
   });
 
+  it.each([
+    ['d4', 4],
+    ['d8', 8],
+    ['d12', 12],
+  ] as const)('a %s has %i faces', (kind, count) => {
+    expect(facesOf(kind).labels).toEqual(Array.from({ length: count }, (_, index) => String(index + 1)));
+  });
+
+  it('a d4 is read by the face it rests on, and shows its value on every face', () => {
+    const faces = facesOf('d4');
+    faces.normals.forEach((normal, index) => {
+      const down: Vec3 = [-normal[0], -normal[1], -normal[2]];
+      expect(upFace(faces, toUp(down))).toBe(index);
+      for (const label of faces.labels) expect(relabel(faces, index, label).labels).toEqual([label, label, label, label]);
+    });
+  });
+
   it('refuses a value the die does not have', () => {
     expect(() => relabel(facesOf('d6'), 0, '7')).toThrow('no face 7');
   });
@@ -91,6 +110,9 @@ describe('a server result as dice', () => {
     expect(diceFor(20, 17)).toEqual([{ kind: 'd20', label: '17' }]);
     expect(diceFor(6, 1)).toEqual([{ kind: 'd6', label: '1' }]);
     expect(diceFor(10, 10)).toEqual([{ kind: 'd10', label: '0' }]);
-    expect(() => diceFor(8, 3)).toThrow('no 3D die');
+    expect(diceFor(8, 3)).toEqual([{ kind: 'd8', label: '3' }]);
+    expect(diceFor(4, 4)).toEqual([{ kind: 'd4', label: '4' }]);
+    expect(diceFor(12, 11)).toEqual([{ kind: 'd12', label: '11' }]);
+    expect(() => diceFor(7, 3)).toThrow('no 3D die');
   });
 });

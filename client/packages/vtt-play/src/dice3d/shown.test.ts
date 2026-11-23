@@ -27,12 +27,14 @@ describe('the dice a result shows', () => {
     const result = roll([
       { notation: '2d6', dice: [{ value: 4 }, { value: 1 }] },
       { notation: '1d8', dice: [{ value: 5 }] },
+      { notation: '1d3', dice: [{ value: 2 }] },
       { notation: '1d%', dice: [{ value: 100 }] },
       { notation: '3', dice: [] },
     ]);
     expect(shownDice(result)).toEqual([
       { kind: 'd6', label: '4' },
       { kind: 'd6', label: '1' },
+      { kind: 'd8', label: '5' },
       { kind: 'd10-tens', label: '00' },
       { kind: 'd10', label: '0' },
     ]);

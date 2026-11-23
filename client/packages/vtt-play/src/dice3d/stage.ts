@@ -113,6 +113,8 @@ function dieMesh(faces: DieFaces, theme: Theme, textures: Map<string, CanvasText
 export interface Stage {
   /** Replays the throw with each die showing its faces; resolves when the dice rest. */
   play(thrown: Throw, faces: DieFaces[], animate: boolean): Promise<void>;
+  /** Refit to the canvas's current size and draw again (it may have been 0×0 in a closed drawer). */
+  resize(): void;
   dispose(): void;
 }
 
@@ -176,6 +178,10 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
         };
         frame = requestAnimationFrame(tick);
       });
+    },
+    resize() {
+      fit();
+      renderer.render(scene, camera);
     },
     dispose() {
       cancelAnimationFrame(frame);

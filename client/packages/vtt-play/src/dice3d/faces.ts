@@ -7,7 +7,7 @@
  * so it runs in a worker and in tests without three.js.
  */
 
-export type DieKind = 'd6' | 'd10' | 'd10-tens' | 'd20';
+export type DieKind = 'd4' | 'd6' | 'd8' | 'd10' | 'd10-tens' | 'd12' | 'd20';
 
 export type Vec3 = readonly [number, number, number];
 /** x, y, z, w */
@@ -130,10 +130,86 @@ function trapezohedron(): DieGeometry {
   return { vertices, faces: wound(vertices, faces) };
 }
 
+/**
+ * A solid's faces from their outward directions: each face is the corners furthest along its
+ * direction, ordered around it (so the solids below are just their corners and face directions).
+ */
+function facesAlong(vertices: Vec3[], directions: Vec3[]): number[][] {
+  return directions.map((direction) => {
+    const along = vertices.map((vertex) => dot(vertex, direction));
+    const most = Math.max(...along);
+    const corners = vertices.flatMap((_, index) => (Math.abs(along[index]! - most) < 1e-6 ? [index] : []));
+    const centre = centroid(corners.map((index) => vertices[index]!));
+    const normal = normalize(direction);
+    const first = normalize(sub(vertices[corners[0]!]!, centre));
+    const second = cross(normal, first);
+    const angle = (index: number): number => {
+      const offset = sub(vertices[index]!, centre);
+      return Math.atan2(dot(offset, second), dot(offset, first));
+    };
+    return [...corners].sort((a, b) => angle(a) - angle(b));
+  });
+}
+
+function scaled(vertices: Vec3[], radius: number): Vec3[] {
+  const reach = Math.max(...vertices.map((vertex) => Math.hypot(...vertex)));
+  return vertices.map(([x, y, z]): Vec3 => [(x * radius) / reach, (y * radius) / reach, (z * radius) / reach]);
+}
+
+/** The d4: a regular tetrahedron (alternate corners of a cube). */
+function tetrahedron(): DieGeometry {
+  const vertices = scaled(
+    [
+      [1, 1, 1],
+      [1, -1, -1],
+      [-1, 1, -1],
+      [-1, -1, 1],
+    ],
+    1.1,
+  );
+  const directions = vertices.map(([x, y, z]): Vec3 => [-x, -y, -z]);
+  return { vertices, faces: wound(vertices, facesAlong(vertices, directions)) };
+}
+
+/** The d8: a regular octahedron, its corners on the axes and a face in each octant. */
+function octahedron(): DieGeometry {
+  const vertices: Vec3[] = [
+    [1, 0, 0],
+    [-1, 0, 0],
+    [0, 1, 0],
+    [0, -1, 0],
+    [0, 0, 1],
+    [0, 0, -1],
+  ];
+  const directions: Vec3[] = [];
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) directions.push([x, y, z]);
+  return { vertices, faces: wound(vertices, facesAlong(vertices, directions)) };
+}
+
+/** The d12: a regular dodecahedron; its faces point at an icosahedron's corners. */
+function dodecahedron(): DieGeometry {
+  const corners: Vec3[] = [];
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([x, y, z]);
+  for (const a of [-1, 1])
+    for (const b of [-1, 1]) corners.push([0, a / PHI, b * PHI], [a / PHI, b * PHI, 0], [b * PHI, 0, a / PHI]);
+  const directions: Vec3[] = [];
+  for (const a of [-1, 1]) for (const b of [-PHI, PHI]) directions.push([0, b, a], [b, a, 0], [a, 0, b]);
+  const vertices = scaled(corners, 1);
+  return { vertices, faces: wound(vertices, facesAlong(vertices, directions)) };
+}
+
 export function geometryOf(kind: DieKind): DieGeometry {
+  if (kind === 'd4') return tetrahedron();
   if (kind === 'd6') return cube();
+  if (kind === 'd8') return octahedron();
+  if (kind === 'd12') return dodecahedron();
   if (kind === 'd20') return icosahedron();
   return trapezohedron();
+}
+
+/** Whether a die is read by the face it rests on (a d4, which has no face pointing up). */
+export function readDown(kind: DieKind): boolean {
+  return kind === 'd4';
 }
 
 function range(from: number, count: number, step = 1): string[] {
@@ -144,13 +220,11 @@ export function facesOf(kind: DieKind): DieFaces {
   const { vertices, faces } = geometryOf(kind);
   const normals = faces.map((face) => faceNormal(vertices, face));
   const labels =
-    kind === 'd6'
-      ? range(1, 6)
-      : kind === 'd20'
-        ? range(1, 20)
-        : kind === 'd10'
-          ? range(0, 10)
-          : range(0, 10, 10).map((label) => label.padStart(2, '0'));
+    kind === 'd10'
+      ? range(0, 10)
+      : kind === 'd10-tens'
+        ? range(0, 10, 10).map((label) => label.padStart(2, '0'))
+        : range(1, faces.length);
   return { kind, normals, labels };
 }
 
@@ -162,12 +236,16 @@ export function rotate([x, y, z]: Vec3, [qx, qy, qz, qw]: Quat): Vec3 {
   return [x + qw * tx + (qy * tz - qz * ty), y + qw * ty + (qz * tx - qx * tz), z + qw * tz + (qx * ty - qy * tx)];
 }
 
-/** The face pointing most nearly up (+y) once the die rests with this orientation. */
+/**
+ * The face that reads the die once it rests with this orientation: the one pointing most nearly up
+ * (+y), or for a die read down (a d4) the one it rests on.
+ */
 export function upFace(faces: DieFaces, orientation: Quat): number {
   let best = 0;
   let highest = -Infinity;
+  const sign = readDown(faces.kind) ? -1 : 1;
   faces.normals.forEach((normal, index) => {
-    const up = rotate(normal, orientation)[1];
+    const up = sign * rotate(normal, orientation)[1];
     if (up > highest) {
       highest = up;
       best = index;
@@ -180,6 +258,8 @@ export function upFace(faces: DieFaces, orientation: Quat): number {
 export function relabel(faces: DieFaces, face: number, label: string): DieFaces {
   const from = faces.labels.indexOf(label);
   if (from < 0) throw new Error(`a ${faces.kind} has no face ${label}`);
+  // A die read down shows its value on every face, so it reads from wherever it's seen.
+  if (readDown(faces.kind)) return { ...faces, labels: faces.labels.map(() => label) };
   const labels = [...faces.labels];
   [labels[face], labels[from]] = [labels[from]!, labels[face]!];
   return { ...faces, labels };
@@ -204,6 +284,6 @@ export function diceFor(sides: number, value: number): ShownDie[] {
     ];
   }
   if (sides === 10) return [{ kind: 'd10', label: String(value % 10) }];
-  if (sides === 6 || sides === 20) return [{ kind: `d${sides}` as DieKind, label: String(value) }];
+  if ([4, 6, 8, 12, 20].includes(sides)) return [{ kind: `d${sides}` as DieKind, label: String(value) }];
   throw new Error(`no 3D die for d${sides}`);
 }

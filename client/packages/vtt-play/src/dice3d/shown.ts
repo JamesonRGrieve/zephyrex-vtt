@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-/** Which dice a server result shows: a test's d100 (a d20 for a d20 pack), or each die of a formula's terms. */
+/** Which dice a server result shows: a test's d100 (a d20 for a d20 pack), or each die of a formula's terms (d4 to d20, d100). */
 import type { RollResult, TestResult } from '../dice/schemas';
 import { diceFor, type ShownDie } from './faces';
 
@@ -26,7 +26,7 @@ export function shownDice(result: TestResult | RollResult): ShownDie[] {
   const shown: ShownDie[] = [];
   for (const term of ((result as { terms?: Term[] }).terms ?? []) as Term[]) {
     const sides = sidesOf(term.notation);
-    if (sides === null || ![6, 10, 20, 100].includes(sides)) continue;
+    if (sides === null || ![4, 6, 8, 10, 12, 20, 100].includes(sides)) continue;
     for (const die of term.dice ?? []) shown.push(...diceFor(sides, die.value));
   }
   return shown.slice(0, MAX_SHOWN);

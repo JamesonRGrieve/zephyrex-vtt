@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import { facesOf, relabel, rotate, upFace } from './faces';
+import { facesOf, readDown, relabel, rotate, upFace } from './faces';
 import { MAX_FRAMES, seeded, simulateThrow, TRAY } from './simulate';
 
 describe('a headless throw', () => {
@@ -29,6 +29,17 @@ describe('a headless throw', () => {
       const wanted = faces.labels[(seed * 7) % faces.labels.length]!;
       const shown = relabel(faces, face, wanted);
       expect(shown.labels[upFace(shown, result.rests[die]!)]).toBe(wanted);
+    });
+  });
+
+  it.each([1, 2, 3, 4])('settles a d4, d8 and d12 flat on a face (seed %i)', (seed) => {
+    const kinds = ['d4', 'd8', 'd12'] as const;
+    const result = simulateThrow([...kinds], seed);
+    expect(result.settled).toBe(true);
+    kinds.forEach((kind, die) => {
+      const faces = facesOf(kind);
+      const facing = rotate(faces.normals[upFace(faces, result.rests[die]!)]!, result.rests[die]!)[1];
+      expect(readDown(kind) ? -facing : facing).toBeGreaterThan(0.95);
     });
   });
 

@@ -52,9 +52,22 @@ export default function DiceStage({ result, seed, animate }: DiceStageProps): Re
   const dice = useMemo(() => shownDice(result), [result]);
 
   useEffect(() => {
-    if (!canvas.current) return undefined;
-    stage.current = createStage(canvas.current);
+    const element = canvas.current;
+    if (!element) return undefined;
+    try {
+      stage.current = createStage(element);
+    } catch {
+      // A browser that names WebGL2 but won't give a context (a phone's GPU blocklist, a lost
+      // context): the stage hides and the result card above it is what shows.
+      element.style.display = 'none';
+      return undefined;
+    }
+    // The canvas can be laid out after the first throw (a drawer still opening on a phone) or change
+    // size later: refit and draw again whenever it does.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => stage.current?.resize());
+    observer?.observe(element);
     return () => {
+      observer?.disconnect();
       stage.current?.dispose();
       stage.current = null;
     };
@@ -77,6 +90,14 @@ export default function DiceStage({ result, seed, animate }: DiceStageProps): Re
     };
   }, [dice, seed, animate]);
 
-  if (dice.length === 0) return null;
-  return <canvas ref={canvas} aria-hidden='true' className='h-40 w-full rounded-md sm:h-48' />;
+  // The canvas stays mounted while there's nothing to show, so a result with no dice to draw (a d3)
+  // doesn't leave every later roll without a stage.
+  return (
+    <canvas
+      ref={canvas}
+      aria-hidden='true'
+      data-dice-stage=''
+      className={dice.length === 0 ? 'hidden' : 'h-40 w-full rounded-md sm:h-48'}
+    />
+  );
 }

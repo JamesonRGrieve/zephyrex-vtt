@@ -5,7 +5,7 @@
  * server's roll (faces.ts). Seeded, so the same seed throws the same tumble on every seat.
  */
 import { Body, Box, ConvexPolyhedron, Plane, Quaternion, Vec3 as CannonVec3, World } from 'cannon-es';
-import { facesOf, geometryOf, rotate, upFace, type DieKind, type Quat, type Vec3 } from './faces';
+import { facesOf, geometryOf, readDown, rotate, upFace, type DieKind, type Quat, type Vec3 } from './faces';
 
 export const STEP = 1 / 60;
 /** At most this long, then the frames stop wherever the dice are (10 s of simulated time; the replay
@@ -57,12 +57,13 @@ function wall(world: World, position: Vec3, axis: Vec3, angle: number): void {
   world.addBody(body);
 }
 
-/** Every die rests flat on a face (its up face within ~18° of vertical). */
+/** Every die rests flat on a face (its reading face within ~18° of vertical). */
 function flat(kinds: DieKind[], rests: Quat[]): boolean {
   return kinds.every((kind, index) => {
     const faces = facesOf(kind);
     const rest = rests[index]!;
-    return rotate(faces.normals[upFace(faces, rest)]!, rest)[1] > 0.95;
+    const facing = rotate(faces.normals[upFace(faces, rest)]!, rest)[1];
+    return (readDown(kind) ? -facing : facing) > 0.95;
   });
 }
 
