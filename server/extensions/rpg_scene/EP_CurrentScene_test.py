@@ -258,3 +258,7 @@ def test_the_gm_moves_a_token_to_another_scene(server: TestClient) -> None:
     on_docks = asyncio.run(RPGSceneExtension.scene_tokens(str(gm.id), docks["id"]))
     on_tavern = asyncio.run(RPGSceneExtension.scene_tokens(str(gm.id), tavern["id"]))
     assert on_docks == [] and [one["name"] for one in on_tavern] == ["Nia"], "one token, now in the tavern"
+    # The GM's own list sees (and so can edit) the token that arrived: it's theirs, not the system's.
+    listed = server.get("/v1/scene_token", params={"scene_id": tavern["id"]}, headers=_headers(gm))
+    assert listed.status_code == 200, listed.text
+    assert [one["id"] for one in listed.json()["scene_tokens"]] == [moved.json()["token_id"]]

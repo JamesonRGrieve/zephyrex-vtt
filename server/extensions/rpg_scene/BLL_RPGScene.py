@@ -1373,7 +1373,10 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         }
         if here is None:
             spot = self._free_cell(scene, point, others)
-            token = tokens.create(name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person_id, x=spot[0], y=spot[1])
+            # Made as the requester (the campaign's GM, checked above), not the system: a token the
+            # system owns is one the GM's own list and edits can't see.
+            mine = SceneTokenManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+            token = mine.create(name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person_id, x=spot[0], y=spot[1])
             location = self.sync_location(token, scene)
             return PilotOut(person_id=person_id, token_id=token.id, scene_id=scene.id, x=spot[0], y=spot[1], removed=removed, location_id=location)
         start = (float(here.x or 0) + grid / 2, float(here.y or 0) + grid / 2)
