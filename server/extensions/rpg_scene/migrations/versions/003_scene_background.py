@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""rpg_scene 003: scenes.background_url, the scene's map picture by link (a battlemap the GM set or
-rpg-ai generated), drawn over its place's picture. Inspector-guarded."""
+"""rpg_scene 003: scenes.background_url, the scene's map picture by link (battlemap art the GM set or
+rpg-ai generated), drawn under its grid. Inspector-guarded."""
 
 from typing import Sequence, Union
 
@@ -21,7 +21,7 @@ def upgrade() -> None:
                     "background_url",
                     sa.String(),
                     nullable=True,
-                    comment="The scene's map picture by link (a generated battlemap); over its place's picture",
+                    comment="The scene's map picture by link (battlemap art, set or generated)",
                 )
             )
 

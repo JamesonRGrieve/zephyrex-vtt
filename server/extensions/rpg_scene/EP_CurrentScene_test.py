@@ -203,14 +203,14 @@ def test_the_gm_places_a_new_npc_beside_the_seats_character(server: TestClient) 
     assert sorted(one["name"] for one in tokens) == ["Brann", "Old Tam"], "one token per person"
 
 
-def test_a_scenes_own_picture_wins_over_its_places(server: TestClient) -> None:
+def test_only_a_scenes_own_picture_is_drawn_never_its_places(server: TestClient) -> None:
     gm = create_user(server)
     campaign = _create(server, gm, "campaign", name="Saltmere", user_id=gm.id)
     docks = _create(server, gm, "location", name="Saltmere Docks", picture_url="https://example.org/docks.jpg")
     _create(server, gm, "person", name="Nia", kind="pc", user_id=gm.id, campaign_id=campaign["id"])
     scene = _create(server, gm, "scene", name="Docks", campaign_id=campaign["id"], location_id=docks["id"])
     view = server.post(f"/v1/scene/{scene['id']}/view", json={"view": {}}, headers=_headers(gm)).json()["view"]
-    assert view["background_url"] == "https://example.org/docks.jpg", "the place's picture"
+    assert view["background_url"] is None, "never the place's picture: an illustration isn't a map"
     current = server.get(f"/v1/scene/{scene['id']}", headers=_headers(gm))
     put = server.put(
         f"/v1/scene/{scene['id']}",
@@ -236,3 +236,24 @@ def test_the_gm_sets_a_scenes_background_through_the_ability(server: TestClient)
     with pytest.raises(HTTPException) as refused:
         asyncio.run(RPGSceneExtension.set_scene_background(str(player.id), scene["id"], "/v1/asset/x/content"))
     assert refused.value.status_code == 404
+
+
+def test_the_gm_moves_a_token_to_another_scene(server: TestClient) -> None:
+    gm, player = create_user(server), create_user(server)
+    campaign = _create(server, gm, "campaign", name="Saltmere", user_id=gm.id)
+    nia = _create(server, gm, "person", name="Nia", kind="pc", user_id=player.id, campaign_id=campaign["id"])
+    docks = _create(server, gm, "scene", name="Docks", campaign_id=campaign["id"], width=1000, height=800)
+    tavern = _create(server, gm, "scene", name="Tavern", campaign_id=campaign["id"], width=600, height=400)
+    token = _create(server, gm, "scene_token", name="Nia", scene_id=docks["id"], person_id=nia["id"], x=100, y=100)
+
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(RPGSceneExtension.move_token_to_scene(str(player.id), token["id"], tavern["id"]))
+    assert refused.value.status_code == 404
+    moved = server.post(
+        f"/v1/scene_token/{token['id']}/move_scene", json={"move_scene": {"scene_id": tavern["id"]}}, headers=_headers(gm)
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["scene_id"] == tavern["id"]
+    on_docks = asyncio.run(RPGSceneExtension.scene_tokens(str(gm.id), docks["id"]))
+    on_tavern = asyncio.run(RPGSceneExtension.scene_tokens(str(gm.id), tavern["id"]))
+    assert on_docks == [] and [one["name"] for one in on_tavern] == ["Nia"], "one token, now in the tavern"

@@ -81,7 +81,7 @@ class SceneModel(
     entry_x: Optional[float] = Field(None, description="Where arrivals appear, pixels; none = the scene's centre")
     entry_y: Optional[float] = Field(None, description="Where arrivals appear, pixels; none = the scene's centre")
     is_active: Optional[bool] = Field(False, description="The campaign's current scene (one per campaign; activate)")
-    background_url: Optional[str] = Field(None, description="The scene's map picture by link (a generated battlemap); over its place's picture")
+    background_url: Optional[str] = Field(None, description="The scene's map picture by link (battlemap art, set or generated)")
     table_comment: ClassVar[str] = "A playable area in a campaign: the battlemap a table plays on"
 
     class Create(BaseModel, CampaignModel.Reference.ID.Optional, LocationModel.Reference.ID.Optional):
@@ -503,6 +503,29 @@ class MovedEnvelope(PlainModel):
     scene_token: dict[str, Any]
 
 
+class PilotOut(PlainModel):
+    person_id: str
+    # The token, where it stands (its top-left, pixels) and on which scene; none when the target
+    # place is on no map, so the character left the maps (its tokens removed).
+    token_id: Optional[str] = None
+    scene_id: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    arrived: bool = True
+    # Cells still to walk, in scene units, when max_distance stopped it short.
+    remaining: float = 0.0
+    removed: int = 0
+    location_id: Optional[str] = None
+
+
+class MoveSceneRequest(PlainModel):
+    scene_id: str = Field(description="The scene to move the token to (the same campaign's)")
+
+
+class MoveSceneEnvelope(PlainModel):
+    move_scene: MoveSceneRequest
+
+
 class SceneTokenManager(AbstractBLLManager, RouterMixin):
     _model = SceneTokenModel
 
@@ -561,6 +584,20 @@ class SceneTokenManager(AbstractBLLManager, RouterMixin):
     )
     async def move_route(self, token_id: str, body: MoveEnvelope) -> MovedEnvelope:
         return MovedEnvelope(scene_token=self.move_for(token_id, body.move))
+
+    @custom_route(
+        method="POST",
+        path="/{token_id}/move_scene",
+        input_model=MoveSceneEnvelope,
+        output_model=PilotOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Move a token to another scene of its campaign, at the entry on a free cell (the campaign's GM)",
+    )
+    async def move_scene_route(self, token_id: str, body: MoveSceneEnvelope) -> PilotOut:
+        scenes = SceneManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+        return scenes.move_token_to_scene_for(token_id, body.move_scene.scene_id)
 
 
 class SceneWallManager(AbstractBLLManager, RouterMixin):
@@ -715,21 +752,6 @@ class SceneTokenOut(PlainModel):
 
 class SceneTokensOut(PlainModel):
     scene_tokens: list[SceneTokenOut]
-
-
-class PilotOut(PlainModel):
-    person_id: str
-    # The token, where it stands (its top-left, pixels) and on which scene; none when the target
-    # place is on no map, so the character left the maps (its tokens removed).
-    token_id: Optional[str] = None
-    scene_id: Optional[str] = None
-    x: Optional[float] = None
-    y: Optional[float] = None
-    arrived: bool = True
-    # Cells still to walk, in scene units, when max_distance stopped it short.
-    remaining: float = 0.0
-    removed: int = 0
-    location_id: Optional[str] = None
 
 
 class ActivateEnvelope(PlainModel):
@@ -1050,13 +1072,10 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         return self._summarize(self._trusted(SceneManager).update(id=scene.id, background_url=background_url))
 
     def _background_of(self, scene: Any) -> Optional[str]:
-        """What to draw under the grid: the scene's own map picture (background_url: a battlemap the
-        GM set or rpg-ai generated), else its wiki location's picture (vault locations have paintings)."""
-        if getattr(scene, "background_url", None):
-            return str(scene.background_url)
-        location_id = getattr(scene, "location_id", None)
-        location = None if location_id is None else self._get(LocationManager, location_id)
-        return getattr(location, "picture_url", None) if location is not None else None
+        """What to draw under the grid: the scene's own map picture (background_url: battlemap art the
+        GM set or rpg-ai generated), else nothing (the grid on its ground). Never its place's wiki
+        picture: that's an illustration (a ship's mast), not a top-down map (the operator, 2026-11-22)."""
+        return str(scene.background_url) if getattr(scene, "background_url", None) else None
 
     def _empty_view(self, scene: Any) -> dict[str, Any]:
         """A scene's map with nothing on it: for a player of the campaign with no token there."""
@@ -1382,6 +1401,30 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             removed=removed,
             location_id=location,
         )
+
+    def move_token_to_scene_for(self, token_id: str, scene_id: str) -> PilotOut:
+        """Move a token to another scene of its campaign (someone leaves the docks for the tavern):
+        off this scene, onto the target at its entry, on the nearest free cell. A character's token
+        goes as pilot_token moves them (one token per person, their wiki location following); a
+        token with no character moves as it is. The campaign's GM only."""
+        token = self._get(SceneTokenManager, token_id)
+        here = None if token is None else self._get(SceneManager, token.scene_id)
+        there = self._get(SceneManager, scene_id)
+        campaign = None if here is None or here.campaign_id is None else self._get(CampaignManager, here.campaign_id)
+        if token is None or here is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("SceneTokenModel")
+        if there is None or there.campaign_id != here.campaign_id:
+            raise _not_found("SceneModel")
+        if token.person_id is not None:
+            return self.pilot_for(token.person_id, scene_id=there.id)
+        grid = float(there.grid_size or DEFAULT_GRID_SIZE)
+        taken = {
+            (int(float(one.x or 0) // grid), int(float(one.y or 0) // grid))
+            for one in _live(self._trusted(SceneTokenManager), scene_id=there.id)
+        }
+        x, y = self._free_cell(there, self._arrival_point(there), taken)
+        self._trusted(SceneTokenManager).update_trusted(id=token.id, scene_id=there.id, scene_level_id=None, x=x, y=y)
+        return PilotOut(person_id="", token_id=token.id, scene_id=there.id, x=x, y=y)
 
     def place_person_for(self, scene_id: str, body: PlaceRequest) -> PilotOut:
         """Put a person of the campaign on a scene (an NPC the GM just authored): on the nearest free

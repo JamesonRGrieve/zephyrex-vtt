@@ -127,7 +127,7 @@ export function drawScene(
   const [left, top] = toScreen(camera, 0, 0);
   context.fillStyle = view.background_color ?? palette.ground;
   context.fillRect(left, top, sceneWidth * camera.zoom, sceneHeight * camera.zoom);
-  // The scene's art, else its place's picture: cover-fitted to the scene, a little dimmed so the grid
+  // The scene's battlemap art (never a place's illustration): cover-fitted, a little dimmed so the grid
   // and tokens read over it.
   const backdrop = picture(view.background_url, redraw);
   if (backdrop) {

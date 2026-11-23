@@ -76,6 +76,14 @@ class RPGSceneExtension(AbstractStaticExtension):
         return cls.scenes(requester_id).set_background_for(scene_id, background_url).model_dump()
 
     @classmethod
+    @ability("move_token_to_scene")
+    async def move_token_to_scene(cls, requester_id: str, token_id: str, scene_id: str) -> dict[str, Any]:
+        """Move a token to another scene of its campaign (the story moves someone): off this scene, at
+        the target's entry on the nearest free cell; a character's token moves as pilot_token moves
+        them (one token per person, their wiki location following). The campaign's GM."""
+        return cls.scenes(requester_id).move_token_to_scene_for(token_id, scene_id).model_dump()
+
+    @classmethod
     @ability("place_person")
     async def place_person(
         cls,

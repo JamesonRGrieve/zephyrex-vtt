@@ -15,7 +15,7 @@ export const viewSchema = z.object({
     gm: z.boolean(),
     viewer: z.string().nullish(),
     lit: z.boolean(),
-    // Drawn under the grid: the scene's art, else its wiki location's picture.
+    // Drawn under the grid: the scene's own battlemap art, or nothing.
     background_url: z.string().nullish(),
     tokens: z.array(
       z.object({
