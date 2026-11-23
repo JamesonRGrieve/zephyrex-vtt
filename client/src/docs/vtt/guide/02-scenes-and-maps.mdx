@@ -1,0 +1,45 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title='VTT/Guide/2. Scenes and maps' />
+
+# Scenes and maps
+
+A scene is one map of a campaign: a battlemap, a room, a stretch of road. It has a grid (pixels per
+cell, and the distance one cell stands for, 5 ft by default), walls, doors, lights, and the tokens
+on it. One scene at a time is the campaign's active scene, the one the players are shown.
+
+The scene's own battlemap art is drawn under the grid. A scene with no art shows its plain
+ground; a place's illustration is never used as a map.
+
+## Getting around the map
+
+- One finger (or a mouse drag) on the ground pans; two fingers pinch to zoom; a mouse wheel zooms.
+- The map opens fitted to its tokens.
+- Tap your token to select it, then tap a cell to move it there. Dragging it works too. Tap it
+  again, or press Escape, to let it go.
+- A long press on a token opens its details.
+- With the keyboard: the map takes focus; Enter selects your next token, the arrow keys move it a
+  cell, Escape lets go.
+
+A move that would pass through a wall is refused by the server, and the token goes back.
+
+## Tools
+
+Above the map, choose **Move** (the default) or **Measure**. With Measure, drag from one point to
+another: the line shows the distance in the scene's units, in whole cells, a diagonal step
+counting as one cell. The line stays until the next measure.
+
+## Darkness and sight
+
+A player sees what their token can see: walls block sight, a closed door blocks it, an open or
+broken one doesn't, and a secret door is never shown. When a scene is dark, the map says so and
+shows only what's lit or close.
+
+## For the GM
+
+- **Doors:** tap a door to open it, or to close an open one. Every view updates at once.
+- **Map controls:** pick the campaign's scene to look at, and **Show to players** to make it the
+  active scene. Under it, everyone in the campaign who isn't on this map yet, each with a
+  **Place** button that puts their token at the scene's entry.
+
+The [Scene stories](?path=/story/vtt-scene--players-view) show both views.

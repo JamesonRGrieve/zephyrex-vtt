@@ -8,10 +8,11 @@ const APP_SRC = path.resolve(import.meta.dirname, '../src');
 const PUBLIC = path.resolve(import.meta.dirname, '../public');
 
 const config: StorybookConfig = {
-  stories: ['../src/**/*.stories.@(js|jsx|mjs|ts|tsx|mdx)'],
-  // Storybook 10 folds actions/controls/interactions/viewport into core; only
-  // links and a11y remain as separate addons here.
-  addons: ['@storybook/addon-links', '@storybook/addon-a11y'],
+  // Stories, and the MDX docs pages (the VTT's user guide and developer docs, under src/docs).
+  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
+  // Storybook 10 folds actions/controls/interactions/viewport into core; links, a11y and docs (the
+  // MDX pages) remain as separate addons here.
+  addons: ['@storybook/addon-links', '@storybook/addon-a11y', '@storybook/addon-docs'],
   framework: {
     name: '@storybook/nextjs',
     options: {},

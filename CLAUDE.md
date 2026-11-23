@@ -23,7 +23,8 @@ deploy/     frameworks.env (the five framework pins), fetch-frameworks.sh, compi
 - Heavy work (installs, builds, test suites) runs on the build runner, never the desktop, in a
   workspace laid out by `deploy/fetch-frameworks.sh`, never against sibling checkouts.
 - `client/pnpm-lock.yaml` and `server/uv.lock` are committed; regenerate them only in a pinned
-  workspace, and in the same commit that bumps `deploy/frameworks.env`.
+  workspace, and in the same commit that bumps `deploy/frameworks.env`, or that adds or removes a
+  dependency the operator approved (2026-11-23: `@storybook/addon-docs`, for the MDX docs).
 - Read the SOP Stack Standards (Python; TypeScript and JavaScript; React and Next.js) before a
   first edit. Work state: Card 256 on Zephyrex Software.
 

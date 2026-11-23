@@ -1,0 +1,45 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title='VTT/Developers/4. Stories and testing' />
+
+# Stories and testing
+
+## Stories
+
+Every component of `@zephyrex/vtt-play` has a story under `client/src/components/`, titled under
+`VTT/`, with a `play` test of what it does. A story never talks to a server: `StoryClient`
+(`client/src/components/vtt/StoryClient.tsx`) puts the framework's providers around the component
+with a stand-in client that answers only the routes the story names (`"POST /v1/dice/sheet"`,
+`"LIST /v1/item_instance"`, a trailing `*` for a prefix) and refuses everything else with a 404.
+A route's answer can be a function of the request body or query.
+
+```tsx
+const ROUTES: Routes = { 'POST /v1/encounter/current': { encounter: null } };
+
+function Order() {
+  return (
+    <StoryClient routes={ROUTES}>
+      <CombatOrder campaignId='k1' />
+    </StoryClient>
+  );
+}
+```
+
+Components that take their data as props (DiceTrayView, DiceReplay) need no client. The stories
+compose into zephyrex-rpg-ai's Storybook by directory, so they import nothing from rpg-ai.
+
+`pnpm storybook-test` runs every story's `play` test and the accessibility check (axe, set to fail
+on any violation in `.storybook/preview.tsx`) against a running Storybook.
+
+## Other tests
+
+- **Unit and component tests:** Vitest, beside each file (`*.test.ts(x)`), with the framework
+  client mocked.
+- **Phone tests:** `client/packages/vtt-play/e2e`, Playwright in a Pixel 7 profile, for the map
+  (pan, pinch, tap-to-move, measure, doors) and the 3D dice.
+- **Server tests:** pytest, beside each extension (`EP_*_test.py` against a real server, the rest
+  pure).
+- **Contract:** `contract/api-cases.json`, the HTTP cases the lite handlers and the server answer the
+  same way.
+
+All of them run on a build runner, never on a desktop.

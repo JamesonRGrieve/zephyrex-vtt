@@ -1,0 +1,29 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title='VTT/Guide/5. Encounters and initiative' />
+
+# Encounters and initiative
+
+An encounter is a fight in a campaign, usually on a scene. The GM starts it with the characters
+taking part (by default everyone with a token on the scene). Initiative is rolled under the
+campaign's rules pack; a combatant whose sheet has nothing to roll is listed, and the fight waits
+until the GM sets their number.
+
+## The order
+
+The combat order shows the round, every combatant from highest initiative down, and whose turn it
+is. Ties go to the higher characteristic, then a roll-off. Defeated combatants stay in the list but
+are skipped when the turn passes. Players see the order without the GM's hidden combatants.
+
+The GM passes the turn with **Next turn**; after the last combatant a new round begins.
+
+## Attacks
+
+On a combatant's turn, the GM (or rpg-ai acting as GM) chooses among the actions the VTT offers:
+the combatant's weapon attacks, from the weapons on their sheet, against any other combatant. An
+attack is resolved on the server: the attack roll against the target's Armor Class, a natural 20
+a critical hit with the damage dice rolled twice, a natural 1 a miss. The damage comes off the
+target's hit points, and at 0 they are defeated.
+
+Each combatant has one action on its turn and one reaction a round, taken off its turn. Distance
+isn't checked yet, so every combatant is offered as a target. Spells and spell slots come next.

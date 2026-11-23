@@ -1,0 +1,41 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title='VTT/Developers/3. Abilities' />
+
+# Abilities other products call
+
+zephyrex-rpg-ai drives the table through abilities: classmethods marked `@ability` on each
+extension's `EXT_*.py`, each also a REST route. Every docstring says who may call it; the GM-only
+ones answer anyone else with a 404.
+
+## Scenes
+
+| Ability                    | Route                                  | Notes                                                                           |
+| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
+| `current_scene`            | `POST /v1/scene/current`               | The campaign's active scene, made and activated if there is none                |
+| `scene_tokens`             | `GET /v1/scene/{id}/tokens`            | The tokens a member may see                                                     |
+| `activate_scene`           | `POST /v1/scene/{id}/activate`         | Make it the scene the players see                                               |
+| `place_person`             | `POST /v1/scene/{id}/place`            | Beside another's token, at a point, or at the entry; one token per person       |
+| `move_token_to_scene`      | `POST /v1/scene_token/{id}/move_scene` | A character's token gets a new id on the new scene                              |
+| `remove_person_from_scene` | `POST /v1/scene/{id}/remove`           | `removed` is false when they had no token there                                 |
+| `pilot_token`              |                                        | Moves a person's token toward a point or a wiki location, by a path round walls |
+
+## Dice and sheets
+
+| Ability             | Route                          | Notes                                                                    |
+| ------------------- | ------------------------------ | ------------------------------------------------------------------------ |
+| `test_options`      | `POST /v1/dice/test-options`   | What a test can name for a character, and `has_sheet`                    |
+| `test`              | `POST /v1/dice/test`           | `advantage` where the pack has it; every die in `rolls`                  |
+| `character_sheet`   | `POST /v1/dice/sheet`          | The sheet, read-only                                                     |
+| `npc_sheet_options` | `POST /v1/builder/npc-options` | `{system, options: [{id, name, level_or_cr, class, subclass, summary}]}` |
+| `npc_sheet`         | `POST /v1/builder/npc-sheet`   | `option_id`, or the closest block by role                                |
+| `build_pregen`      | `POST /v1/builder/pregen`      | `dry_run` and `replace`; the open choices are in `gaps`                  |
+
+## Combat
+
+| Ability              | Route                             | Notes                                                                              |
+| -------------------- | --------------------------------- | ---------------------------------------------------------------------------------- |
+| `start_encounter`    |                                   | Combatants from `person_ids` or the scene's tokens; initiative rolled              |
+| `next_turn`          | `POST /v1/encounter/{id}/next`    | After the last, a new round                                                        |
+| `combat_options`     | `POST /v1/encounter/{id}/options` | `turn`, `action_available`, `reaction`, `actions`, `targets`, `reach: "unchecked"` |
+| `take_combat_action` | `POST /v1/encounter/{id}/action`  | Anything combat_options doesn't offer now is refused                               |

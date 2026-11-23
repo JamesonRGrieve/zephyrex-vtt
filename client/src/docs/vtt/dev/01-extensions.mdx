@@ -1,0 +1,33 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title='VTT/Developers/1. Server extensions' />
+
+# Server extensions
+
+The VTT's server is a consumer of server-framework: each extension under `server/extensions/<name>/`
+has a `manifest.toml` (its dependencies), `BLL_*.py` models and managers (the framework makes their
+tables and REST routes), an `EXT_*.py` with the abilities other products call, and its own Alembic
+history under `migrations/`. The wiki's `rpg_core` and `world_*` extensions load from a second root.
+
+| Extension     | Provides                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `rpg_systems` | Game systems, their rules packs (`packs/`, and `VTT_PACKS_DIRS`), the system of a campaign                                |
+| `rpg_traits`  | Trait templates (abilities, skills, weapons, resources, origins), what each character holds, plot hooks' character checks |
+| `rpg_modules` | Private content modules: a bridge's bundle installed as one account's records and traits                                  |
+| `rpg_dice`    | Dice notation, roll tables, tests and checks, the character sheet read                                                    |
+| `rpg_builder` | Creation steps, ability scores, NPC sheets, pregens' starting sheets                                                      |
+| `rpg_scene`   | Scenes, tokens, walls, lights, what each token sees, moving people between scenes                                         |
+| `rpg_combat`  | Encounters, initiative, turns, combat options and their resolution                                                        |
+| `rpg_table`   | Tables: seats in a conversation, whispers, lines                                                                          |
+
+## Rules every extension keeps
+
+- **The server decides.** Access is checked on the server (the campaign's GM, the character's
+  player or seat); a request it refuses answers 404 for records the requester may not know exist.
+- **Reads that cross ownership are trusted, writes are the requester's.** A manager reads as ROOT
+  once the access rule has passed, filtering soft-deleted rows in the query. Rows a GM's own lists
+  must see (tokens, NPC sheets) are created as the requester; rows a player must not edit around a
+  rule (ability scores) stay the system's.
+- **No rule in code.** A number or rule a system states comes from its pack.
+- **Live rooms.** A change to anything on a scene is heard in that scene's room (with no record
+  data); views read again through the server, which decides what each person sees.

@@ -1,0 +1,37 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title='VTT/Guide/4. Dice' />
+
+# Dice
+
+Every roll is made on the server, so nobody's browser decides a result. The dice tray offers two
+kinds of roll.
+
+## Tests
+
+A test is your character trying something under the campaign's rules: pick a characteristic or a
+skill and a difficulty, add any other modifiers, and roll. The result card shows the total large,
+whether it succeeded, and how the target was reached.
+
+- **Fifth edition:** a D20 Test, d20 plus the ability modifier and the Proficiency Bonus if you're
+  proficient, against the difficulty's DC. Choose **Advantage** or **Disadvantage** to roll two d20s
+  and keep the higher or the lower; the card shows both dice, the dropped one struck through.
+- **A percentile system:** d100 under the target, with degrees of success or failure.
+
+A character with no sheet yet still gets the system's own test, rolled at the rules' human-average
+score, and the card says so.
+
+## Free rolls
+
+Below the tests is the dice rack. Tap a die (d4, d6, d8, d10, d12, d20, d100) to add it, tap the
+minus beside it to take one away, and set a modifier. A lone d20 can be rolled with Advantage or
+Disadvantage. The button shows the formula it will roll, such as `Roll 2d6+3`. For anything the
+rack doesn't build, open **Type a formula**: the server reads notation such as `4d6kh3`.
+
+## 3D dice and history
+
+After a roll the dice tumble in 3D and land on the server's values. If your device asks for less
+motion, or you turn off **Animate dice**, they appear at rest. The last ten rolls are listed under
+the tray, newest first.
+
+See the [Dice tray stories](?path=/story/vtt-dice-tray--fifth-edition-test).
