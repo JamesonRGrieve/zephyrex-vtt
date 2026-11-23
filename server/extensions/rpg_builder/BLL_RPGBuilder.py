@@ -486,13 +486,14 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         else:
             block, source = pick(npcs["blocks"], npcs["generic"], body.role, body.hint)
         rows = self._trusted(PersonTraitManager)
+        # The rows are made as the requester (the campaign's GM, checked above), so the GM's own list
+        # and edits see the sheet; one the system made earlier is replaced, not updated in place.
+        mine = PersonTraitManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
 
         def write(trait_id: str, **values: Any) -> None:
-            live = self._live(rows, person_id=person.id, trait_id=trait_id)
-            if live:
-                rows.update_trusted(id=live[0].id, **values)
-            else:
-                rows.create(person_id=person.id, trait_id=trait_id, **values)
+            for row in self._live(rows, person_id=person.id, trait_id=trait_id):
+                rows.delete(id=row.id)
+            mine.create(person_id=person.id, trait_id=trait_id, **values)
 
         for one, trait, _ in abilities:
             write(trait.id, value=float(block["abilities"][one["slug"]]))
@@ -613,8 +614,10 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         if result.buildable and not body.dry_run:
             for row in existing:
                 rows.delete(id=row.id)
+            # Made as the requester (the pregen's owner, checked above), so their own list sees the sheet.
+            mine = PersonTraitManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
             for row in wanted:
-                rows.create(person_id=person.id, **row)
+                mine.create(person_id=person.id, **row)
             written = len(wanted)
         return PregenOut(
             person_id=person.id,

@@ -171,6 +171,11 @@ def test_npc_sheet_options_list_the_packs_blocks_to_choose_among(server: TestCli
     smith = _create(server, world["gm"], "person", name="Mara", kind="npc", campaign_id=campaign_id)
     made = _run(RPGBuilderExtension.npc_sheet(gm, smith["id"], "blacksmith", option_id="guard"))
     assert made["source_name"] == "Guard" and made["sheet"]["source"] == "compendium"
+    # The sheet is the GM's: their own person_trait list returns it (six abilities, a skill, a weapon,
+    # hit points, AC and Proficiency Bonus), as rpg-ai's GM moves read it.
+    listed = server.get("/v1/person_trait", params={"person_id": smith["id"], "limit": 50}, headers={"Authorization": f"Bearer {world['gm'].jwt}"})
+    assert listed.status_code == 200, listed.text
+    assert len(listed.json()["person_traits"]) >= 6 + 1 + 1 + 3
     with pytest.raises(HTTPException) as unknown:
         _run(RPGBuilderExtension.npc_sheet(gm, smith["id"], "blacksmith", replace=True, option_id="dragon"))
     assert unknown.value.status_code == 422 and "no NPC option 'dragon'" in unknown.value.detail["message"]

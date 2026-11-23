@@ -121,6 +121,9 @@ def test_a_build_writes_the_sheet_once_and_a_rebuild_needs_replace(server: TestC
     traits = TraitManager(requester_id=env("ROOT_ID"), model_registry=registry)
     live = [rows.DB.deleted_at.is_(None)]
     held = {traits.get(id=row.trait_id).slug: row for row in rows.list(filters=live, person_id=world["current"]["id"])}
+    # The pregen's owner lists the sheet through the generic route: the rows are theirs, not the system's.
+    own = server.get("/v1/person_trait", params={"person_id": world["current"]["id"], "limit": 50}, headers=_headers(world["owner"]))
+    assert own.status_code == 200 and len(own.json()["person_traits"]) == 15, own.text
     assert held["strength"].value == 15 and held["religion"].rank == 1 and "fighter" in held
 
     again = _build(server, world["owner"], world["current"]["id"])
