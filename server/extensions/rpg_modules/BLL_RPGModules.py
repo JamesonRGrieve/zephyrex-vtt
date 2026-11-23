@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """rpg_modules: private rules and content modules (operator, 2026-11-21).
 
-The six [redacted] [redacted] lines come in from the redacted Foundry system's compendiums through the bridge
-(tools/foundry-bridge: extract.mjs writes a line's bundle, Install.py installs it). The content is
-private:
+A line's rules and content come in from a source system through a bridge (a bridge writes a line's
+bundle, Install.py installs it). The content is private:
 - a module and everything installed from it belong to the account that installed it, never the
   framework's SYSTEM user, so on a hosted instance no other account sees them;
 - a campaign plays with the modules its GM enables (CampaignModule).
@@ -43,9 +42,9 @@ class ContentModuleModel(
     """One line's rules and content, as one account installed it."""
 
     Manager: ClassVar[Type["ContentModuleManager"]] = None
-    slug: Optional[str] = Field(None, description="redacted-dh2, redacted-rt…")
-    line: Optional[str] = Field(None, description="The source's line key (dh2, rt…)")
-    system_ref: Optional[str] = Field(None, description="The redacted system commit it was read with")
+    slug: Optional[str] = Field(None, description="The module's slug, as its bundle names it")
+    line: Optional[str] = Field(None, description="The source's line key, as its bundle names it")
+    system_ref: Optional[str] = Field(None, description="The source system commit it was read with")
     content_ref: Optional[str] = Field(None, description="The content repository commit it was read from")
     document_count: Optional[int] = Field(None, description="Source documents installed")
     rules: Optional[dict[str, Any]] = Field(None, description="The line's test rules (characteristics, ranks, difficulties…)")
@@ -82,7 +81,7 @@ class ModuleRecordModel(
 
     Manager: ClassVar[Type["ModuleRecordManager"]] = None
     source_id: Optional[str] = Field(None, description="The Foundry document's _id")
-    source_type: Optional[str] = Field(None, description="Its Foundry type (talent, skill, originPath…)")
+    source_type: Optional[str] = Field(None, description="Its source type (talent, skill, spell…)")
     entity_type: Optional[str] = Field(None, description="The vtt record it became (trait…)")
     entity_id: Optional[str] = Field(None, description="That record's id")
     content_hash: Optional[str] = Field(None)
@@ -96,7 +95,7 @@ class ModuleRecordModel(
 
     class Create(BaseModel, ContentModuleModel.Reference.ID):
         # Foundry's compendium UUID (Compendium.<package>.<pack>.<Type>.<_id>, up to ~100 characters),
-        # or a rules key (characteristic:[redacted]).
+        # or a rules key (characteristic:might).
         source_id: str = Field(..., max_length=255)
         source_type: Optional[str] = None
         entity_type: Optional[str] = None

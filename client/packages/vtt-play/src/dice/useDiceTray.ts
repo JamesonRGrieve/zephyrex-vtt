@@ -21,7 +21,7 @@ export interface TestInput {
   name: string;
   difficulty?: string;
   modifiers?: number[];
-  /** Which one of a specialist skill ([redacted]: "[redacted]"). */
+  /** Which one of a specialist skill (Lore: "Stars"). */
   specialisation?: string;
 }
 
@@ -55,7 +55,7 @@ export function useDiceTray(personId: string) {
         .then((answer: unknown) => {
           const parsed = testOptionsSchema.parse(answer).options;
           // No sheet still gets the system's own tests: the server rolls them at the rules' average
-          // (5e: a plain d20), or refuses where the rulebook states none ([redacted]), never a made-up formula.
+          // (5e: a plain d20), or refuses where the rulebook states none (some packs), never a made-up formula.
           setOptions({ state: 'ready', options: parsed });
         })
         .catch((error: unknown) =>

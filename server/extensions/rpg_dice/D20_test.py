@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The D20 Test against the generated dnd-5e pack (SRD 5.2, Playing the Game › D20 Tests)."""
+"""The D20 Test against the generated srd-5e pack (SRD 5.2, Playing the Game › D20 Tests)."""
 
 import pytest
 from zephyrex.extensions.rpg_dice.D20 import ability_modifier, d20_test, proficiency_bonus
 from zephyrex.extensions.rpg_dice.Percentile import TestError
 from zephyrex.extensions.rpg_systems.Packs import load_pack
 
-PACK = load_pack("dnd-5e")
+PACK = load_pack("srd-5e")
 
 
 @pytest.mark.parametrize(("score", "modifier"), [(1, -5), (3, -4), (8, -1), (10, 0), (11, 0), (12, 1), (15, 2), (20, 5), (30, 10)])

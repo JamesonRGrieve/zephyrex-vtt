@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""rpg_systems 002: a game system's slug (its stable name, redacted) and the wiki setting it
+"""rpg_systems 002: a game system's slug (its stable name, srd-5e) and the wiki setting it
 belongs to (setting_id: a reference by id to the wiki's rpg_core SettingModel, no foreign key, since
 the wiki sits above vtt). Inspector-guarded: a no-op where a column is already there.
 """
@@ -17,7 +17,7 @@ depends_on: Union[str, Sequence[str], None] = None
 # Neither is unique: people make their own systems, and two may share a name. The seed (003) skips a
 # slug already there, so the catalog holds each seeded slug once.
 COLUMNS = [
-    ("slug", "Stable name (redacted); from the name when not given"),
+    ("slug", "Stable name (srd-5e); from the name when not given"),
     ("setting_id", "The wiki's setting it belongs to (a reference, no FK)"),
 ]
 

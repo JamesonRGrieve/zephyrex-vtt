@@ -1,28 +1,26 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """A percentile test, d100 roll-under with degrees of success and failure, as a system pack's
 ``test`` spec describes it (rpg_systems/packs/<system>.json). Pure: the roll is given, so the server
-rolls with its own random source and the tests (contract/[redacted]-test-cases.json) give theirs.
+rolls with its own random source and the tests (contract/percentile-test-cases.json) give theirs.
 
-[redacted], Core Rulebook:
+The rules, as a d100 roll-under pack states them:
 - The target is the characteristic, plus the skill's rank bonus (an untrained skill instead takes the
   pack's penalty), plus the test's modifiers. The modifiers are summed first, and their total is held
-  within ± the cap (p. 24).
-- The test succeeds when the roll is at or under the target (p. 22). A roll of the natural success
+  within ± the cap.
+- The test succeeds when the roll is at or under the target. A roll of the natural success
   value (1) always succeeds and of the natural failure value (100) always fails, whatever the
   target.
 - Success gives one degree, plus the target's tens digit minus the roll's; failure gives one, plus
-  the roll's tens digit minus the target's (p. 24). An automatic success or failure still has at
+  the roll's tens digit minus the target's. An automatic success or failure still has at
   least one degree.
 
-The other [redacted] lines differ only in what a pack's spec says (the redacted system's rules, read by
-the Foundry bridge, 2026-11-21):
-- ``degrees``: "gen2" (dh2, bc, ow: the tens-digit rule above; "tens" is its old name) or "gen1"
-  (dh1, dw, rt: the margin's full tens, so a bare pass or fail scores 0 degrees);
+Percentile packs differ only in what their spec says:
+- ``degrees``: "gen2" (the tens-digit rule above; "tens" is its old name) or "gen1" (the margin's full
+  tens, so a bare pass or fail scores 0 degrees);
 - ``untrained``: "penalty" (an aptitude line: the characteristic plus ``untrained_skill``, -20) or
   "half" (a career line: half the characteristic, rounded down);
 - the skill ranks a pack lists (four on aptitude lines, three on career lines);
-- a skill that can't be attempted untrained: a [redacted] specialist skill, or a career line's Advanced
-  skill.
+- a skill that can't be attempted untrained (a specialist skill, or another the pack marks).
 """
 
 from __future__ import annotations
@@ -99,10 +97,10 @@ def test(
     modifiers: Sequence[int] = (),
 ) -> Outcome:
     """A characteristic or skill test under a pack. For a characteristic test leave ``skill_rank``
-    unset and ``trained`` true. For a skill test, ``skill_rank`` is the pack's rank (1–4 Known…
-    Veteran on an aptitude line, 1–3 on a career line); ``trained`` false is untrained, refused when
-    ``specialist`` says the skill can't be attempted untrained (a [redacted] specialist skill, a career
-    line's Advanced skill)."""
+    unset and ``trained`` true. For a skill test, ``skill_rank`` is the pack's rank (1–4 on an aptitude
+    line, 1–3 on a career line); ``trained`` false is untrained, refused when
+    ``specialist`` says the skill can't be attempted untrained (a specialist skill, or
+    another the pack marks)."""
     spec = pack["test"]
     steps: list[dict[str, Any]] = [{"step": "characteristic", "value": characteristic}]
     base = characteristic

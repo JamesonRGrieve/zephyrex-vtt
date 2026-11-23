@@ -20,30 +20,30 @@ const { testOptionsSchema } = await import('./schemas');
 const OPTIONS = {
   options: {
     person_id: 'p1',
-    system: 'redacted',
-    characteristics: [{ slug: '[redacted]', name: '[redacted]', short: 'WS' }],
+    system: 'percentile-test',
+    characteristics: [{ slug: 'might', name: 'Might', short: 'MT' }],
     skills: [
       { slug: 'awareness', name: 'Awareness', characteristic: 'perception', untrainable: false },
       {
-        slug: '[redacted]',
-        name: '[redacted]',
+        slug: 'lore',
+        name: 'Lore',
         characteristic: 'intelligence',
         untrainable: true,
-        specialisations: ['[redacted]'],
+        specialisations: ['Sea Lanes'],
       },
     ],
     difficulties: [
-      { slug: 'challenging', modifier: 0 },
+      { slug: 'standard', modifier: 0 },
       { slug: 'hard', modifier: -20 },
     ],
-    default_difficulty: 'challenging',
+    default_difficulty: 'standard',
   },
 };
 
 const RESULT = {
   test: {
     person_id: 'p1',
-    system: 'redacted',
+    system: 'percentile-test',
     name: 'Awareness',
     kind: 'skill',
     skill_rank: 1,
@@ -84,7 +84,7 @@ describe('the dice tray', () => {
     post.mockImplementation((path: string) => Promise.resolve(path === '/v1/dice/test-options' ? OPTIONS : RESULT));
     render(<DiceTray personId='p1' prefill={{ name: 'awareness', modifiers: [20] }} />);
     expect(await screen.findByLabelText('Test')).toHaveValue('awareness');
-    expect(screen.getByRole('option', { name: '[redacted] (trained only)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Lore (trained only)' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: 'Hard (-20)' }));
     await userEvent.click(screen.getByRole('button', { name: 'Roll the test' }));
     expect(post).toHaveBeenLastCalledWith('/v1/dice/test', {
@@ -125,7 +125,7 @@ describe('the dice tray', () => {
       <DiceResult
         result={{
           person_id: 'p1',
-          system: 'dnd-5e',
+          system: 'srd-5e',
           name: 'stealth',
           kind: 'skill',
           skill_rank: null,
@@ -167,14 +167,14 @@ describe('the dice tray', () => {
   it('asks which specialisation of a specialist skill, offering the character’s own', async () => {
     post.mockImplementation((path: string) => Promise.resolve(path === '/v1/dice/test-options' ? OPTIONS : RESULT));
     render(<DiceTray personId='p1' />);
-    await userEvent.selectOptions(await screen.findByLabelText('Test'), '[redacted]');
-    const which = screen.getByLabelText('Which [redacted]');
+    await userEvent.selectOptions(await screen.findByLabelText('Test'), 'lore');
+    const which = screen.getByLabelText('Which Lore');
     expect(screen.getByRole('button', { name: 'Roll the test' })).toBeDisabled();
-    expect(document.querySelector('#dice-tray-specialisations option[value="[redacted]"]')).not.toBeNull();
-    await userEvent.type(which, '[redacted]');
+    expect(document.querySelector('#dice-tray-specialisations option[value="Sea Lanes"]')).not.toBeNull();
+    await userEvent.type(which, 'Sea Lanes');
     await userEvent.click(screen.getByRole('button', { name: 'Roll the test' }));
     expect(post).toHaveBeenLastCalledWith('/v1/dice/test', {
-      test: { person_id: 'p1', modifiers: [], name: '[redacted]', difficulty: 'challenging', specialisation: '[redacted]' },
+      test: { person_id: 'p1', modifiers: [], name: 'lore', difficulty: 'standard', specialisation: 'Sea Lanes' },
     });
   });
 
@@ -200,7 +200,7 @@ describe('the dice tray', () => {
     expect(screen.getByText('Whole numbers only, separated by commas.')).toBeInTheDocument();
   });
 
-  it('starts the free roll on the system’s die: a d20 for 5e or no pack, a d100 for the [redacted] lines', () => {
+  it('starts the free roll on the system’s die: a d20 for 5e or no pack, a d100 for the percentile packs', () => {
     expect(defaultFormula(null)).toBe('1d20');
     expect(defaultFormula(testOptionsSchema.parse({ options: { ...OPTIONS.options, test_kind: 'd20-over' } }).options)).toBe(
       '1d20',

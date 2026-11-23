@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Ability score methods against the generated dnd-5e pack (SRD 5.2, Generate Your Scores)."""
+"""Ability score methods against the generated srd-5e pack (SRD 5.2, Generate Your Scores)."""
 
 import pytest
 from zephyrex.extensions.rpg_builder.Abilities import AbilityError, check_scores
 from zephyrex.extensions.rpg_systems.Packs import load_pack
 
-PACK = load_pack("dnd-5e") or {}
+PACK = load_pack("srd-5e") or {}
 METHODS = PACK.get("ability_methods", {})
 SIX = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]
 

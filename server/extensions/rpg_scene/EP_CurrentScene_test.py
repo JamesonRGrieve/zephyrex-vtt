@@ -43,7 +43,7 @@ def _current(server: TestClient, user: Any, campaign_id: str) -> Any:
 
 def test_a_player_sees_the_gms_scene_and_the_first_becomes_current(server: TestClient) -> None:
     gm, player, stranger = create_user(server), create_user(server), create_user(server)
-    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id)
+    campaign = _create(server, gm, "campaign", name="Harbour", user_id=gm.id)
     _create(server, gm, "person", name="Rhia", kind="pc", user_id=player.id, campaign_id=campaign["id"])
     bridge = _create(server, gm, "scene", name="Bridge", campaign_id=campaign["id"], width=800, height=600)
     shown = _current(server, player, campaign["id"])
@@ -167,18 +167,19 @@ def test_a_campaign_without_a_system_uses_its_settings_packed_system(server: Tes
     """A vault-imported scenario (or its playthrough) has a setting but no game system: rpg_dice uses
     the one system of that setting with a rules pack."""
     from zephyrex.extensions.rpg_dice.EXT_RPGDice import RPGDiceExtension
-    from zephyrex.extensions.rpg_systems.EXT_RPGSystems import RPGSystemsExtension
+    from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager
+    from zephyrex.lib.Environment import env
+    from test_support import percentile_system
 
     gm = create_user(server)
-    systems = {one["slug"]: one for one in asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))}
-    setting_id = systems["dnd-5e"].get("setting_id")
-    if setting_id is None:
-        pytest.skip("the dnd-5e system has no setting in this database")
-    campaign = _create(server, gm, "campaign", name="Imported", user_id=gm.id, setting_id=setting_id)
+    setting = _create(server, gm, "setting", name="Far Shores", slug="far-shores")
+    system = percentile_system(server)
+    systems = GameSystemManager(requester_id=env("ROOT_ID"), model_registry=server.app.state.model_registry)
+    systems.update(id=system["id"], setting_id=setting["id"])
+    campaign = _create(server, gm, "campaign", name="Imported", user_id=gm.id, setting_id=setting["id"])
     villager = _create(server, gm, "person", name="Villager", kind="npc", campaign_id=campaign["id"])
     options = asyncio.run(RPGDiceExtension.test_options(str(gm.id), villager["id"]))
-    assert options["system"] == "dnd-5e" and len(options["skills"]) == 18
-
+    assert options["system"] == "percentile-test" and len(options["skills"]) == 4
 
 def test_the_gm_places_a_new_npc_beside_the_seats_character(server: TestClient) -> None:
     gm, player = create_user(server), create_user(server)

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""rpg_traits 002: a trait's slug, the option's stable name within its kind ([redacted], [redacted]),
+"""rpg_traits 002: a trait's slug, the option's stable name within its kind (repair, seafarer),
 which a plot hook's character check names (the wiki's contract/requirement-cases.json). A trait made
 before it keeps a NULL slug until it is next saved; checks match only traits that have one.
 Inspector-guarded: a no-op where the column is already there.
@@ -29,7 +29,7 @@ def upgrade() -> None:
                     sa.String(),
                     nullable=True,
                     comment=(
-                        "The option's stable name within its kind ([redacted], [redacted]): what a plot hook's "
+                        "The option's stable name within its kind (repair, seafarer): what a plot hook's "
                         "character check names (contract/requirement-cases.json). From the name when not given."
                     ),
                 )

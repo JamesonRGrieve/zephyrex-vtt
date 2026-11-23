@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Imports character sheets from vault notes onto a campaign's persons, server-side.
 
-    python tools/vault-import/import.py --notes "<vault>/OneShots/[redacted]/Characters/Pregens" \
-        --owner <the GM's user id> --campaign <campaign id> [--line dh2] [--app module:factory] [--dry-run]
+    python tools/vault-import/import.py --notes "<vault>/<scenario>/Characters/Pregens" \
+        --owner <the GM's user id> --campaign <campaign id> --line <line> [--app module:factory] [--dry-run]
 
 Each note whose frontmatter has a ``canonical_sheet`` becomes the sheet of the campaign's person
 with the note's ``name`` (the wiki importer makes the persons first). The line's module must be
@@ -40,7 +40,7 @@ def main() -> int:
     parser.add_argument("--notes", required=True, type=Path, help="A note, or a folder of notes")
     parser.add_argument("--owner", required=True, help="The campaign's GM, who owns the installed module")
     parser.add_argument("--campaign", required=True, help="The campaign whose persons get the sheets")
-    parser.add_argument("--line", default="dh2")
+    parser.add_argument("--line", required=True, help="The installed module's line key (its bundle's)")
     parser.add_argument("--app", default="vtt_app:create", help="The app factory to boot, module:function")
     parser.add_argument("--dry-run", action="store_true", help="Print the sheets read; write nothing")
     args = parser.parse_args()
@@ -73,7 +73,7 @@ def main() -> int:
 
         installed = [
             one
-            for one in as_owner(ContentModuleManager).list(slug=f"redacted-{args.line}")
+            for one in as_owner(ContentModuleManager).list(line=args.line)
             if str(one.created_by_user_id) == str(args.owner)
         ]
         if not installed:

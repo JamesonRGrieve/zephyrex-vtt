@@ -41,12 +41,12 @@ def _person(server: TestClient, user: Any, person_id: str) -> dict[str, Any]:
 
 def test_the_gm_pilots_a_character_round_walls_between_scenes_and_off_the_map(server: TestClient) -> None:
     gm = create_user(server)
-    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id)
-    ship = _create(server, gm, "location", name="The [redacted]")
+    campaign = _create(server, gm, "campaign", name="Harbour", user_id=gm.id)
+    ship = _create(server, gm, "location", name="The Grey Gull")
     deck = _create(server, gm, "location", name="Pilgrim Deck", parent_id=ship["id"])
     chapel = _create(server, gm, "location", name="Chapel", parent_id=deck["id"])
     brig = _create(server, gm, "location", name="Brig", parent_id=ship["id"])
-    planet = _create(server, gm, "location", name="[redacted]")
+    planet = _create(server, gm, "location", name="Farport")
     vell = _create(server, gm, "person", name="Captain Vell", campaign_id=campaign["id"])
     deck_scene = _create(
         server, gm, "scene", name="Pilgrim Deck", campaign_id=campaign["id"], location_id=deck["id"], width=1000, height=600

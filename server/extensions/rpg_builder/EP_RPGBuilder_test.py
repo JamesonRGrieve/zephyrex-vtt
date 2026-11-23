@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Ability scores by the rules as written, against a real server under the dnd-5e pack: the methods
+"""Ability scores by the rules as written, against a real server under the srd-5e pack: the methods
 offered, the roll kept on the server (a player can't roll again for a better set), scores checked
 against the method and written as the character's values, which tests then use; a player sets them
 once, the GM may redo them; a stranger gets a 404; a pack without methods says so."""
@@ -16,6 +16,7 @@ from zephyrex.extensions.rpg_dice.EXT_RPGDice import RPGDiceExtension
 from zephyrex.extensions.rpg_systems.EXT_RPGSystems import RPGSystemsExtension
 from zephyrex.testing.factories import create_user
 
+from test_support import percentile_system
 from vtt_app import create
 
 SIX = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]
@@ -38,8 +39,9 @@ def _create(server: TestClient, user: Any, resource: str, **fields: Any) -> dict
 def world(server: TestClient) -> dict[str, Any]:
     gm, player, stranger = create_user(server), create_user(server), create_user(server)
     systems = {one["slug"]: one for one in asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))}
-    campaign = _create(server, gm, "campaign", name="Split Antler", user_id=gm.id, game_system_id=systems["dnd-5e"]["id"])
-    gothic = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id, game_system_id=systems["redacted"]["id"])
+    campaign = _create(server, gm, "campaign", name="Split Antler", user_id=gm.id, game_system_id=systems["srd-5e"]["id"])
+    percentile = percentile_system(server, gm)
+    gothic = _create(server, gm, "campaign", name="Farport", user_id=gm.id, game_system_id=percentile["id"])
     return {
         "gm": gm, "player": player, "stranger": stranger,
         "brann": _create(server, gm, "person", name="Brann", kind="pc", user_id=player.id, campaign_id=campaign["id"]),

@@ -57,9 +57,9 @@ beforeEach(() => {
 describe('the seat list', () => {
   it('shows who sits where, linking each character to its wiki page', async () => {
     serve();
-    render(<SeatList conversationId='c1' personHref={(id) => `/w/voidship/person/${id}`} />);
+    render(<SeatList conversationId='c1' personHref={(id) => `/w/harbour/person/${id}`} />);
     const osk = await screen.findByRole('link', { name: 'Osk Halleran' });
-    expect(osk).toHaveAttribute('href', '/w/voidship/person/osk');
+    expect(osk).toHaveAttribute('href', '/w/harbour/person/osk');
     expect(within(osk.closest('li')!).getByText('Player')).toBeInTheDocument();
     expect(within(screen.getByRole('link', { name: 'Captain Vell' }).closest('li')!).getByText('NPC')).toBeInTheDocument();
   });

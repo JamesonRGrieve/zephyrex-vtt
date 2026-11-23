@@ -37,7 +37,7 @@ def _changes(server: TestClient, user: Any, room: str, after: str | None = None)
 
 def test_a_token_move_is_heard_in_its_scene_room_and_says_nothing_of_where(server: TestClient) -> None:
     gm, stranger = create_user(server), create_user(server)
-    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id)
+    campaign = _create(server, gm, "campaign", name="Harbour", user_id=gm.id)
     scene = _create(server, gm, "scene", name="Bridge", campaign_id=campaign["id"])
     room = f"scene/{scene['id']}"
     start = _changes(server, gm, room)
@@ -64,7 +64,7 @@ def test_a_token_move_is_heard_in_its_scene_room_and_says_nothing_of_where(serve
 
 def test_a_seat_is_heard_in_its_tables_conversation_room(server: TestClient) -> None:
     gm = create_user(server)
-    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id)
+    campaign = _create(server, gm, "campaign", name="Harbour", user_id=gm.id)
     table = _create(server, gm, "table", name="Session 1", campaign_id=campaign["id"])
     room = f"conversation/{table['conversation_id']}"
     cursor = _changes(server, gm, room).json()["next"]
@@ -78,7 +78,7 @@ def test_a_seat_is_heard_in_its_tables_conversation_room(server: TestClient) -> 
 
 def test_scenes_and_tables_are_news_in_their_campaigns_room_but_token_moves_are_not(server: TestClient) -> None:
     gm = create_user(server)
-    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id)
+    campaign = _create(server, gm, "campaign", name="Harbour", user_id=gm.id)
     room = f"campaign/{campaign['id']}"
     assert _changes(server, gm, room).status_code == 200
     # A cursor needs a change in the room to point at (an empty room's `next` is null).

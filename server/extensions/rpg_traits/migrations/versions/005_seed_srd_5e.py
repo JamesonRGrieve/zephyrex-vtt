@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""rpg_traits 005: the [redacted] system pack's abilities and skills, as trait templates of the dnd-5e
-game system (rpg_systems' seed). The pack file (rpg_systems/packs/dnd-5e.json, generated from the
+"""rpg_traits 005: the fifth-edition SRD pack's abilities and skills, as trait templates of the srd-5e
+game system (rpg_systems' seed). The pack file (rpg_systems/packs/srd-5e.json, generated from the
 SRD 5.2's own text) is the source. A character holds an ability score as a PersonTrait value, and a
 skill as a PersonTrait rank (1: proficient, 2: Expertise).
 
 Written as the framework's SYSTEM user, so everyone reads them and only ROOT and SYSTEM change them.
-A template already there (same system, kind and slug) is left as it is; with no dnd-5e
+A template already there (same system, kind and slug) is left as it is; with no srd-5e
 system, it does nothing. The downgrade removes only the templates nobody has changed since.
 """
 
@@ -24,7 +24,7 @@ down_revision: Union[str, None] = "004_rpg_traits_person_trait_specialisation"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-PACK_FILE = Path(__file__).resolve().parents[3] / "rpg_systems" / "packs" / "dnd-5e.json"
+PACK_FILE = Path(__file__).resolve().parents[3] / "rpg_systems" / "packs" / "srd-5e.json"
 
 game_systems = sa.table("game_systems", sa.column("id", sa.String), sa.column("slug", sa.String))
 traits = sa.table(

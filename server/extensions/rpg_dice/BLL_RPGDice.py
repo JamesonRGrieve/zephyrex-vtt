@@ -76,7 +76,7 @@ def live_draw(sides: int) -> int:
 
 
 def stat_name(name: str) -> str:
-    """How a trait is named in a formula: ``[redacted]`` is ``@weapon_skill``."""
+    """How a trait is named in a formula: ``Sleight of Hand`` is ``@sleight_of_hand``."""
     return _NOT_A_WORD.sub("_", name.strip().lower()).strip("_")
 
 
@@ -275,12 +275,12 @@ MAX_MODIFIERS = 20
 
 class TestRequest(PlainModel):
     person_id: str
-    # A characteristic or skill of the campaign's system pack, by slug ([redacted], [redacted]).
+    # A characteristic or skill of the campaign's system pack, by slug (might, repair).
     name: str = Field(..., max_length=100)
-    # A difficulty of the pack (redacted: trivial … hellish); none is the pack's default.
+    # A difficulty of the pack (a d100 pack: easy … very hard); none is the pack's default.
     difficulty: Optional[str] = Field(None, max_length=40)
     modifiers: list[int] = Field(default_factory=list, max_length=MAX_MODIFIERS)
-    # Which specialisation of a specialist skill ([redacted]: "[redacted]"); required for those, refused
+    # Which specialisation of a specialist skill (Lore: "Stars"); required for those, refused
     # for the rest. Matched case-insensitively against the character's own.
     specialisation: Optional[str] = Field(None, max_length=100)
 
@@ -305,7 +305,7 @@ class TestOut(PlainModel):
     natural: Optional[Literal["success", "failure"]]
     steps: list[dict[str, Any]]
     total: Optional[int] = Field(None, description="A d20 test's roll plus its modifiers (none for d100 roll-under)")
-    test_kind: str = Field("d100-under", description="The pack's test: d100-under ([redacted]) or d20-over (5e)")
+    test_kind: str = Field("d100-under", description="The pack's test: d100-under (percentile) or d20-over (5e)")
     no_sheet: bool = Field(False, description="Rolled for a character with no value for it, as the pack's rules say")
 
 
@@ -347,7 +347,7 @@ class TestOptionsOut(PlainModel):
     # Whether the character has a sheet under this pack (any of its characteristics set); without one
     # a tray offers formulas only.
     has_sheet: bool = True
-    test_kind: str = Field("d100-under", description="The pack's test: d100-under ([redacted]) or d20-over (5e)")
+    test_kind: str = Field("d100-under", description="The pack's test: d100-under (percentile) or d20-over (5e)")
 
 
 class TestOptionsResultEnvelope(PlainModel):
@@ -420,7 +420,7 @@ class InitiativeResultEnvelope(PlainModel):
 
 
 def initiative_bonus(value: float, kind: str) -> int:
-    """A characteristic's initiative bonus by the pack's rule: ``tens``, its tens digit (the [redacted]
+    """A characteristic's initiative bonus by the pack's rule: ``tens``, its tens digit (a percentile
     lines' characteristic bonus); ``modifier``, (value − 10) / 2 rounded down (d20 ability modifiers)."""
     if kind == "tens":
         return int(value) // 10
@@ -547,7 +547,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
 
     def _system_trait(self, name: str, campaign: Any) -> list[Any]:
         """The system-level traits (``campaign_id`` NULL) ``@name`` can mean in this campaign. A trait
-        installed by a content module (a [redacted] line: its owner's own) counts only when that module is
+        installed by a content module (a private line: its owner's own) counts only when that module is
         enabled on the campaign (CampaignModule), and then it wins over the system's templates;
         another account's private module is never one of them, though a trusted read lists it."""
         candidates = [
@@ -709,7 +709,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         return str(packed[0].id) if len(packed) == 1 else None
 
     def _module_pack(self, campaign: Any, system: Any) -> Optional[dict[str, Any]]:
-        """A system with no committed pack (the private [redacted] lines) runs by the rules of a content
+        """A system with no committed pack (a private instance's lines) runs by the rules of a content
         module enabled on the campaign for that system: the Foundry bridge's rules step writes them in
         a pack's shape (test, skill ranks, difficulties, characteristics, skills, and character
         creation). None when no enabled module of the system has rules."""
@@ -869,7 +869,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         self, body: TestRequest, person: Any, campaign: Any, gm: bool, pack: dict[str, Any],
         skill: Optional[dict[str, Any]], trait: Any, rank: Optional[int], no_sheet: bool,
     ) -> TestOut:
-        """A D20 Test (a d20-over pack: [redacted]): ability modifier, Proficiency Bonus by level when
+        """A D20 Test (a d20-over pack: the 5e SRD): ability modifier, Proficiency Bonus by level when
         proficient, against the difficulty's DC; a character with no score tests at the pack's human
         average, flagged no_sheet."""
         if no_sheet:
@@ -910,7 +910,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         )
 
     def test_for(self, body: TestRequest) -> TestOut:
-        """A test under the campaign's system pack ([redacted]: d100 roll-under with degrees),
+        """A test under the campaign's system pack (d100 roll-under with degrees, or a d20-over test),
         rolled on the server: the characteristic resolved as a check resolves a stat, plus the
         skill's rank, the difficulty and the modifiers."""
         person, campaign, gm = self._character(body.person_id)
@@ -927,7 +927,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         if specialist and not _same(body.specialisation):
             raise HTTPException(
                 status_code=422,
-                detail={"message": f"Name which {skill['name']} this is, e.g. {skill['name']} ([redacted])"},
+                detail={"message": f"Name which {skill['name']} this is, e.g. {skill['name']} (Stars)"},
             )
         if not specialist and body.specialisation:
             raise HTTPException(status_code=422, detail={"message": f"{body.name} has no specialisations"})
@@ -937,7 +937,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         if pack["test"]["kind"] == "d20-over":
             return self._d20_test(body, person, campaign, gm, pack, skill, trait, rank, no_sheet)
         if no_sheet and pack["test"].get("no_sheet_score") is None:
-            # The pack's rulebook states no average to test a sheetless character at ([redacted] doesn't):
+            # The pack's rulebook states no average to test a sheetless character at (not every rulebook does):
             # a value is needed, never a made-up number.
             raise HTTPException(
                 status_code=422,
@@ -980,8 +980,8 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
 
     def initiative_for(self, body: InitiativeRequest) -> InitiativeOut:
         """A character's initiative under the campaign's system pack, rolled on the server: the
-        pack's dice plus the bonus of its characteristic ([redacted]: 1d10 + Agility bonus,
-        p. 218). ``value`` is the characteristic itself, which breaks ties."""
+        pack's dice plus the bonus of its characteristic (a percentile pack: 1d10 + a characteristic's
+        tens). ``value`` is the characteristic itself, which breaks ties."""
         person, campaign, gm = self._character(body.person_id)
         pack = self._pack_for(campaign)
         rule = pack.get("initiative")
@@ -1049,7 +1049,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         authentication_type="jwt",
         expose_in=(ExposeIn.REST,),
         openapi_tags=("Dice",),
-        summary="Roll a test under the campaign's system pack ([redacted]: d100 with degrees)",
+        summary="Roll a test under the campaign's system pack (d100 with degrees, or a d20 test)",
     )
     async def test_route(self, body: TestEnvelope) -> TestResultEnvelope:
         return TestResultEnvelope(test=self.test_for(body.test))
@@ -1088,7 +1088,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
         authentication_type="jwt",
         expose_in=(ExposeIn.REST,),
         openapi_tags=("Dice",),
-        summary="Roll a character's initiative under the campaign's system pack ([redacted]: 1d10 + Agility bonus)",
+        summary="Roll a character's initiative under the campaign's system pack (its dice plus a characteristic's bonus)",
     )
     async def initiative_route(self, body: InitiativeEnvelope) -> InitiativeResultEnvelope:
         return InitiativeResultEnvelope(initiative=self.initiative_for(body.initiative))

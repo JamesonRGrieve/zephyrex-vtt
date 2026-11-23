@@ -38,28 +38,16 @@ def test_the_named_systems_are_seeded_once_each(server: TestClient) -> None:
     slugs = [one["slug"] for one in listed]
     for slug in SEEDED:
         assert slugs.count(slug) == 1, slug
-    heresy = next(one for one in listed if one["slug"] == "redacted")
-    assert heresy["name"] == "[redacted]"
+    fifth = next(one for one in listed if one["slug"] == "srd-5e")
+    assert fifth["name"] == "SRD 5.2 (fifth-edition rules)"
 
 
-def _setting(server: TestClient, user: Any, slug: str) -> str:
-    response = server.get("/v1/setting", params={"slug": slug}, headers=_headers(user))
-    assert response.status_code == 200, response.text
-    found = response.json()["settings"]
-    assert len(found) == 1, found
-    return str(found[0]["id"])
-
-
-def test_each_seeded_system_belongs_to_the_wikis_setting(server: TestClient) -> None:
-    reader = create_user(server)
+def test_the_public_seed_names_no_setting_specific_system() -> None:
+    """Setting-specific systems are private (operator ruling, 2026-11-23): an operator imports them into
+    a private instance; the open seed carries only openly licensed rules, tied to no setting."""
     seed = json.loads((Path(__file__).parent / "game-systems.json").read_text())["systems"]
-    listed = {one["slug"]: one for one in _systems(reader)}
-    for system in seed:
-        assert listed[system["slug"]]["setting_id"] == _setting(server, reader, system["setting"]), system["slug"]
-    forty_k = _setting(server, reader, "redacted")
-    assert sorted(one["slug"] for one in _systems(reader, forty_k)) == sorted(
-        one["slug"] for one in seed if one["setting"] == "redacted"
-    )
+    assert [one["slug"] for one in seed] == ["srd-5e"]
+    assert all(one["setting"] is None for one in seed)
 
 
 def test_a_system_made_without_a_slug_gets_one_from_its_name(server: TestClient) -> None:
@@ -83,6 +71,6 @@ def test_systems_filter_by_the_wikis_setting(server: TestClient) -> None:
 
 def test_the_catalog_is_readable_over_rest(server: TestClient) -> None:
     reader = create_user(server)
-    response = server.get("/v1/game_system", params={"slug": "redacted"}, headers=_headers(reader))
+    response = server.get("/v1/game_system", params={"slug": "srd-5e"}, headers=_headers(reader))
     assert response.status_code == 200, response.text
-    assert [one["slug"] for one in response.json()["game_systems"]] == ["redacted"]
+    assert [one["slug"] for one in response.json()["game_systems"]] == ["srd-5e"]

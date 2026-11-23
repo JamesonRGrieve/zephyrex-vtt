@@ -4,9 +4,9 @@
 A sheet is what a vault note's frontmatter holds (tools/vault-import reads it): characteristics by
 their short name, resources, skills with their rank and specialisation, and the Foundry documents
 the character has (talents, gear). Each maps through the module's own records, never by guessing:
-- a characteristic: the record ``characteristic:<slug>`` (WS → [redacted], by the module's rules);
+- a characteristic: the record ``characteristic:<slug>`` (its short name, by the module's rules);
 - a resource: ``resource:<slug>`` (wounds, fate);
-- a skill: the module's skill trait with that slug ([redacted] → [redacted]);
+- a skill: the module's skill trait with that slug (sleightOfHand → sleight-of-hand);
 - a document: the record whose source_id is its Foundry _id, when it's a trait (a talent).
 Gear isn't a trait: it waits for the wiki's items (P3) and is reported as skipped, with anything
 else that didn't map. Writes as the owner (the campaign's GM); a re-import replaces the person's
@@ -28,21 +28,6 @@ from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[impor
     TraitManager,
 )
 
-# Foundry's characteristic short names, for a module whose rules don't carry them.
-SHORTS: dict[str, str] = {
-    "WS": "[redacted]",
-    "BS": "[redacted]",
-    "S": "strength",
-    "T": "toughness",
-    "Ag": "agility",
-    "Int": "intelligence",
-    "Per": "perception",
-    "WP": "willpower",
-    "Fel": "fellowship",
-    "Inf": "influence",
-}
-
-
 @dataclass
 class SheetSummary:
     person_id: str
@@ -52,12 +37,12 @@ class SheetSummary:
 
 
 def kebab(key: str) -> str:
-    """A Foundry key as a slug: [redacted] → [redacted], [redacted] → [redacted]."""
+    """A Foundry key as a slug: sleightOfHand → sleight-of-hand, animalHandling → animal-handling."""
     return re.sub(r"([a-z])([A-Z])", r"\1-\2", key).replace("_", "-").lower()
 
 
 def foundry_id(reference: Any) -> Optional[str]:
-    """A document's _id from a compendium UUID (Compendium.redacted.<pack>.Item.<id>) or a bare id."""
+    """A document's _id from a compendium UUID (Compendium.<system>.<pack>.Item.<id>) or a bare id."""
     uuid = compendium_uuid(reference)
     return None if uuid is None else uuid.rsplit(".", 1)[-1]
 
@@ -71,7 +56,7 @@ def compendium_uuid(reference: Any) -> Optional[str]:
 
 def sheet_from_frontmatter(frontmatter: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     """A sheet from a vault note's frontmatter, or None when the note has none. Reads the two blocks
-    the redacted system builds its actors from: ``initial_build`` (base64 JSON: characteristics,
+    the source system builds its actors from: ``initial_build`` (base64 JSON: characteristics,
     wounds, fate) and ``canonical_sheet`` (skill advancements with their specialisation, where
     advance N is rank N, and the compendium documents the character has). canonical_sheet is
     authoritative where the two differ."""
@@ -103,7 +88,7 @@ def import_sheet(
 
     modules = [
         one
-        for one in as_owner(ContentModuleManager).list(slug=f"redacted-{line}")
+        for one in as_owner(ContentModuleManager).list(line=line)
         if str(one.created_by_user_id) == str(owner_id)
     ]
     if not modules:
@@ -120,7 +105,7 @@ def import_sheet(
         for trait in as_owner(TraitManager).list(kind="skill")
         if trait.id in module_traits and trait.slug
     }
-    shorts = dict(SHORTS)
+    shorts: dict[str, str] = {}
     for one in (module.rules or {}).get("characteristics") or []:
         if one.get("short"):
             shorts[one["short"]] = one["slug"]

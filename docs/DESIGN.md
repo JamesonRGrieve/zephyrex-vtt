@@ -525,24 +525,34 @@ where a character can go and how far they get.
 ## Character building (operator, 2026-11-21)
 
 "Make sure vtt/wiki also handle both narrative and RAW character building with feature parity to the
-redacted foundry system, orcpub, etc." The VTT owns RAW building; the wiki owns the narrative side.
+[Foundry systems], orcpub, etc." The VTT owns RAW building; the wiki owns the narrative side.
 
-- **At parity with** the redacted Foundry system ([redacted] homeworld, background, role, elite
-  advances; characteristics rolled or point-bought; aptitudes and XP costs by aptitude match;
-  skills with specialisations; talents with prerequisites; psychic powers; starting gear; wounds
-  and fate; [redacted]/RT/DW careers and ranks, BC, OW) and OrcPub / [redacted] for 5e (species, class
-  and subclass, background, ability scores by array, point buy or roll, level-up with HP, ASIs and
-  feats, spells, proficiencies, equipment, multiclassing, the derived sheet).
-- **Every rule comes from the pack, never restated:** [redacted] from the redacted system's own functions
-  through the bridge (origins via `normalizeOrigin`, cost tables, aptitudes, prerequisites, and the
-  generation rules it is exporting); 5e from the dnd5e system's 2024 SRD packs, with the
-  ability-score rules parsed from the SRD's text (`tools/foundry-bridge/dnd5e.py`). Illegal choices
-  are shown and refused, by the server too.
+- **At parity with** the source systems' own builders: origins, characteristics rolled or
+  point-bought, skills with specialisations, talents and powers, starting gear, resources; for 5e
+  (species, class and subclass, background, ability scores by array, point buy or roll, level-up with
+  HP and feats, spells, proficiencies, equipment, the derived sheet).
+- **Every rule comes from the pack, never restated:** a private line's rules from its source system
+  through a private bridge and the module install; the 5e SRD's from its own text
+  (`tools/foundry-bridge/srd5e.py`). Illegal choices are shown and refused, by the server too.
 - **Records link across the suite** by Foundry's compendium UUID, the wiki's `compendium_source`.
-- The result is a VTT actor linked to the wiki person. A `BuildCharacter` component in
-  `@zephyrex/vtt-play` lets rpg-ai offer it from Start and from a person's page.
-- Order: bridge rules, then the server's build session, then the [redacted] builder, the other [redacted] lines,
-  the 5e builder, and gear with the wiki's items.
+- The result is a VTT actor linked to the wiki person (`AbilityScores`, `CreationChoices` in
+  `@zephyrex/vtt-play`).
+
+## Setting-specific content is private (operator ruling, 2026-11-23)
+
+"IP settings are personal use only and must not be in open-source code." vtt's open code carries no
+setting-specific game system, rules pack, trait seed, bridge or fixture:
+
+- **Game systems:** the public seed (`rpg_systems/game-systems.json`) carries only openly licensed
+  rules: `srd-5e`, the SRD 5.2 (CC-BY-4.0). A setting-specific system is a row an operator imports
+  into a separate private instance (`POST /v1/game_system`), from the private settings repository's
+  `systems.json`, after its setting; never into rpg.zephyrex.ca.
+- **Rules:** a private line's rules come from the private module install (rpg_modules: a bundle names
+  its system, name, slug and trait kinds); a system with no committed pack runs by the rules of a
+  module enabled on the campaign. Private packs can also load from `VTT_PACKS_DIRS`.
+- **Tests:** run on a synthetic percentile pack (`server/test_packs/`) and generic cases.
+- The `dnd-5e` row is renamed in place to `srd-5e` (rpg_systems 006). Alembic revision ids are opaque
+  and kept, as databases record them.
 
 ## Editions
 
@@ -583,10 +593,10 @@ reason) ([zephyrex-rpg-ai: docs/DESIGN.md](https://github.com/JamesonRGrieve/zep
 | Dice and checks (A21 for the AI product) | `rpg_dice`: dice notation (`server/extensions/rpg_dice/Dice.py`, its lite twin `client/src/features/dice/roll.ts`, both held to `contract/roll-cases.json`), rolled on the server with the system's random source; stats resolved through rpg_traits' derivative pipeline (`Check.py`, `contract/check-cases.json`); `POST /v1/dice/roll` and `/check`, and the abilities `roll` and `check`. A check is for the campaign's GM or the character's own player. Its stats are read as the system, and a player sees contributions from records they can't read only as one `hidden` step with its net effect. A player may name the game system's stat templates (`campaign_id` NULL), which are the rules and public to every member, and the campaign traits they can read; any other name (a GM's undiscovered Curse) answers exactly as one that doesn't exist. Per-record hiding comes with `acl_rbac`. **Authoring note:** until then, a campaign's own public stats (a house-rule Sanity, say) are authored as game-system templates, not as campaign-scoped traits, so players can name them. Results are not yet written to the wiki's `rpg_log` (its own item). Lite lists `rpg_dice` once it has traits. |
 
 | Scene awareness (A23 for the AI product) | `rpg_scene`: the scene, token and wall fields sight needs first (OBJECT_PLAN §4); `Vision.py`, pure line of sight held to `contract/vision-cases.json` (range, cone, normal, limited and one-way walls, open or broken doors, hidden tokens never perceived); `POST /v1/scene/{scene_id}/snapshot` and the ability `scene_snapshot`: the tokens a token sees, nearest first with their distance, and the doors. For the campaign's GM, or the player whose character the token is; anyone else gets the same 404 as a missing token. Not yet: lights (V11, so a dark scene shows nothing), elevation, fog memory, the map (the wiki's world_spatial). |
-| Settings, systems and the first system pack (operator, 2026-11-21) | Settings are the wiki's (S6); a game system carries `slug` and `setting_id` (a reference, no FK), and the `game_systems(setting_id)` ability lists the catalog. The systems the operator named are seeded by name as the framework's SYSTEM user, readable by all (`rpg_systems/game-systems.json`). **[redacted]** is the first system pack (`rpg_systems/packs/redacted.json`), every value cited to the core rulebook: d100 roll-under, natural 1 and 100, modifiers summed and held at ±60, untrained −20, skill ranks +0/+10/+20/+30, degrees of success and failure by tens digits; its 10 characteristics and 28 skills are seeded as trait templates. `rpg_dice`'s `test` ability and `POST /v1/dice/test` run a test under the campaign's pack (`Percentile.py`, held to `contract/[redacted]-test-cases.json`: the book's worked examples and its rules). Next per system: a pack each. |
+| Settings and systems (operator, 2026-11-21; ruling 2026-11-23) | Settings are the wiki's (S6); a game system carries `slug` and `setting_id` (a reference, no FK), and the `game_systems(setting_id)` ability lists the catalog. The public seed carries only `srd-5e`; setting-specific systems are private (see "Setting-specific content is private"). |
 | The wiki, built in (operator, 2026-11-21) | The client composes `@zephyrex-rpg/wiki` at `/w`, built from the pinned wiki checkout (`deploy/compile-wiki.sh --no-lite`), injected; Worlds in the nav and a page per record. |
 | The play UI, `@zephyrex/vtt-play` (operator, 2026-11-21) | DiceTray (tests and formulas; 3D physics dice, three.js + cannon-es, landing on the server's roll; reduced motion respected); SeatList; SceneView; CharacterSheet (read-only); live over rooms. Without a sheet, the tray offers formulas ("No character sheet yet: roll a formula"), never an error. rpg-ai embeds them. |
-| [redacted] content (operator, 2026-11-21) | The Foundry bridge installs each [redacted] line as one account's private module (never instance-wide); characteristics, resources, skills with each line's untrained rule, talents and origins become that account's traits; tests read only modules enabled on the campaign. Pregens import from vault frontmatter (`tools/vault-import`). |
+| Private content modules (operator, 2026-11-21) | A bridge installs a line as one account's private module (never instance-wide); characteristics, resources, skills, talents and origins become that account's traits; tests read only modules enabled on the campaign. Pregens import from vault frontmatter (`tools/vault-import`). |
 
 **Clamp, as the VTT reads it.** rpg_state says only that a clamp's sign "selects min vs max". The VTT
 reads a value of 0 or more as a floor (the stat is at least it) and a negative value as a ceiling at

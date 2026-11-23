@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Installs a line's bundle (tools/foundry-bridge/extract.mjs) as a private module of one account.
+"""Installs a bridge's bundle (a source system's documents, read by a bridge such as
+tools/foundry-bridge/srd5e.py, or a private instance's own) as a private module of one account.
 
-P1 (operator's [redacted] bridge, 2026-11-21): the documents that are traits in vtt become the owner's
-traits of the line's game system, and every document (trait or not yet) gets a ModuleRecord with
+The bundle names its game system, the module's name and slug, and which documents are traits (its
+"kinds"). The documents that are traits in vtt become the owner's traits of that game system, and every document (trait or not yet) gets a ModuleRecord with
 its materialized data, so later phases (roll tables, the wiki's items and NPC templates, modifiers)
 read them from there. A re-install is incremental:
 - an unchanged document (same content hash) is left as it is;
@@ -29,56 +30,16 @@ from zephyrex.extensions.rpg_systems.BLL_RPGSystems import GameSystemManager, sl
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import TraitManager  # type: ignore[import-not-found]
 from zephyrex.lib.Environment import env
 
-# The [redacted] lines' game systems (rpg_systems' seed); dh1 has no seeded system yet.
-LINE_SYSTEMS: dict[str, str] = {
-    "bc": "redacted",
-    "dh1": "redacted",
-    "dh2": "redacted",
-    "dw": "redacted",
-    "ow": "redacted",
-    "rt": "redacted",
-    # [redacted] from the dnd5e Foundry system's own packs (tools/foundry-bridge/dnd5e.py).
-    "dnd5e": "dnd-5e",
-}
-LINE_NAMES: dict[str, str] = {
-    "bc": "[redacted]",
-    "dh1": "[redacted]",
-    "dh2": "[redacted]",
-    "dw": "[redacted]",
-    "ow": "[redacted]",
-    "rt": "[redacted]",
-    "dnd5e": "[redacted]",
-}
+# A bundle says which game system it's for, under what name, and its module's slug: the bridge that
+# writes it knows its source (a private instance's own), so no game is named here.
 
-# Foundry item types that are traits in vtt, and the trait kind each becomes.
-TRAIT_KINDS: dict[str, str] = {
-    "skill": "skill",
-    "talent": "talent",
-    "trait": "trait",
-    "psychicPower": "psychic-power",
-    "condition": "condition",
-    "malignancy": "malignancy",
-    "mutation": "mutation",
-    "mentalDisorder": "mental-disorder",
-    "criticalInjury": "critical-injury",
-    "darkPact": "dark-pact",
-    "vehicleTrait": "vehicle-trait",
-}
-# An origin-path document's step becomes its kind.
-# The dnd5e system's item types that are traits in vtt (the 2024 packs): a character's origins and
-# class, and the features under them. A `feat` item says what it belongs to in system.type.value.
-DND5E_KINDS: dict[str, str] = {
-    "race": "species", "background": "background", "class": "class", "subclass": "subclass", "spell": "spell",
-}
-DND5E_FEATS: dict[str, str] = {"class": "class-feature", "race": "species-trait", "feat": "feat"}
-
-ORIGIN_STEPS: dict[str, str] = {
-    "homeWorld": "homeworld",
-    "background": "background",
-    "role": "role",
-    "elite": "elite-advance",
-    "divination": "divination",
-}
+# Which source documents become traits, and of what kind, comes with the bundle (its "kinds"): the
+# bridge that read the source system knows its item types. The scheme:
+#   {"types": {item type: trait kind},
+#    "fields": {item type: {"path": [keys into system], "map": {value: trait kind},
+#                           "default": kind or null, "slug_unknown": bool}}}
+# A type under "fields" takes its kind from a value in its system data (a feat's "type.value", an
+# origin step's "step"), else the default, else (slug_unknown) the value itself as a slug.
 
 
 @dataclass
@@ -122,27 +83,34 @@ def rule_documents(rules: Optional[Mapping[str, Any]], line: str) -> list[dict[s
     return found
 
 
-def trait_kind(document: Mapping[str, Any]) -> Optional[str]:
-    """The trait kind a source document becomes, or None when it isn't a trait in vtt (yet)."""
+def trait_kind(document: Mapping[str, Any], kinds: Optional[Mapping[str, Any]] = None) -> Optional[str]:
+    """The trait kind a source document becomes under its bundle's ``kinds`` scheme, or None when it
+    isn't a trait in vtt (yet)."""
     for _key, foundry_class, kind in RULE_DOCUMENTS:
         if document.get("foundry_class") == foundry_class:
             return kind
     if document.get("foundry_class") != "Item":
         return None
-    kind = document.get("type")
-    if document.get("line") == "dnd5e":
-        if kind == "feat":
-            belongs = ((document.get("system") or {}).get("type") or {}).get("value")
-            return DND5E_FEATS.get(belongs or "", "feat")
-        return DND5E_KINDS.get(kind or "")
-    if kind == "originPath":
-        step = (document.get("system") or {}).get("step")
-        return ORIGIN_STEPS.get(step) or (slugify(step) if isinstance(step, str) and step else "origin")
+    scheme = kinds or {}
+    kind = document.get("type") or ""
+    by_field = (scheme.get("fields") or {}).get(kind)
+    if by_field:
+        value: Any = document.get("system") or {}
+        for key in by_field.get("path") or []:
+            value = value.get(key) if isinstance(value, Mapping) else None
+        mapped = (by_field.get("map") or {}).get(value) if isinstance(value, str) else None
+        if mapped:
+            return str(mapped)
+        if by_field.get("slug_unknown") and isinstance(value, str) and value:
+            return slugify(value)
+        default = by_field.get("default")
+        return str(default) if default else None
     if kind == "skill" and document.get("conversion"):
-        # Another line's copy of a skill this line has itself (RT's [redacted] in a dh2 bundle):
-        # kept as a record, never a second trait a test's name would find twice.
+        # Another line's copy of a skill this line has itself: kept as a record, never a second trait
+        # a test's name would find twice.
         return None
-    return TRAIT_KINDS.get(kind or "")
+    found = (scheme.get("types") or {}).get(kind)
+    return str(found) if found else None
 
 
 def _description(document: Mapping[str, Any]) -> Optional[str]:
@@ -177,17 +145,18 @@ def install(
     rules: Optional[dict[str, Any]] = None,
 ) -> Summary:
     line = bundle["line"]
-    if line not in LINE_SYSTEMS:
-        raise ValueError(f"no module for line {line!r}")
+    system_slug = bundle.get("system")
+    if not system_slug:
+        raise ValueError(f"the bundle for line {line!r} names no game system (its 'system' slug)")
 
     def as_owner(manager: type[Any]) -> Any:
         return manager(requester_id=owner_id, model_registry=model_registry)
 
     catalog = GameSystemManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
-    systems = catalog.list(slug=LINE_SYSTEMS[line])
+    systems = catalog.list(slug=system_slug)
     system_id = systems[0].id if systems else None
 
-    slug = f"redacted-{line}"
+    slug = str(bundle.get("slug") or line)
     modules = as_owner(ContentModuleManager)
     found = [one for one in modules.list(slug=slug) if str(one.created_by_user_id) == str(owner_id)]
     documents = rule_documents(rules, line) + list(bundle["documents"])
@@ -200,7 +169,7 @@ def install(
     if found:
         module = modules.update(id=found[0].id, **fields)
     else:
-        module = modules.create(name=LINE_NAMES[line], slug=slug, line=line, game_system_id=system_id, **fields)
+        module = modules.create(name=str(bundle.get("name") or line), slug=slug, line=line, game_system_id=system_id, **fields)
 
     records = as_owner(ModuleRecordManager)
     traits = as_owner(TraitManager)
@@ -210,7 +179,7 @@ def install(
     for document in documents:
         source_id = document["id"]
         wanted.add(source_id)
-        kind = trait_kind(document)
+        kind = trait_kind(document, bundle.get("kinds"))
         source = document.get("source") or {}
         record_fields = {
             "source_type": document.get("type"),

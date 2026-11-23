@@ -31,7 +31,7 @@
         {
           "method": "POST",
           "path": "/v1/game_system",
-          "body": { "game_system": { "name": "[redacted]" } },
+          "body": { "game_system": { "name": "Percentile Test" } },
           "expect": { "status": 201 },
           "save": "first"
         },
@@ -40,8 +40,8 @@
           "method": "PUT",
           "path": "/v1/game_system/{first.id}",
           "headers": { "If-Match": "{first.etag}" },
-          "body": { "game_system": { "description": "Second edition" } },
-          "expect": { "status": 200, "body": { "game_system": { "name": "[redacted]", "description": "Second edition" } } }
+          "body": { "game_system": { "description": "A test system" } },
+          "expect": { "status": 200, "body": { "game_system": { "name": "Percentile Test", "description": "A test system" } } }
         },
         {
           "method": "PUT",

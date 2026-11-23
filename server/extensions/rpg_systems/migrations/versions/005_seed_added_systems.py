@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """rpg_systems 005: seed the game systems added to game-systems.json since 003, and give them their
-wiki setting: redacted, for the [redacted] bridge's six lines (operator, 2026-11-21). As 003 and
+wiki setting: (none now: the public seed names no setting-specific system, operator ruling 2026-11-23). As 003 and
 004 do: a slug already there is left alone; rows are the framework's SYSTEM user's (the catalog is
 public, the module content is not); the setting is matched by slug when the wiki has it.
 """
@@ -21,7 +21,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 SEED_FILE = Path(__file__).resolve().parents[2] / "game-systems.json"
-ADDED = ("redacted",)
+ADDED: tuple[str, ...] = ()  # the public seed no longer names setting-specific systems
 
 game_systems = sa.table(
     "game_systems",

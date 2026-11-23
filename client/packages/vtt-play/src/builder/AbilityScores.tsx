@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 'use client';
 /**
- * Character creation's ability score step (rpg_builder), by the campaign's pack's own methods ([redacted]
+ * Character creation's ability score step (rpg_builder), by the campaign's pack's own methods (the 5e
  * 2024: standard array, point buy, or 4d6 keep 3 rolled on the server). The player picks a method,
  * gives each ability a score, and the server checks it against the method and saves it; this form
  * only helps (what's left of the array, points spent), it never decides.

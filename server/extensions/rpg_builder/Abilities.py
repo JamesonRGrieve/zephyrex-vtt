@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Ability scores by a pack's own methods (``ability_methods``; [redacted] from the SRD 5.2, Creating a
+"""Ability scores by a pack's own methods (``ability_methods``; the 5e SRD 5.2, Creating a
 Character › Generate Your Scores). Pure: rolls are given.
 
 - standard_array: the six scores, each used once;

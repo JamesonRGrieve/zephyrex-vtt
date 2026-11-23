@@ -8,7 +8,7 @@ const { DiceReplay, readResult } = await import('./DiceReplay');
 
 const TEST = {
   person_id: 'p1',
-  system: 'redacted',
+  system: 'percentile-test',
   name: 'charm',
   kind: 'skill',
   skill_rank: 2,

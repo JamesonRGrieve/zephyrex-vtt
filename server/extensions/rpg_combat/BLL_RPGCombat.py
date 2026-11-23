@@ -3,9 +3,8 @@
 initiative order it runs in, round by round.
 
 The campaign's GM runs an encounter: they add combatants, roll initiative, start it, pass the turn and
-end it. Initiative is rolled on the server under the campaign's rules pack (rpg_dice; [redacted]:
-1d10 + Agility bonus, p. 218); ties go to the higher characteristic, then to a roll-off, as that page
-says. A combatant with no stats to roll (an NPC without a sheet) keeps the initiative the GM sets.
+end it. Initiative is rolled on the server under the campaign's rules pack (rpg_dice: its dice plus a
+characteristic's bonus); ties go to the higher characteristic, then to a roll-off, as the pack says. A combatant with no stats to roll (an NPC without a sheet) keeps the initiative the GM sets.
 
 The order is read by the GM, and by a player with a character in the campaign; hidden combatants are
 the GM's alone. Round, the current combatant and the status are server-written: they change only

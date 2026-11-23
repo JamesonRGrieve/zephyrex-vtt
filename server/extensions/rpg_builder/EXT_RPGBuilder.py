@@ -44,7 +44,7 @@ class RPGBuilderExtension(AbstractStaticExtension):
     @classmethod
     @ability("builder_options")
     async def builder_options(cls, requester_id: str, person_id: str) -> dict[str, Any]:
-        """A character's ability score methods under the campaign's pack ([redacted]: standard array,
+        """A character's ability score methods under the campaign's pack (the 5e SRD: standard array,
         point buy with its costs and pool, 4d6 keep 3 six times), their current scores, any kept
         roll, and whether the requester may set them now."""
         return cls.builder(requester_id).options_for(person_id).model_dump()
@@ -67,7 +67,7 @@ class RPGBuilderExtension(AbstractStaticExtension):
     @classmethod
     @ability("builder_choices")
     async def builder_choices(cls, requester_id: str, person_id: str) -> dict[str, Any]:
-        """A character's creation steps under the pack ([redacted]: class; origin's background and
+        """A character's creation steps under the pack (the 5e SRD: class; origin's background and
         species; ability scores…), each choice's options and what the character has chosen."""
         return cls.builder(requester_id).choices_for(person_id).model_dump()
 
@@ -83,7 +83,7 @@ class RPGBuilderExtension(AbstractStaticExtension):
     async def npc_sheet(
         cls, requester_id: str, person_id: str, role: str, hint: str = "", replace: bool = False
     ) -> dict[str, Any]:
-        """Give an NPC a sheet from the closest compendium stat block of the campaign's pack (dnd-5e:
+        """Give an NPC a sheet from the closest compendium stat block of the campaign's pack (srd-5e:
         the SRD's humanoids, by ``role`` and the ``hint`` line about them), or the pack's generic
         block (the Commoner): its ability scores and skill proficiencies become the NPC's, nothing
         invented. Returns {sheet: {person_id, system, source: compendium | template, entry_name,

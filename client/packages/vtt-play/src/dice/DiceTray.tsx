@@ -149,7 +149,7 @@ function TestForm({
             id='dice-tray-specialisation'
             list='dice-tray-specialisations'
             value={specialisation}
-            placeholder={skill.specialisations[0] ?? '[redacted]'}
+            placeholder={skill.specialisations[0] ?? 'Stars'}
             onChange={(event) => setSpecialisation(event.target.value)}
           />
           <datalist id='dice-tray-specialisations'>
@@ -195,7 +195,7 @@ function TestForm({
   );
 }
 
-/** The free roll's starting dice: a d100 for the percentile ([redacted]) packs, else a d20 (5e, or no pack). */
+/** The free roll's starting dice: a d100 for the percentile packs, else a d20 (5e, or no pack). */
 export function defaultFormula(options: TestOptions | null): string {
   return options !== null && options.test_kind === 'd100-under' ? '1d100' : '1d20';
 }

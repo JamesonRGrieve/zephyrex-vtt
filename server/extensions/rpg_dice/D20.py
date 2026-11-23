@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """A D20 Test, as a system pack's ``test`` spec of kind ``d20-over`` describes it
-(rpg_systems/packs/dnd-5e.json, generated from the SRD's own text). Pure: the roll is given.
+(rpg_systems/packs/srd-5e.json, generated from the SRD's own text). Pure: the roll is given.
 
 System Reference Document 5.2, Playing the Game › D20 Tests:
 - Roll a d20 and add the relevant ability modifier ((score − 10) / 2, rounded down: the Ability

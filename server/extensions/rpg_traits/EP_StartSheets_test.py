@@ -36,7 +36,7 @@ def _create(server: TestClient, user: Any, resource: str, **fields: Any) -> dict
 def test_a_started_playthroughs_characters_keep_their_sheets(server: TestClient) -> None:
     author = create_user(server)
     systems = {one["slug"]: one for one in asyncio.run(RPGSystemsExtension.game_systems(str(author.id)))}
-    dnd = systems["dnd-5e"]["id"]
+    dnd = systems["srd-5e"]["id"]
     scenario = _create(server, author, "campaign", name="Tavern", user_id=author.id, is_scenario=True, game_system_id=dnd)
     brann = _create(server, author, "person", name="Brann", kind="pc", campaign_id=scenario["id"])
     strength = server.get("/v1/trait", params={"slug": "strength", "game_system_id": dnd}, headers=_headers(author)).json()["traits"][0]

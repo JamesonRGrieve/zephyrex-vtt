@@ -16,14 +16,14 @@ const SHEET = {
   sheet: {
     person_id: 'osk',
     name: 'Osk Halleran',
-    system: 'redacted',
+    system: 'percentile-test',
     has_sheet: true,
     characteristics: [
-      { trait_id: 'fel', slug: 'fellowship', name: 'Fellowship', kind: 'characteristic', value: 45 },
+      { trait_id: 'ne', slug: 'nerve', name: 'Nerve', kind: 'characteristic', value: 45 },
       { trait_id: 'wp', slug: 'willpower', name: 'Willpower', kind: 'characteristic', value: 40 },
     ],
     skills: [
-      { trait_id: 'cl', slug: '[redacted]', name: '[redacted]', kind: 'skill', rank: 1, specialisation: '[redacted]' },
+      { trait_id: 'cl', slug: 'lore', name: 'Lore', kind: 'skill', rank: 1, specialisation: 'Old Kingdoms' },
       { trait_id: 'ch', slug: 'charm', name: 'Charm', kind: 'skill', rank: 2 },
     ],
     resources: [{ trait_id: 'w', slug: 'wounds', name: 'Wounds', kind: 'resource', value: 10 }],
@@ -31,7 +31,7 @@ const SHEET = {
     abilities: [
       { trait_id: 'wt', slug: 'weapon-training', name: 'Weapon Training', kind: 'talent', specialisation: 'Flame' },
     ],
-    gear: [{ id: 'g1', item_id: 'i1', name: '[redacted]', quantity: 1 }],
+    gear: [{ id: 'g1', item_id: 'i1', name: 'Torch', quantity: 1 }],
   },
 };
 
@@ -46,11 +46,11 @@ describe('the character sheet', () => {
     render(<CharacterSheet personId='osk' />);
     const characteristics = await screen.findByRole('region', { name: 'Characteristics' });
     expect(within(characteristics).getByText('45')).toBeInTheDocument();
-    expect(screen.getByText('[redacted] ([redacted])')).toBeInTheDocument();
+    expect(screen.getByText('Lore (Old Kingdoms)')).toBeInTheDocument();
     expect(screen.getByText('Rank 2')).toBeInTheDocument();
     expect(screen.getByText('Shrine World')).toBeInTheDocument();
     expect(screen.getByText('Weapon Training (Flame)')).toBeInTheDocument();
-    expect(screen.getByText('[redacted]')).toBeInTheDocument();
+    expect(screen.getByText('Torch')).toBeInTheDocument();
     expect(post).toHaveBeenCalledWith('/v1/dice/sheet', { sheet: { person_id: 'osk' } });
   });
 

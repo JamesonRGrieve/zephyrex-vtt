@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The Foundry bridge's install step: install a line's bundle (extract.mjs) as one account's private
+"""The bridge's install step: install a line's bundle (srd5e.py's, or a private instance's own bridge's) as one account's private
 module, server-side. Run on the server host, with the app's environment (its database), never
 through a route: the content is on the server's disk, and the module belongs to --owner alone.
 
-    python tools/foundry-bridge/install.py --bundle dh2.json --owner <user id> \
+    python tools/foundry-bridge/install.py --bundle srd5e.json --owner <user id> \
         [--system-ref <sha>] [--content-ref <sha>] [--rules rules.json] [--app module:factory]
 
 --app boots a composing app instead of vtt's own (rpg-ai's server, which loads vtt's extensions);

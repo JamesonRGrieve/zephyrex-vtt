@@ -1,0 +1,86 @@
+{
+  "$comment": "A synthetic d100 roll-under pack for vtt's own tests: generic names and round numbers, from no rulebook.",
+  "system": "percentile-test",
+  "source": "vtt test fixture",
+  "test": {
+    "kind": "d100-under",
+    "natural_success": 1,
+    "natural_failure": 100,
+    "modifier_cap": 60,
+    "untrained_skill": -20,
+    "degrees": "tens"
+  },
+  "initiative": {
+    "dice": "1d10",
+    "characteristic": "grace",
+    "bonus": "tens",
+    "ties": [
+      "characteristic",
+      "roll-off"
+    ]
+  },
+  "skill_ranks": {
+    "by_rank": {
+      "1": 0,
+      "2": 10,
+      "3": 20,
+      "4": 30
+    }
+  },
+  "difficulties": {
+    "easy": 20,
+    "standard": 0,
+    "hard": -20,
+    "very-hard": -40,
+    "default": "standard"
+  },
+  "characteristics": [
+    {
+      "slug": "might",
+      "name": "Might",
+      "short": "MT"
+    },
+    {
+      "slug": "grace",
+      "name": "Grace",
+      "short": "GR"
+    },
+    {
+      "slug": "wits",
+      "name": "Wits",
+      "short": "WI"
+    },
+    {
+      "slug": "nerve",
+      "name": "Nerve",
+      "short": "NE"
+    }
+  ],
+  "characteristics_cite": "fixture",
+  "skills": [
+    {
+      "slug": "athletics",
+      "name": "Athletics",
+      "characteristic": "might",
+      "specialist": false
+    },
+    {
+      "slug": "stealth",
+      "name": "Stealth",
+      "characteristic": "grace",
+      "specialist": false
+    },
+    {
+      "slug": "lore",
+      "name": "Lore",
+      "characteristic": "wits",
+      "specialist": true
+    },
+    {
+      "slug": "repair",
+      "name": "Repair",
+      "characteristic": "wits",
+      "specialist": false
+    }
+  ]
+}

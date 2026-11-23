@@ -31,7 +31,7 @@ def _made(server: TestClient, user: Any, resource: str, **fields: Any) -> dict[s
 
 def test_a_roll_for_a_seated_character_is_posted_as_their_line(server: TestClient) -> None:
     host = create_user(server)
-    campaign = _made(server, host, "campaign", name="[redacted]", user_id=host.id)
+    campaign = _made(server, host, "campaign", name="Harbour", user_id=host.id)
     vell = _made(server, host, "person", name="Captain Vell", campaign_id=campaign["id"])
     stowaway = _made(server, host, "person", name="Stowaway", campaign_id=campaign["id"])
     table = _made(server, host, "table", name="Session 1", campaign_id=campaign["id"])
@@ -51,7 +51,7 @@ def test_a_roll_for_a_seated_character_is_posted_as_their_line(server: TestClien
     with pytest.raises(HTTPException) as both:
         asyncio.run(
             RPGTableExtension.roll_to_table(
-                str(host.id), table["conversation_id"], vell["id"], name="[redacted]", formula="1d6"
+                str(host.id), table["conversation_id"], vell["id"], name="might", formula="1d6"
             )
         )
     assert both.value.status_code == 422

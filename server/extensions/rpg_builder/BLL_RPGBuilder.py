@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """rpg_builder: character creation by the rules as written, under the campaign's system pack.
 
-Ability scores first (the pack's ``ability_methods``; [redacted]: standard array, point buy, or 4d6
+Ability scores first (the pack's ``ability_methods``; the 5e SRD: standard array, point buy, or 4d6
 keep the highest three, six times). The server rolls, keeps the roll, and checks the scores applied
 against the chosen method, then writes them as the character's ability values. The campaign's GM, or
 the character's own player (rpg_dice's access rule). A player sets a character's scores once and
@@ -119,7 +119,7 @@ class ChoicesEnvelope(PlainModel):
 
 class ChooseRequest(PlainModel):
     person_id: str
-    kind: str = Field(description="A choice the pack's creation steps name ([redacted]: class, background, species)")
+    kind: str = Field(description="A choice the pack's creation steps name (the 5e SRD: class, background, species)")
     trait_id: str
 
 
@@ -243,7 +243,7 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         )
 
     def roll_for(self, body: RollRequest) -> RolledOut:
-        """Roll the pack's random generation ([redacted]: 4d6 keep the highest three, six times) and keep
+        """Roll the pack's random generation (the 5e SRD: 4d6 keep the highest three, six times) and keep
         it. A player gets one roll per character; the GM may roll again."""
         person, _, gm, _, methods = self._context(body.person_id)
         existing = self._roll_of(person.id)
@@ -366,7 +366,7 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         return self.choices_for(person.id)
 
     def npc_sheet_for(self, body: NpcSheetRequest) -> NpcSheetResultEnvelope:
-        """An NPC's sheet from the closest compendium stat block of the campaign's pack (dnd-5e: the
+        """An NPC's sheet from the closest compendium stat block of the campaign's pack (srd-5e: the
         SRD's humanoids) by role and hint, or the pack's generic block: its ability scores and skill
         proficiencies written as the NPC's, nothing invented. The campaign's GM only."""
         dice = self._dice()
@@ -445,7 +445,7 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         authentication_type="jwt",
         expose_in=(ExposeIn.REST,),
         openapi_tags=("Builder",),
-        summary="Record a creation choice ([redacted]: a class, background or species)",
+        summary="Record a creation choice (the 5e SRD: a class, background or species)",
     )
     async def choose_route(self, body: ChooseEnvelope) -> ChoicesResultEnvelope:
         return ChoicesResultEnvelope(builder=self.choose_for(body.choose))

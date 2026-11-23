@@ -1,0 +1,134 @@
+{
+  "$comment": "Generic cases for Percentile.py on the synthetic percentile-test pack (server/test_packs/), worked by hand from its rules: target = characteristic + rank bonus (or the untrained penalty) + the modifiers held within the cap; success at or under the target; degrees 1 + the tens of the target minus the roll's (a failure the other way), at least 1; 1 and 100 always succeed and fail.",
+  "cases": [
+    {
+      "name": "51 rolls 13: five degrees",
+      "characteristic": 51,
+      "roll": 13,
+      "expect": {
+        "target": 51,
+        "success": true,
+        "degrees": 5,
+        "natural": null
+      }
+    },
+    {
+      "name": "34 rolls 22: two degrees",
+      "characteristic": 34,
+      "roll": 22,
+      "expect": {
+        "target": 34,
+        "success": true,
+        "degrees": 2,
+        "natural": null
+      }
+    },
+    {
+      "name": "28 rolls 22: one degree",
+      "characteristic": 28,
+      "roll": 22,
+      "expect": {
+        "target": 28,
+        "success": true,
+        "degrees": 1,
+        "natural": null
+      }
+    },
+    {
+      "name": "untrained at 42 needs 22 or lower",
+      "characteristic": 42,
+      "trained": false,
+      "roll": 22,
+      "expect": {
+        "target": 22,
+        "success": true,
+        "degrees": 1,
+        "natural": null
+      }
+    },
+    {
+      "name": "rank 2 at 30, hard: 20, rolls 45, three degrees of failure",
+      "characteristic": 30,
+      "skill_rank": 2,
+      "difficulty": "hard",
+      "roll": 45,
+      "expect": {
+        "target": 20,
+        "success": false,
+        "degrees": 3,
+        "natural": null
+      }
+    },
+    {
+      "name": "easy and +60 held to the cap: 30 + 60 = 90, rolls 90",
+      "characteristic": 30,
+      "difficulty": "easy",
+      "modifiers": [
+        60
+      ],
+      "roll": 90,
+      "expect": {
+        "target": 90,
+        "success": true,
+        "degrees": 1,
+        "natural": null
+      }
+    },
+    {
+      "name": "very hard at 50: 10, rolls 9, two degrees",
+      "characteristic": 50,
+      "difficulty": "very-hard",
+      "roll": 9,
+      "expect": {
+        "target": 10,
+        "success": true,
+        "degrees": 2,
+        "natural": null
+      }
+    },
+    {
+      "name": "a natural 1 succeeds even below 0",
+      "characteristic": 20,
+      "difficulty": "very-hard",
+      "roll": 1,
+      "expect": {
+        "target": -20,
+        "success": true,
+        "degrees": 1,
+        "natural": "success"
+      }
+    },
+    {
+      "name": "a natural 100 fails even at 90",
+      "characteristic": 90,
+      "roll": 100,
+      "expect": {
+        "target": 90,
+        "success": false,
+        "degrees": 2,
+        "natural": "failure"
+      }
+    }
+  ],
+  "refused": [
+    {
+      "name": "a specialist skill can't be attempted untrained",
+      "characteristic": 40,
+      "trained": false,
+      "specialist": true,
+      "roll": 10
+    },
+    {
+      "name": "no such difficulty",
+      "characteristic": 40,
+      "difficulty": "impossible",
+      "roll": 10
+    },
+    {
+      "name": "a rank past the pack's last",
+      "characteristic": 40,
+      "skill_rank": 5,
+      "roll": 10
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 name = "rpg_modules"
 version = "0.1.0"
-description = "Private rules and content modules (the [redacted] lines from the Foundry bridge), owned by the account that installs them"
+description = "Private rules and content modules (a source system's lines, from a bridge), owned by the account that installs them"
 entry_module = "EXT_RPGModules"
 minimum_framework_version = "0.0.1"
 # Where this extension's source is offered (AGPL-3.0 section 13). Its modules' content is private.

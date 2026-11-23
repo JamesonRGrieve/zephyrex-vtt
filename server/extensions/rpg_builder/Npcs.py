@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Picking a compendium stat block for an NPC from their role and a line about them (rpg_builder's
-npc_sheet). Pure. The blocks and their numbers are the pack's (dnd-5e: the SRD's humanoids); this
+npc_sheet). Pure. The blocks and their numbers are the pack's (srd-5e: the SRD's humanoids); this
 only chooses one, by the words of the role and hint against each block's name, and a few common
 roles the SRD names differently (a barkeeper is a Commoner, a watchman a Guard). With no match, the
 pack's generic block (the Commoner), marked as the template.

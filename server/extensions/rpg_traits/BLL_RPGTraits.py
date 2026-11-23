@@ -87,7 +87,7 @@ class TraitModel(
     slug: Optional[str] = Field(
         None,
         description=(
-            "The option's stable name within its kind ([redacted], [redacted]): what a plot hook's "
+            "The option's stable name within its kind (repair, seafarer): what a plot hook's "
             "character check names (contract/requirement-cases.json). From the name when not given."
         ),
     )
@@ -288,8 +288,8 @@ class PersonTraitModel(
     specialisation: Optional[str] = Field(
         None,
         description=(
-            "Which specialisation of a specialist skill the person holds at this rank ([redacted] "
-            "([redacted]), Operate (Surface)): one row per specialisation. NULL for skills without them."
+            "Which specialisation of a specialist skill the person holds at this rank (Lore "
+            "(Stars), Craft (Wood)): one row per specialisation. NULL for skills without them."
         ),
     )
     started_at: Optional[datetime] = Field(

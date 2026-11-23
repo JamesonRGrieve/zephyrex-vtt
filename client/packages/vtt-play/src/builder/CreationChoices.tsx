@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 'use client';
 /**
- * Character creation's choices (rpg_builder), in the pack's own steps ([redacted]: 1 Choose a Class;
+ * Character creation's choices (rpg_builder), in the pack's own steps (the 5e SRD: 1 Choose a Class;
  * 2 Character Origin, a background and a species). Each choice lists what the campaign offers; the
  * player picks once (the GM may change a pick), and the server checks and records it. Steps without
  * choices (ability scores: AbilityScores) are listed for orientation only.

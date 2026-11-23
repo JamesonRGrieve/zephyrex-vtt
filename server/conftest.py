@@ -28,6 +28,9 @@ os.environ["DATABASE_NAME"] = f"test_zephyrex_vtt_{os.environ.get('PYTEST_XDIST_
 os.environ.setdefault("DATABASE_PATH", tempfile.mkdtemp(prefix="zephyrex-vtt-db-"))
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-32-bytes-or-more-aaaaaa")
 os.environ.setdefault("SEED_DATA", "true")
+# The tests' synthetic rules pack (test_packs/percentile-test.json): the d100 engine runs on it, as a
+# private instance's own packs would load from its VTT_PACKS_DIRS.
+os.environ.setdefault("VTT_PACKS_DIRS", str(_project_root / "test_packs"))
 
 import zephyrex.extensions  # noqa: E402
 

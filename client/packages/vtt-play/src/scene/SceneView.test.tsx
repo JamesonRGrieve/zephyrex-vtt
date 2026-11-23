@@ -80,8 +80,8 @@ beforeEach(() => {
 describe('the scene view', () => {
   it('lists what the player sees, linking characters to the wiki, and moves only their own token', async () => {
     post.mockImplementation((path: string) => Promise.resolve(path.endsWith('/view') ? view(false) : { scene_token: {} }));
-    render(<SceneView showList sceneId='s1' personHref={(id) => `/w/voidship/person/${id}`} />);
-    expect(await screen.findByRole('link', { name: 'Ada' })).toHaveAttribute('href', '/w/voidship/person/p-ada');
+    render(<SceneView showList sceneId='s1' personHref={(id) => `/w/harbour/person/${id}`} />);
+    expect(await screen.findByRole('link', { name: 'Ada' })).toHaveAttribute('href', '/w/harbour/person/p-ada');
     expect(screen.getByRole('application', { name: /^Map of Bridge/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Move Orc/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Move Ada east' }));

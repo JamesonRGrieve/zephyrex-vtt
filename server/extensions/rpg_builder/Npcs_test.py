@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Choosing an NPC's stat block from the dnd-5e pack's SRD humanoids by role and hint."""
+"""Choosing an NPC's stat block from the srd-5e pack's SRD humanoids by role and hint."""
 
 import pytest
 from zephyrex.extensions.rpg_builder.Npcs import pick
 from zephyrex.extensions.rpg_systems.Packs import load_pack
 
-NPCS = (load_pack("dnd-5e") or {})["npcs"]
+NPCS = (load_pack("srd-5e") or {})["npcs"]
 
 
 def _pick(role: str, hint: str = "") -> tuple[str, str]:

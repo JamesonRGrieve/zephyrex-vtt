@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Encounters against a real server, under the [redacted] pack: initiative is
-1d10 + Agility bonus (p. 218), rolled on the server; ties go to the higher Agility, then a roll-off;
+"""Encounters against a real server, under a d100 pack (the synthetic percentile-test pack): initiative
+is 1d10 + the Grace bonus, rolled on the server; ties go to the higher Grace, then a roll-off;
 a combatant with no stats waits for the GM's number; the turn passes in order, skipping the defeated,
 and a new round follows the last; players see the order without hidden combatants and can't run it."""
 
@@ -15,9 +15,9 @@ from fastapi.testclient import TestClient
 from zephyrex.extensions.rpg_combat.BLL_RPGCombat import ordered
 from zephyrex.extensions.rpg_combat.EXT_RPGCombat import RPGCombatExtension
 from zephyrex.extensions.rpg_dice.EXT_RPGDice import RPGDiceExtension
-from zephyrex.extensions.rpg_systems.EXT_RPGSystems import RPGSystemsExtension
 from zephyrex.testing.factories import create_user
 
+from test_support import percentile_system
 from vtt_app import create
 
 
@@ -46,12 +46,11 @@ def _template(server: TestClient, user: Any, system_id: str, slug: str) -> str:
 
 @pytest.fixture(scope="module")
 def fight(server: TestClient) -> dict[str, Any]:
-    """Two acolytes (Agility 35 and 42), a cultist with no stats, and a hidden one on a scene."""
+    """Two characters (Grace 35 and 42), a cultist with no stats, and a hidden one on a scene."""
     gm, player, stranger = create_user(server), create_user(server), create_user(server)
-    systems = asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))
-    heresy = next(one for one in systems if one["slug"] == "redacted")
-    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id, game_system_id=heresy["id"])
-    agility = _template(server, gm, heresy["id"], "agility")
+    system = percentile_system(server, gm)
+    campaign = _create(server, gm, "campaign", name="Harbour", user_id=gm.id, game_system_id=system["id"])
+    agility = _template(server, gm, system["id"], "grace")
     rhia = _create(server, gm, "person", name="Rhia", kind="pc", user_id=player.id, campaign_id=campaign["id"])
     osk = _create(server, gm, "person", name="Osk", kind="pc", campaign_id=campaign["id"])
     for person, value in ((rhia, 35), (osk, 42)):
@@ -67,17 +66,17 @@ def fight(server: TestClient) -> dict[str, Any]:
     }
 
 
-def test_initiative_is_1d10_plus_the_agility_bonus(fight: dict[str, Any]) -> None:
+def test_initiative_is_1d10_plus_the_grace_bonus(fight: dict[str, Any]) -> None:
     for _ in range(20):
         rolled = asyncio.run(RPGDiceExtension.initiative(str(fight["player"].id), fight["rhia"]["id"]))
-        assert (rolled["dice"], rolled["characteristic"], rolled["value"], rolled["bonus"]) == ("1d10", "agility", 35, 3)
+        assert (rolled["dice"], rolled["characteristic"], rolled["value"], rolled["bonus"]) == ("1d10", "grace", 35, 3)
         assert 1 <= rolled["roll"] <= 10 and rolled["total"] == rolled["roll"] + 3
     with pytest.raises(HTTPException) as refused:
         asyncio.run(RPGDiceExtension.initiative(str(fight["stranger"].id), fight["rhia"]["id"]))
     assert refused.value.status_code == 404
 
 
-def test_ties_go_to_the_higher_agility_then_the_roll_off() -> None:
+def test_ties_go_to_the_higher_characteristic_then_the_roll_off() -> None:
     def one(name: str, initiative: Any, tiebreak: Any = None, roll_off: Any = None) -> Any:
         return SimpleNamespace(id=name, name=name, initiative=initiative, tiebreak=tiebreak, roll_off=roll_off)
 
@@ -166,7 +165,7 @@ def test_players_see_the_order_but_not_hidden_combatants_and_cant_run_it(server:
         headers={**_headers(fight["gm"]), "If-Match": current.headers["ETag"]},
     )
     after = server.get(f"/v1/encounter/{encounter['id']}/order", headers=_headers(fight["gm"])).json()["encounter"]
-    # The Lurker has no Agility, so this fight is still in setup: the update moved neither.
+    # The Lurker has no Grace, so this fight is still in setup: the update moved neither.
     assert (after["name"], after["status"], after["round"]) == ("Ambush", "setup", 0)
 
 

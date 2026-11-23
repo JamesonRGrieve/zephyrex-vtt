@@ -21,8 +21,8 @@ const { Inventory } = await import('./Inventory');
 
 const V = { updated_at: '2026-11-21T10:00:00Z' };
 const INSTANCES = [
-  { id: 'i1', item_id: 'flamer', location_id: null, owner_person_id: 'osk', quantity: 1, ...V },
-  { id: 'i2', item_id: '[redacted]', location_id: 'belt', owner_person_id: 'osk', quantity: 3, ...V },
+  { id: 'i1', item_id: 'torch', location_id: null, owner_person_id: 'osk', quantity: 1, ...V },
+  { id: 'i2', item_id: 'tonic', location_id: 'belt', owner_person_id: 'osk', quantity: 3, ...V },
   { id: 'i3', item_id: 'crate', location_id: 'hold', owner_person_id: 'osk', quantity: 1, ...V },
 ];
 
@@ -34,7 +34,7 @@ function serve(): void {
         : {
             item: {
               id: path.split('/').pop(),
-              name: { flamer: '[redacted]', [redacted]: '[redacted]', crate: 'Crate' }[path.split('/').pop() ?? ''],
+              name: { torch: 'Torch', tonic: 'Tonic', crate: 'Crate' }[path.split('/').pop() ?? ''],
             },
           },
     ),
@@ -64,36 +64,36 @@ beforeEach(() => {
 describe('the inventory', () => {
   it('shows what they carry (on them or in their slots), not what they left elsewhere', async () => {
     render(<Inventory personId='osk' />);
-    expect(await screen.findByText('[redacted]')).toBeInTheDocument();
-    expect(screen.getByText('[redacted]')).toBeInTheDocument();
+    expect(await screen.findByText('Torch')).toBeInTheDocument();
+    expect(screen.getByText('Tonic')).toBeInTheDocument();
     expect(screen.getByText('×3')).toBeInTheDocument();
     expect(screen.queryByText('Crate')).toBeNull();
   });
 
   it('uses one of several, and the last one is gone', async () => {
     render(<Inventory personId='osk' />);
-    await screen.findByText('[redacted]');
-    const [flamerUse, [redacted]Use] = screen.getAllByRole('button', { name: 'Use' });
-    await userEvent.click([redacted]Use!);
+    await screen.findByText('Tonic');
+    const [torchUse, tonicUse] = screen.getAllByRole('button', { name: 'Use' });
+    await userEvent.click(tonicUse!);
     expect(put).toHaveBeenCalledWith(
       '/v1/item_instance/i2',
       { item_instance: { quantity: 2 } },
       expect.objectContaining({ id: 'i2' }),
     );
-    await userEvent.click(flamerUse!);
+    await userEvent.click(torchUse!);
     expect(remove).toHaveBeenCalledWith('/v1/item_instance/i1', expect.objectContaining({ id: 'i1' }));
   });
 
   it('drops where they stand and gives to another character, on them', async () => {
     render(<Inventory personId='osk' />);
-    await screen.findByText('[redacted]');
+    await screen.findByText('Torch');
     await userEvent.click(screen.getAllByRole('button', { name: 'Drop' })[0]!);
     expect(put).toHaveBeenCalledWith(
       '/v1/item_instance/i1',
       { item_instance: { location_id: 'chapel' } },
       expect.anything(),
     );
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Give [redacted] to' }), 'wren');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Give Tonic to' }), 'wren');
     expect(put).toHaveBeenCalledWith(
       '/v1/item_instance/i2',
       { item_instance: { owner_person_id: 'wren', location_id: null } },
@@ -104,8 +104,8 @@ describe('the inventory', () => {
   it('says when a write was refused', async () => {
     put.mockRejectedValue(new Error('403'));
     render(<Inventory personId='osk' />);
-    await screen.findByText('[redacted]');
+    await screen.findByText('Tonic');
     await userEvent.click(screen.getAllByRole('button', { name: 'Use' })[1]!);
-    expect(await screen.findByRole('alert')).toHaveTextContent("[redacted] wasn't used");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Tonic wasn't used");
   });
 });

@@ -4,7 +4,7 @@ wiki's rpg_core keeps campaigns and the character fields). It also gives the wik
 items the game system they belong to (``game_system_id``), which its migration adds to their tables.
 Split from rpg_state (operator, 2026-11-20).
 
-A game system belongs to a setting ([redacted], [redacted]…), which is the wiki's (rpg_core's
+A game system belongs to a setting (the wiki's settings), which is the wiki's (rpg_core's
 SettingModel, the wiki's S6; docs/SUITE.md: the wiki owns campaigns, world and canon, vtt owns
 systems and mechanics). The wiki sits above vtt, so ``setting_id`` is a reference by id, not a
 foreign key. The systems the operator named are seeded by name (game-systems.json, migration 003);
@@ -44,7 +44,7 @@ SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 
 
 def slugify(name: str) -> str:
-    """A name as a slug: lower case, words joined by hyphens ("[redacted]" → "redacted")."""
+    """A name as a slug: lower case, words joined by hyphens ("Fifth Edition SRD" → "fifth-edition-srd")."""
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "unnamed"
 
 
@@ -56,7 +56,7 @@ class GameSystemModel(
     metaclass=ModelMeta,
 ):
     Manager: ClassVar[Type["GameSystemManager"]] = None
-    slug: Optional[str] = Field(None, description="Stable name (redacted); from the name when not given")
+    slug: Optional[str] = Field(None, description="Stable name (srd-5e); from the name when not given")
     setting_id: Optional[str] = Field(None, description="The wiki's setting it belongs to (a reference, no FK)")
     table_comment: ClassVar[str] = (
         "Reference catalog of supported RPG systems (DnD 5e, Pathfinder 2e, ...)"

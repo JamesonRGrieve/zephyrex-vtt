@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The `test` ability under the [redacted] pack (dnd-5e, generated from the SRD 5.2), against a real
+"""The `test` ability under the fifth-edition SRD pack (srd-5e, generated from the SRD 5.2), against a real
 server: an ability or skill check is d20 + ability modifier against the difficulty's DC; a character
 with no sheet still gets the system's own test, at the human-average score (a plain d20), flagged;
-[redacted] states no such average, so there a sheetless test is refused rather than invented;
+a pack that states no such average refuses a sheetless test rather than invent one;
 initiative is a Dexterity check; and roll_to_table posts the check as the seat's line."""
 
 import asyncio
@@ -17,6 +17,7 @@ from zephyrex.extensions.rpg_systems.EXT_RPGSystems import RPGSystemsExtension
 from zephyrex.extensions.rpg_table.EXT_RPGTable import RPGTableExtension
 from zephyrex.testing.factories import create_user
 
+from test_support import percentile_system
 from vtt_app import create
 
 
@@ -48,16 +49,16 @@ def _template(server: TestClient, user: Any, system_id: str, slug: str) -> str:
 @pytest.fixture(scope="module")
 def world(server: TestClient) -> dict[str, Any]:
     """A 5e campaign with a fighter (STR 16, proficient in Athletics) and a villager with no sheet,
-    and a [redacted] campaign with a sheetless acolyte."""
+    and a percentile campaign with a sheetless character."""
     gm, player = create_user(server), create_user(server)
     systems = {one["slug"]: one for one in asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))}
-    dnd, heresy = systems["dnd-5e"], systems["redacted"]
+    dnd, percentile = systems["srd-5e"], percentile_system(server, gm)
     campaign = _create(server, gm, "campaign", name="Split Antler", user_id=gm.id, game_system_id=dnd["id"])
     fighter = _create(server, gm, "person", name="Brann", kind="pc", user_id=player.id, campaign_id=campaign["id"])
     _create(server, gm, "person_trait", person_id=fighter["id"], trait_id=_template(server, gm, dnd["id"], "strength"), value=16)
     _create(server, gm, "person_trait", person_id=fighter["id"], trait_id=_template(server, gm, dnd["id"], "athletics"), rank=1)
     villager = _create(server, gm, "person", name="Villager", kind="npc", campaign_id=campaign["id"])
-    gothic = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id, game_system_id=heresy["id"])
+    gothic = _create(server, gm, "campaign", name="Farport", user_id=gm.id, game_system_id=percentile["id"])
     acolyte = _create(server, gm, "person", name="Rhia", kind="pc", campaign_id=gothic["id"])
     return {"gm": gm, "player": player, "campaign": campaign, "fighter": fighter, "villager": villager, "acolyte": acolyte}
 
@@ -94,9 +95,9 @@ def test_no_sheet_still_gets_the_systems_test_a_plain_d20(world: dict[str, Any])
         assert plain["total"] == plain["roll"] and plain["success"] == (plain["roll"] >= 10)
 
 
-def test_dark_heresy_states_no_average_so_a_sheetless_test_is_refused(world: dict[str, Any]) -> None:
+def test_a_pack_with_no_stated_average_refuses_a_sheetless_test(world: dict[str, Any]) -> None:
     with pytest.raises(HTTPException) as refused:
-        _test(world["gm"], world["acolyte"], "agility")
+        _test(world["gm"], world["acolyte"], "grace")
     assert refused.value.status_code == 422
     assert "states no average" in refused.value.detail["message"]
 

@@ -23,7 +23,7 @@ function options(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     builder: {
       person_id: 'p1',
-      system: 'dnd-5e',
+      system: 'srd-5e',
       gm: false,
       abilities: SIX.map((slug, index) => ({
         slug,

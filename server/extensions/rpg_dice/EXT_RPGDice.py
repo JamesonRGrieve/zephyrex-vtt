@@ -89,10 +89,10 @@ class RPGDiceExtension(AbstractStaticExtension):
         modifiers: Optional[list[int]] = None,
         specialisation: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Roll a test under the campaign's system pack, on the server. For [redacted]: ``name``
-        is a characteristic or skill slug ([redacted], [redacted]), ``difficulty`` one of trivial …
-        hellish (default challenging), ``modifiers`` extra +/- numbers, ``specialisation`` which one
-        of a specialist skill ([redacted]: "[redacted]"; required for those). The result has the target,
+        """Roll a test under the campaign's system pack, on the server: ``name`` is a characteristic
+        or skill slug (as test_options lists them), ``difficulty`` one of the pack's (its default when
+        none), ``modifiers`` extra +/- numbers, ``specialisation`` which one of a specialist skill
+        (lore: "Stars"; required for those). The result has the target,
         the roll, success, the degrees of success or failure, a natural 1 or 100, and how the target
         was reached. For the campaign's GM or the character's own player."""
         body = TestRequest(

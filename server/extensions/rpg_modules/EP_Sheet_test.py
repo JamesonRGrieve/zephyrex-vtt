@@ -15,24 +15,25 @@ from fastapi.testclient import TestClient
 from zephyrex.extensions.rpg_dice.EXT_RPGDice import RPGDiceExtension
 from zephyrex.extensions.rpg_modules.Install import install
 from zephyrex.extensions.rpg_modules.Sheet import foundry_id, import_sheet, kebab, sheet_from_frontmatter
-from zephyrex.extensions.rpg_systems.EXT_RPGSystems import RPGSystemsExtension
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import PersonTraitManager
 from zephyrex.testing.factories import create_user
 
+from test_support import percentile_system
 from vtt_app import create
 
 RULES = {
     "characteristics": [
-        {"slug": "intelligence", "key": "intelligence", "name": "Intelligence", "short": "Int"},
-        {"slug": "fellowship", "key": "fellowship", "name": "Fellowship", "short": "Fel"},
+        {"slug": "wits", "key": "wits", "name": "Wits", "short": "WI"},
+        {"slug": "nerve", "key": "nerve", "name": "Nerve", "short": "NE"},
     ],
-    "resources": [{"slug": "wounds", "key": "wounds", "name": "Wounds"}, {"slug": "fate", "key": "fate", "name": "Fate"}],
+    "resources": [{"slug": "health", "key": "health", "name": "Health"}, {"slug": "luck", "key": "luck", "name": "Luck"}],
 }
+KINDS = {"types": {"skill": "skill", "talent": "talent"}}
 
 
 def _document(source_id: str, name: str, kind: str, **changes: Any) -> dict[str, Any]:
     document = {
-        "line": "dh2",
+        "line": "testline",
         "id": source_id,
         "name": name,
         "foundry_class": "Item",
@@ -48,29 +49,33 @@ def _document(source_id: str, name: str, kind: str, **changes: Any) -> dict[str,
 
 
 BUNDLE = {
-    "line": "dh2",
+    "line": "testline",
+    "system": "percentile-test",
+    "name": "Test line",
+    "slug": "testline",
+    "kinds": KINDS,
     "packs": [],
     "problems": [],
     "documents": [
-        _document("Compendium.redacted.dh2-core-items-skills.Item.SRCSkill00000007", "[redacted]", "skill"),
-        _document("Compendium.redacted.rt-core-items-skills.Item.RTSkill000000007", "[redacted]", "skill", conversion=True, homebrew=True),
-        _document("Compendium.redacted.dh2-core-items-skills.Item.SRCSkill00000003", "Charm", "skill"),
-        _document("Compendium.redacted.dh2-core-items-talents.Item.SRCaTlnt00000026", "Weapon Training", "talent"),
-        _document("Compendium.redacted.dh2-core-items-weapons.Item.j7K8l9M0n1O2p3Q4", "[redacted]", "weapon"),
+        _document("Compendium.source.test-skills.Item.Skill00000007", "Lore", "skill"),
+        _document("Compendium.source.other-skills.Item.Skill10000007", "Lore", "skill", conversion=True, homebrew=True),
+        _document("Compendium.source.test-skills.Item.Skill00000003", "Repair", "skill"),
+        _document("Compendium.source.test-talents.Item.Talent000026", "Blade Training", "talent"),
+        _document("Compendium.source.test-weapons.Item.j7K8l9M0n1O2p3Q4", "Torch", "weapon"),
     ],
 }
 
 SHEET = {
-    "characteristics": {"Int": 30, "Fel": 45, "Xyz": 5},
-    "resources": {"wounds": 10, "fate": 3},
+    "characteristics": {"WI": 30, "NE": 45, "Xyz": 5},
+    "resources": {"health": 10, "luck": 3},
     "skills": [
-        {"skill": "[redacted]", "specialisation": "[redacted]", "rank": 1},
-        {"skill": "[redacted]", "specialisation": "[redacted]", "rank": 3},
-        {"skill": "charm", "rank": 2},
+        {"skill": "lore", "specialisation": "Old Kingdoms", "rank": 1},
+        {"skill": "lore", "specialisation": "Stars", "rank": 3},
+        {"skill": "repair", "rank": 2},
     ],
     "items": [
-        {"uuid": "Compendium.redacted.dh2-core-items-talents-specializations.Item.SRCaTlnt00000026", "specialisation": "Flame"},
-        "Compendium.redacted.dh2-core-items-weapons.Item.j7K8l9M0n1O2p3Q4",
+        {"uuid": "Compendium.source.test-talents-specializations.Item.Talent000026", "specialisation": "Edge"},
+        "Compendium.source.test-weapons.Item.j7K8l9M0n1O2p3Q4",
     ],
 }
 
@@ -94,30 +99,29 @@ def _create(server: TestClient, user: Any, resource: str, **fields: Any) -> dict
 
 
 def test_keys_and_references() -> None:
-    assert kebab("[redacted]") == "[redacted]" and kebab("[redacted]") == "[redacted]" and kebab("charm") == "charm"
-    assert foundry_id("Compendium.redacted.dh2-core-items-talents.Item.SRCaTlnt00000004") == "SRCaTlnt00000004"
+    assert kebab("sleightOfHand") == "sleight-of-hand" and kebab("animalHandling") == "animal-handling" and kebab("repair") == "repair"
+    assert foundry_id("Compendium.source.test-talents.Item.Talent000004") == "Talent000004"
     assert foundry_id({"uuid": "Compendium.x.y.Item.abc"}) == "abc" and foundry_id(None) is None
 
 
 def test_a_vault_notes_frontmatter_is_a_sheet() -> None:
-    built = {"characteristics": {"Int": 30, "Fel": 45}, "wounds": 10, "fate": 3, "skills": ["Charm"]}
+    built = {"characteristics": {"WI": 30, "NE": 45}, "health": 10, "luck": 3, "skills": ["Repair"]}
     frontmatter = {
         "initial_build": base64.b64encode(json.dumps(built).encode()).decode(),
         "canonical_sheet": {
             "source": "initial_build",
             "advancements": [
-                {"type": "skill", "skill": "[redacted]", "specialisation": "[redacted]", "advance": 1},
-                {"type": "characteristic", "characteristic": "fel", "advance": 1},
+                {"type": "skill", "skill": "lore", "specialisation": "Old Kingdoms", "advance": 1},
+                {"type": "characteristic", "characteristic": "ne", "advance": 1},
             ],
-            "items": ["Compendium.redacted.dh2-core-items-talents.Item.SRCaTlnt00000004"],
+            "items": ["Compendium.source.test-talents.Item.Talent000004"],
         },
     }
-    assert sheet_from_frontmatter(frontmatter) == {
-        "characteristics": {"Int": 30, "Fel": 45},
-        "resources": {"wounds": 10, "fate": 3},
-        "skills": [{"skill": "[redacted]", "specialisation": "[redacted]", "rank": 1}],
-        "items": ["Compendium.redacted.dh2-core-items-talents.Item.SRCaTlnt00000004"],
-    }
+    sheet = sheet_from_frontmatter(frontmatter)
+    assert sheet is not None
+    assert sheet["characteristics"] == {"WI": 30, "NE": 45}
+    assert sheet["skills"] == [{"skill": "lore", "specialisation": "Old Kingdoms", "rank": 1}]
+    assert sheet["items"] == ["Compendium.source.test-talents.Item.Talent000004"]
     assert sheet_from_frontmatter({"entity_type": "person"}) is None
 
 
@@ -125,35 +129,32 @@ def test_a_sheet_imports_through_the_module_and_a_test_rolls_on_it(app: Any) -> 
     server = TestClient(app)
     registry = app.state.model_registry
     gm = create_user(server)
-    systems = asyncio.run(RPGSystemsExtension.game_systems(str(gm.id)))
-    heresy = next(one for one in systems if one["slug"] == "redacted")["id"]
-    campaign = _create(server, gm, "campaign", name="[redacted]", user_id=gm.id, game_system_id=heresy)
+    system_id = percentile_system(server)["id"]
+    campaign = _create(server, gm, "campaign", name="Harbour", user_id=gm.id, game_system_id=system_id)
     osk = _create(server, gm, "person", name="Osk", kind="pc", user_id=gm.id, campaign_id=campaign["id"])
 
     with pytest.raises(ValueError):
-        import_sheet(registry, str(gm.id), osk["id"], "dh2", SHEET)
+        import_sheet(registry, str(gm.id), osk["id"], "testline", SHEET)
     module = install(registry, str(gm.id), BUNDLE, rules=RULES)
-    assert module.kinds["skill"] == 2, "the RT conversion of [redacted] is a record, not a second trait"
+    assert module.kinds["skill"] == 2, "the other line's copy of Lore is a record, not a second trait"
     _create(server, gm, "campaign_module", campaign_id=campaign["id"], content_module_id=module.module_id)
 
-    first = import_sheet(registry, str(gm.id), osk["id"], "dh2", SHEET)
+    first = import_sheet(registry, str(gm.id), osk["id"], "testline", SHEET)
     assert (first.written, first.removed) == (8, 0)
     assert sorted(first.skipped) == [
         "characteristic Xyz",
-        "weapon Compendium.redacted.dh2-core-items-weapons.Item.j7K8l9M0n1O2p3Q4",
+        "weapon Compendium.source.test-weapons.Item.j7K8l9M0n1O2p3Q4",
     ]
 
-    lore = asyncio.run(
-        RPGDiceExtension.test(str(gm.id), osk["id"], "[redacted]", specialisation="[redacted]", difficulty="challenging")
-    )
-    assert (lore["skill_rank"], lore["target"]) == (3, 50), "Int 30 + Experienced (+20)"
-    charm = asyncio.run(RPGDiceExtension.test(str(gm.id), osk["id"], "charm"))
-    assert (charm["skill_rank"], charm["target"]) == (2, 55), "Fel 45 + Trained (+10)"
+    lore = asyncio.run(RPGDiceExtension.test(str(gm.id), osk["id"], "lore", specialisation="Stars", difficulty="standard"))
+    assert (lore["skill_rank"], lore["target"]) == (3, 50), "Wits 30 + rank 3 (+20)"
+    repair = asyncio.run(RPGDiceExtension.test(str(gm.id), osk["id"], "repair"))
+    assert (repair["skill_rank"], repair["target"]) == (2, 40), "Wits 30 + rank 2 (+10)"
 
     changed = {**SHEET, "skills": SHEET["skills"][1:]}
-    second = import_sheet(registry, str(gm.id), osk["id"], "dh2", changed)
+    second = import_sheet(registry, str(gm.id), osk["id"], "testline", changed)
     assert (second.written, second.removed) == (7, 1)
     rows = PersonTraitManager(requester_id=str(gm.id), model_registry=registry).list(person_id=osk["id"])
     assert len(rows) == 7, "a re-import replaces; it never duplicates"
-    flame = [row for row in rows if row.specialisation == "Flame"]
-    assert len(flame) == 1 and flame[0].rank is None
+    edge = [row for row in rows if row.specialisation == "Edge"]
+    assert len(edge) == 1 and edge[0].rank is None

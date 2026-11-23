@@ -20,10 +20,10 @@ const { Loot } = await import('./Loot');
 
 const V = { updated_at: '2026-11-21T10:00:00Z' };
 const LYING = [
-  { id: 'i1', item_id: 'flamer', location_id: 'chapel', owner_person_id: 'wren', quantity: 1, ...V },
+  { id: 'i1', item_id: 'torch', location_id: 'chapel', owner_person_id: 'wren', quantity: 1, ...V },
   { id: 'i2', item_id: 'coin', location_id: 'chapel', owner_person_id: null, quantity: 12, ...V },
 ];
-const NAMES: Record<string, string> = { flamer: '[redacted]', coin: '[redacted]' };
+const NAMES: Record<string, string> = { torch: 'Torch', coin: 'Silver coin' };
 
 function serve(at: string | null): void {
   get.mockImplementation((path: string) => {
@@ -45,7 +45,7 @@ describe('loot', () => {
   it('lists what lies where the character stands', async () => {
     serve('chapel');
     render(<Loot personId='osk' />);
-    expect(await screen.findByText('[redacted]')).toBeInTheDocument();
+    expect(await screen.findByText('Torch')).toBeInTheDocument();
     expect(screen.getByText('×12')).toBeInTheDocument();
     expect(screen.getByText('Chapel')).toBeInTheDocument();
     expect(list).toHaveBeenCalledWith('/v1/item_instance', 'item_instances', expect.anything(), { location_id: 'chapel' });
@@ -54,7 +54,7 @@ describe('loot', () => {
   it('takes one onto them: theirs, carried', async () => {
     serve('chapel');
     render(<Loot personId='osk' />);
-    await screen.findByText('[redacted]');
+    await screen.findByText('Torch');
     await userEvent.click(screen.getAllByRole('button', { name: 'Take' })[0]!);
     expect(put).toHaveBeenCalledWith(
       '/v1/item_instance/i1',
@@ -67,10 +67,10 @@ describe('loot', () => {
     serve('chapel');
     put.mockImplementation((path: string) => (path.endsWith('i1') ? Promise.reject(new Error('403')) : Promise.resolve({})));
     render(<Loot personId='osk' />);
-    await screen.findByText('[redacted]');
+    await screen.findByText('Torch');
     await userEvent.click(screen.getByRole('button', { name: 'Take all' }));
     expect(put).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Not taken: [redacted]');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not taken: Torch');
   });
 
   it('says so when they are nowhere, or nothing lies here', async () => {

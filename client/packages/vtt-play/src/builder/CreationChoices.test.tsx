@@ -23,7 +23,7 @@ function steps(classChosen: typeof FIGHTER | null = null, gm = false): Record<st
   return {
     builder: {
       person_id: 'p1',
-      system: 'dnd-5e',
+      system: 'srd-5e',
       gm,
       steps: [
         { step: 1, name: 'Choose a Class', choices: [{ kind: 'class', chosen: classChosen, options: [FIGHTER, WIZARD] }] },
