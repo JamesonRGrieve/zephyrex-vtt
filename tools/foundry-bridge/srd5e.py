@@ -378,6 +378,20 @@ def test_pack(root: Path) -> dict[str, Any]:
         creation, r"Without armor or a shield, your base Armor Class is (\d+) plus your (\w+) modifier", "the base Armor Class"
     )
     find(creation, r"Hit Points? (?:and|&) Hit (?:Point )?Dice|Hit Point maximum", "Hit Points")
+    fixed = find(
+        creation,
+        r"Fixed Hit Points by Class Class Hit Points per Level ((?:[A-Z][a-z]+(?:, [A-Z][a-z]+)*(?:,? or [A-Z][a-z]+)? \d+ \+ Con\. modifier ?)+)",
+        "the Fixed Hit Points by Class table",
+    )
+    per_class: dict[str, int] = {}
+    for names, value in re.findall(r"([A-Z][a-z]+(?:, [A-Z][a-z]+)*(?:,? or [A-Z][a-z]+)?) (\d+) \+ Con\. modifier", fixed.group(1)):
+        for name in re.split(r",\s*(?:or\s+)?|\s+or\s+", names):
+            if name.strip():
+                per_class[name.strip()] = int(value)
+    find(creation, r"add the total \(minimum of (\d+)\) to your Hit Point maximum\. Instead of rolling, you can use the fixed value", "the level-up hit points")
+    minimum = int(re.search(r"add the total \(minimum of (\d+)\) to your Hit Point maximum", creation).group(1))  # type: ignore[union-attr]
+    advancement = find(creation, r"Character Advancement Level Experience Points Proficiency Bonus ((?:\d+ [\d,]+ \+\d+ ?)+)", "the Character Advancement table")
+    levels = [int(level) for level, _, _ in re.findall(r"(\d+) ([\d,]+) (\+\d+)", advancement.group(1))]
     attribution = find(legal, r"(This work includes material from the System Reference Document .*?legalcode) \.", "the attribution").group(1)
 
     return {
@@ -426,6 +440,15 @@ def test_pack(root: Path) -> dict[str, Any]:
             {"slug": "proficiency-bonus", "name": "Proficiency Bonus", "cite": "Playing the Game › D20 Tests › Proficiency"},
         ],
         "armor_class": {"base": int(base_ac.group(1)), "characteristic": by_name[base_ac.group(2)], "cite": "Creating a Character › Armor Class"},
+        # Gaining a level: up to the Character Advancement table's last, each level after the first
+        # adding the class's fixed hit points (the operator's choice over rolling) plus the
+        # Constitution modifier, at least the minimum.
+        "leveling": {
+            "max_level": max(levels),
+            "fixed_hit_points": per_class,
+            "minimum_per_level": minimum,
+            "cite": "Creating a Character › Gaining a Level; Fixed Hit Points by Class; Character Advancement",
+        },
         # A weapon attack: its ability by melee or range (Finesse: either), the same modifier on the
         # damage, a natural 20 a Critical Hit (the damage dice rolled twice), a natural 1 a miss.
         "attack": {

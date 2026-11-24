@@ -60,9 +60,18 @@ class Plan:
     hp: Optional[int] = None
     gaps: list[Gap] = field(default_factory=list)
 
+    level: int = 1
+
     @property
     def buildable(self) -> bool:
-        return self.line is not None and len(self.origins) == 3 and bool(self.abilities)
+        needed = {"class", "background"} | (set() if self.line is not None and is_unknown(self.line.species) else {"species"})
+        return self.line is not None and needed <= set(self.origins) and bool(self.abilities)
+
+
+def is_unknown(species: str) -> bool:
+    """A pregen whose species is canonically unknown ("Level 1 Unknown Bard"): built with no species
+    traits rather than refused (operator, 2026-11-23)."""
+    return species.strip().casefold() == "unknown"
 
 
 def name_key(name: str) -> str:
@@ -99,8 +108,11 @@ def plan(
     line: Optional[PregenLine],
     catalog: Mapping[str, Mapping[str, Document]],
     pack: Mapping[str, Any],
+    level: Optional[int] = None,
 ) -> Plan:
-    """The pregen's sheet: ``catalog`` is kind (class, background, species) → name_key → document."""
+    """The pregen's sheet: ``catalog`` is kind (class, background, species) → name_key → document.
+    ``level`` advances the level-1 base build to that level (a campaign's starting level); none
+    keeps the line's own."""
     result = Plan(line=line)
     if line is None:
         result.gaps.append(Gap("line", "No 'Level N <species> <class>, <background> background (SRD x)' line to build from"))
@@ -109,11 +121,20 @@ def plan(
         result.gaps.append(Gap("edition", f"SRD {line.edition}: the srd5e module carries SRD 5.2.1 only"))
         return result
     if line.level != 1:
-        result.gaps.append(Gap("level", f"Level {line.level}: build_pregen builds level 1 characters only"))
+        result.gaps.append(Gap("level", f"Level {line.level}: a pregen's line is its level-1 base build"))
         return result
+    target = level if level is not None else 1
+    leveling = pack.get("leveling") or {}
+    top = int(leveling.get("max_level") or 1)
+    if not 1 <= target <= top:
+        result.gaps.append(Gap("level", f"Level {target}: this system's characters go from level 1 to {top}"))
+        return result
+    result.level = target
 
     chosen: dict[str, Document] = {}
     for kind, name in (("class", line.klass), ("background", line.background), ("species", line.species)):
+        if kind == "species" and is_unknown(name):
+            continue
         document = catalog.get(kind, {}).get(name_key(name)) if name else None
         if document is None:
             result.gaps.append(Gap(kind, f"No {kind} called {name or '(none)'!r} in the srd5e module"))
@@ -134,7 +155,7 @@ def plan(
     for kind, document in chosen.items():
         system = document.data or {}
         for advancement in system.get("advancement") or []:
-            if not _at(advancement, line.level):
+            if not _at(advancement, target):
                 continue
             kind_of = advancement.get("type")
             title = advancement.get("title") or kind_of
@@ -160,7 +181,7 @@ def plan(
                         result.features.append(item["uuid"])
             elif kind_of == "ItemChoice":
                 counts = config.get("choices") or {}
-                if any(int(level) <= line.level and (one or {}).get("count") for level, one in counts.items()):
+                if any(int(at) <= target and (one or {}).get("count") for at, one in counts.items()):
                     result.gaps.append(Gap(kind, f"{document.name} › {title}: choose from its options"))
             elif kind_of == "AbilityScoreImprovement":
                 points = config.get("points") or 0
@@ -175,6 +196,9 @@ def plan(
                     result.gaps.append(Gap(kind, f"{document.name} › size: one of {', '.join(sizes)}"))
             elif kind_of == "Subclass" and advancement.get("level") is not None:
                 result.gaps.append(Gap(kind, f"{document.name} › {title}: choose a subclass"))
+        casting = (system.get("spellcasting") or {}).get("progression")
+        if kind == "class" and casting and casting != "none":
+            result.gaps.append(Gap("spells", f"{document.name}'s spells known, prepared and slots by level: chosen by the player"))
         if system.get("startingEquipment"):
             wealth = system.get("wealth")
             alternative = f", or {wealth} GP instead" if wealth else ""
@@ -186,5 +210,13 @@ def plan(
     if klass is not None and result.abilities:
         die = str(((klass.data or {}).get("hd") or {}).get("denomination") or "")
         if die.startswith("d") and die[1:].isdigit():
-            result.hp = int(die[1:]) + _modifier(result.abilities.get("constitution", 10))
+            con = _modifier(result.abilities.get("constitution", 10))
+            result.hp = int(die[1:]) + con
+            if target > 1:
+                fixed = (leveling.get("fixed_hit_points") or {}).get(klass.name)
+                if fixed is None:
+                    result.gaps.append(Gap("hp", f"No fixed hit points for {klass.name} in the pack: levels 2 to {target} are open"))
+                else:
+                    # Each level after the first: the class's fixed value + Con, at least the minimum.
+                    result.hp += (target - 1) * max(int(leveling.get("minimum_per_level", 1)), int(fixed) + con)
     return result

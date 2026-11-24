@@ -9,9 +9,11 @@ from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import (
     ApplyRequest,
     BuilderManager,
     ChooseRequest,
+    LevelsRequest,
     NpcOptionsRequest,
     NpcSheetRequest,
     PregenRequest,
+    PregensRequest,
     RollRequest,
 )
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
@@ -87,8 +89,28 @@ class RPGBuilderExtension(AbstractStaticExtension):
         return cls.builder(requester_id).choose_for(ChooseRequest(person_id=person_id, kind=kind, trait_id=trait_id)).model_dump()
 
     @classmethod
+    @ability("starting_levels")
+    async def starting_levels(cls, requester_id: str, campaign_id: str) -> dict[str, Any]:
+        """The levels a campaign's characters can start at, for a slider: {campaign_id, system,
+        max_level, starting_level}. max_level is the pack's (20 for srd-5e; 1 with no pack). Set the
+        level through the campaign's ``starting_level``. The campaign's GM only."""
+        return cls.builder(requester_id).levels_for(LevelsRequest(campaign_id=campaign_id)).model_dump()
+
+    @classmethod
+    @ability("build_campaign_pregens")
+    async def build_campaign_pregens(cls, requester_id: str, campaign_id: str, level: Optional[int] = None) -> dict[str, Any]:
+        """Build a campaign's (a scenario's) pregens to its starting level, as a starting-level slider
+        commits: ``level`` sets the campaign's starting level first (within the pack's maximum), then
+        every player character with a builder line is built or re-levelled to it. Returns
+        {campaign_id, starting_level, results: [build_pregen's report each], skipped: [{person_id,
+        name, reason}]}; each result's gaps are its open choices. The campaign's GM only."""
+        return cls.builder(requester_id).campaign_pregens_for(PregensRequest(campaign_id=campaign_id, level=level)).model_dump()
+
+    @classmethod
     @ability("build_pregen")
-    async def build_pregen(cls, requester_id: str, person_id: str, replace: bool = False, dry_run: bool = False) -> dict[str, Any]:
+    async def build_pregen(
+        cls, requester_id: str, person_id: str, replace: bool = False, dry_run: bool = False, level: Optional[int] = None
+    ) -> dict[str, Any]:
         """Give a pregen its starting sheet by the SRD's creation rules (a setting's pc with no campaign,
         for its owner; or a campaign's character, a scenario's pregen, for the campaign's GM),
         from its own line ("Level 1 Dragonborn Cleric, Acolyte background (SRD 5.2.1)") and the srd5e
@@ -96,8 +118,10 @@ class RPGBuilderExtension(AbstractStaticExtension):
         class, the skills and features granted outright. Every choice the rules leave open and its data
         doesn't settle is a gap, reported and not guessed. Returns {pregen: {built, written, abilities,
         saves, skills, features, hp, gaps: [{what, detail}], ...}}. ``dry_run`` writes nothing; a sheet
-        already there is refused unless ``replace``."""
-        body = PregenRequest(person_id=person_id, replace=replace, dry_run=dry_run)
+        already there is refused unless ``replace``. It is built to ``level``, else its campaign's
+        ``starting_level``, else 1: each level after the first adds the class's fixed hit points, and
+        the features, subclass, ability increases and spells it brings are granted or reported open."""
+        body = PregenRequest(person_id=person_id, replace=replace, dry_run=dry_run, level=level)
         return {"pregen": cls.builder(requester_id).build_pregen_for(body).model_dump()}
 
     @classmethod

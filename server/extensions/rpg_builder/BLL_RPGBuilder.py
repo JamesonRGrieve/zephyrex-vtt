@@ -221,12 +221,41 @@ class NpcSheetResultEnvelope(PlainModel):
 
 class PregenRequest(PlainModel):
     person_id: str
+    level: Optional[int] = Field(None, ge=1, description="The level to build to; none is its campaign's starting level, else 1")
     replace: bool = Field(False, description="Overwrite a sheet the pregen already has")
     dry_run: bool = Field(False, description="Report what would be built and what stays open; write nothing")
 
 
 class PregenEnvelope(PlainModel):
     pregen: PregenRequest
+
+
+class LevelsRequest(PlainModel):
+    campaign_id: str
+
+
+class LevelsEnvelope(PlainModel):
+    levels: LevelsRequest
+
+
+class LevelsOut(PlainModel):
+    campaign_id: str
+    system: Optional[str] = Field(None, description="The campaign's game system; none when it has no rules pack")
+    max_level: int = Field(description="The highest level its characters can be built to (the pack's; 1 without one)")
+    starting_level: int = Field(description="The level its characters start at (the campaign's, else 1)")
+
+
+class LevelsResultEnvelope(PlainModel):
+    levels: LevelsOut
+
+
+class PregensRequest(PlainModel):
+    campaign_id: str
+    level: Optional[int] = Field(None, ge=1, description="Set the campaign's starting level first; none builds to the one it has")
+
+
+class PregensEnvelope(PlainModel):
+    pregens: PregensRequest
 
 
 class PregenGapOut(PlainModel):
@@ -256,6 +285,17 @@ class PregenOut(PlainModel):
 
 class PregenResultEnvelope(PlainModel):
     pregen: PregenOut
+
+
+class PregensOut(PlainModel):
+    campaign_id: str
+    starting_level: int
+    results: list[PregenOut] = Field(default_factory=list, description="Each player character with a builder line, built or re-levelled")
+    skipped: list[dict[str, Any]] = Field(default_factory=list, description="Those that couldn't be built, with why")
+
+
+class PregensResultEnvelope(PlainModel):
+    pregens: PregensOut
 
 
 def _refuse(message: str) -> HTTPException:
@@ -549,6 +589,56 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             catalog[kind] = found
         return catalog
 
+    def levels_for(self, body: LevelsRequest) -> LevelsOut:
+        """The levels a campaign's characters can start at, for a starting-level slider: the pack's
+        highest and the campaign's own. The campaign's GM; set it through the campaign's
+        ``starting_level`` (PUT /v1/campaign/{id})."""
+        dice = self._dice()
+        campaign = dice._get(CampaignManager, "CampaignModel", body.campaign_id)
+        requester = str(self.requester.id)
+        if requester not in {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}:
+            raise HTTPException(status_code=404, detail={"message": "Request searched CampaignModel and could not find the required record."})
+        try:
+            pack = dice._pack_for(campaign)
+        except HTTPException:
+            pack = None
+        top = int(((pack or {}).get("leveling") or {}).get("max_level") or 1)
+        return LevelsOut(
+            campaign_id=campaign.id,
+            system=None if pack is None else pack["system"],
+            max_level=top,
+            starting_level=int(getattr(campaign, "starting_level", None) or 1),
+        )
+
+    def campaign_pregens_for(self, body: PregensRequest) -> PregensOut:
+        """A campaign's (a scenario's) pregens built to its starting level, as the slider moves it:
+        ``level`` sets the starting level first (within the pack's), then every player character with
+        a builder line is built or rebuilt to it (build_pregen with replace). A character with no
+        line (one a player built step by step) is left as it is. The campaign's GM only."""
+        from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
+
+        levels = self.levels_for(LevelsRequest(campaign_id=body.campaign_id))
+        if body.level is not None:
+            if body.level > levels.max_level:
+                raise _refuse(f"This campaign's characters go up to level {levels.max_level}")
+            self._trusted(CampaignManager).update_trusted(id=body.campaign_id, starting_level=body.level)
+        level = body.level if body.level is not None else levels.starting_level
+        results: list[PregenOut] = []
+        skipped: list[dict[str, Any]] = []
+        people = self._live(self._trusted(PersonManager), campaign_id=body.campaign_id)
+        for person in sorted((one for one in people if getattr(one, "kind", None) == "pc"), key=lambda one: one.name or ""):
+            try:
+                built = self.build_pregen_for(PregenRequest(person_id=person.id, replace=True, level=level))
+            except HTTPException as error:
+                detail = error.detail.get("message") if isinstance(error.detail, dict) else str(error.detail)
+                skipped.append({"person_id": person.id, "name": person.name, "reason": detail})
+                continue
+            if built.class_name is None and not built.built:
+                skipped.append({"person_id": person.id, "name": person.name, "reason": "No builder line in its description"})
+                continue
+            results.append(built)
+        return PregensOut(campaign_id=body.campaign_id, starting_level=level, results=results, skipped=skipped)
+
     def build_pregen_for(self, body: PregenRequest) -> PregenOut:
         """A pregen's starting sheet by the SRD's creation rules (rpg_builder.Pregen): what its own
         line and the rules settle is written, every open choice is reported, nothing is guessed. A
@@ -581,7 +671,9 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         # Its line is in its description (genealogy's), or its entry (the wiki's Plate value, as JSON text).
         text = " ".join(str(getattr(person, name, None) or "") for name in ("description", "summary", "entry"))
         line = parse_line(text, [document.name for document in catalog["class"].values()])
-        result = plan(line, catalog, pack)
+        # The level to build to: the caller's, else the campaign's starting level (a scenario's), else 1.
+        target = body.level if body.level is not None else (getattr(campaign, "starting_level", None) if campaign is not None else None)
+        result = plan(line, catalog, pack, level=target)
 
         records = self._trusted(ModuleRecordManager)
         traits = self._trusted(TraitManager)
@@ -611,8 +703,11 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         for slug in result.skills:
             if ("skill", slug) in by_slug:
                 wanted.append({"trait_id": by_slug[("skill", slug)], "rank": 1})
-        # Combat reads these (rpg_combat): level-1 hit points, and the Proficiency Bonus at level 1.
-        resources = {"hit-points": result.hp, "proficiency-bonus": proficiency_bonus(pack, 1) if pack.get("proficiency") else None}
+        # Combat reads these (rpg_combat): the hit points and the Proficiency Bonus at the level built to.
+        resources = {
+            "hit-points": result.hp,
+            "proficiency-bonus": proficiency_bonus(pack, result.level) if pack.get("proficiency") else None,
+        }
         for slug, value in resources.items():
             if value is not None and ("resource", slug) in by_slug:
                 wanted.append({"trait_id": by_slug[("resource", slug)], "value": float(value)})
@@ -631,7 +726,7 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             person_id=person.id,
             name=person.name,
             system=pack["system"],
-            level=line.level if line else None,
+            level=result.level if line else None,
             class_name=line.klass if line else None,
             background=line.background if line else None,
             species=line.species if line else None,
@@ -646,6 +741,34 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             hp=result.hp,
             gaps=[PregenGapOut(what=gap.what, detail=gap.detail) for gap in result.gaps],
         )
+
+    @custom_route(
+        method="POST",
+        path="/levels",
+        input_model=LevelsEnvelope,
+        output_model=LevelsResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Builder",),
+        summary="The levels a campaign's characters can start at: the pack's highest and the campaign's own (its GM)",
+    )
+    async def levels_route(self, body: LevelsEnvelope) -> LevelsResultEnvelope:
+        builder = BuilderManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+        return LevelsResultEnvelope(levels=builder.levels_for(body.levels))
+
+    @custom_route(
+        method="POST",
+        path="/pregens",
+        input_model=PregensEnvelope,
+        output_model=PregensResultEnvelope,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Builder",),
+        summary="A campaign's pregens built or re-levelled to its starting level, set first if given (its GM)",
+    )
+    async def pregens_route(self, body: PregensEnvelope) -> PregensResultEnvelope:
+        builder = BuilderManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+        return PregensResultEnvelope(pregens=builder.campaign_pregens_for(body.pregens))
 
     @custom_route(
         method="POST",

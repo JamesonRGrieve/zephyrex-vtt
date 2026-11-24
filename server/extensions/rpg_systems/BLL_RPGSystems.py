@@ -95,17 +95,26 @@ class GameSystemManager(AbstractBLLManager, RouterMixin):
 # ---------------------------------------------------------------------------
 
 
+# The highest starting level any pack could state; each pack's own maximum is checked where it's used.
+MAX_STARTING_LEVEL = 30
+
+
 @extension_model(CampaignModel)
 class RPG_CampaignSystemModel(BaseModel):
     """The game system a campaign runs on, added to the wiki's campaigns."""
 
     game_system_id: Optional[str] = Field(None, description="FK → game_systems.id; the rules it runs on")
+    starting_level: Optional[int] = Field(
+        None, description="The level its characters start at (a scenario's pregens are built to it); none is the pack's first"
+    )
 
     class Create(BaseModel):
         game_system_id: Optional[str] = None
+        starting_level: Optional[int] = Field(None, ge=1, le=MAX_STARTING_LEVEL)
 
     class Update(BaseModel):
         game_system_id: Optional[str] = None
+        starting_level: Optional[int] = Field(None, ge=1, le=MAX_STARTING_LEVEL)
 
     class Search(BaseModel):
         game_system_id: Optional[StringSearchModel] = None

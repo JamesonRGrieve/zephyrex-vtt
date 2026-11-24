@@ -1208,6 +1208,25 @@
     "characteristic": "dexterity",
     "cite": "Creating a Character › Armor Class"
   },
+  "leveling": {
+    "max_level": 20,
+    "fixed_hit_points": {
+      "Barbarian": 7,
+      "Fighter": 6,
+      "Paladin": 6,
+      "Ranger": 6,
+      "Bard": 5,
+      "Cleric": 5,
+      "Druid": 5,
+      "Monk": 5,
+      "Rogue": 5,
+      "Warlock": 5,
+      "Sorcerer": 4,
+      "Wizard": 4
+    },
+    "minimum_per_level": 1,
+    "cite": "Creating a Character › Gaining a Level; Fixed Hit Points by Class; Character Advancement"
+  },
   "attack": {
     "melee": "strength",
     "ranged": "dexterity",

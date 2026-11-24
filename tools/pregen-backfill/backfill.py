@@ -2,10 +2,11 @@
 """Builds pregens' starting sheets (rpg_builder's build_pregen), server-side. A dry run unless --write.
 
     python tools/pregen-backfill/backfill.py --owner <the pregens' owner> [--setting <setting id>] \
-        [--campaign <campaign id>] [--app module:factory] [--write] [--replace]
+        [--campaign <campaign id>] [--level <n>] [--app module:factory] [--write] [--replace]
 
 By default every setting pregen of the owner (a pc with no campaign); with --campaign, that
-campaign's player characters (a scenario's pregens), the owner being its GM. Each is built from its
+campaign's player characters (a scenario's pregens), the owner being its GM, built to the
+campaign's starting level (or --level). Each is built from its
 own line ("Level 1 Dragonborn Cleric, Acolyte background (SRD 5.2.1)") and the srd5e module, which must be installed for its
 system first (tools/foundry-bridge/install.py). The dry run prints, per pregen, what would be built
 and every choice left open; nothing is guessed. A pregen whose setting has no system with a rules
@@ -31,6 +32,7 @@ def main() -> int:
     parser.add_argument("--owner", required=True, help="The pregens' owner (who imported them)")
     parser.add_argument("--setting", help="Only this setting's pregens")
     parser.add_argument("--campaign", help="This campaign's player characters (a scenario's pregens) instead")
+    parser.add_argument("--level", type=int, help="Build to this level (default: the campaign's starting level, else 1)")
     parser.add_argument("--app", default="vtt_app:create", help="The app factory to boot, module:function")
     parser.add_argument("--write", action="store_true", help="Write the sheets (default: a dry run)")
     parser.add_argument("--replace", action="store_true", help="Rebuild pregens that already have a sheet")
@@ -63,7 +65,7 @@ def main() -> int:
                 if person.campaign_id is None and getattr(person, "setting_id", None) and getattr(person, "kind", None) == "pc"
             ]
         for person in sorted(pregens, key=lambda one: one.name or ""):
-            body = PregenRequest(person_id=person.id, replace=args.replace, dry_run=not args.write)
+            body = PregenRequest(person_id=person.id, replace=args.replace, dry_run=not args.write, level=args.level)
             try:
                 results.append(builder.build_pregen_for(body).model_dump())
             except HTTPException as error:

@@ -13,6 +13,7 @@ PACK: dict[str, Any] = {
         for slug in ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
     ],
     "skills": [{"slug": "insight", "key": "ins"}, {"slug": "religion", "key": "rel"}, {"slug": "athletics", "key": "ath"}],
+    "leveling": {"max_level": 20, "fixed_hit_points": {"Fighter": 6}, "minimum_per_level": 1},
     "ability_methods": {
         "standard_array_by_class": {
             FIGHTER: {"name": "Fighter", "scores": {"strength": 15, "dexterity": 14, "constitution": 13, "intelligence": 8, "wisdom": 10, "charisma": 12}}
@@ -95,3 +96,23 @@ def test_an_other_edition_or_level_or_unknown_origin_builds_nothing() -> None:
     assert not higher.buildable and [gap.what for gap in higher.gaps] == ["level"]
     unknown = plan(parse_line("Level 1 High Elf Fighter, Recluse background (SRD 5.2.1).", ["Fighter"]), _catalog(), PACK)
     assert not unknown.buildable and any(gap.what == "background" and "Recluse" in gap.detail for gap in unknown.gaps)
+
+
+def test_a_pregen_is_advanced_to_the_starting_level_with_fixed_hit_points() -> None:
+    line = parse_line("Level 1 High Elf Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"])
+    got = plan(line, _catalog(), PACK, level=4)
+    assert got.buildable and got.level == 4
+    assert got.hp == (10 + 1) + 3 * (6 + 1), "level 1's d10 + Con, then the fixed 6 + Con at each of levels 2 to 4"
+    assert "F-action-surge" in got.features, "level 2's feature comes in"
+    open_choices = [gap.detail for gap in got.gaps]
+    assert any("choose a subclass" in one for one in open_choices), "a subclass at level 3 is the player's"
+    assert any("2 points among" in one for one in open_choices), "level 4's ability increase is the player's"
+
+
+def test_a_level_past_the_packs_last_or_an_unknown_species() -> None:
+    line = parse_line("Level 1 High Elf Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"])
+    beyond = plan(line, _catalog(), PACK, level=21)
+    assert not beyond.buildable and [gap.what for gap in beyond.gaps] == ["level"]
+    unknown = plan(parse_line("Level 1 Unknown Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"]), _catalog(), PACK)
+    assert unknown.buildable and "species" not in unknown.origins
+    assert not any(gap.what == "species" for gap in unknown.gaps)

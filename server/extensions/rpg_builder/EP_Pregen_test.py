@@ -161,3 +161,51 @@ def test_a_scenarios_pregen_is_built_by_the_campaigns_gm_under_its_system(server
     stranger = create_user(server)
     refused = _build(server, stranger, rowan["id"], dry_run=True)
     assert refused.status_code == 404 and "could not find" in refused.text
+
+
+def test_a_scenario_builds_its_pregens_to_its_starting_level(server: TestClient, world: dict[str, Any]) -> None:
+    owner = world["owner"]
+    registry = world["registry"]
+    fifth = next(one for one in GameSystemManager(requester_id=env("ROOT_ID"), model_registry=registry).list(slug="srd-5e"))
+    antler = _create(server, owner, "campaign", name="The Split Antler", user_id=owner.id, game_system_id=fifth.id, starting_level=10)
+    levels = server.post("/v1/builder/levels", json={"levels": {"campaign_id": antler["id"]}}, headers=_headers(owner))
+    assert levels.status_code == 200, levels.text
+    assert levels.json()["levels"] == {"campaign_id": antler["id"], "system": "srd-5e", "max_level": 20, "starting_level": 10}
+    dingus = _create(
+        server, owner, "person", name="Dingus McQuingus the Eighteenth", kind="pc", campaign_id=antler["id"],
+        description="Level 1 Unknown Fighter, Acolyte background (SRD 5.2.1). His race is canonically unknown.",
+    )
+    got = _build(server, owner, dingus["id"], dry_run=True).json()["pregen"]
+    assert got["built"] and got["level"] == 10 and got["species"] == "Unknown"
+    assert got["hp"] == (10 + 1) + 9 * (6 + 1), "the fixed 6 + Con at each level from 2 to 10"
+
+
+def test_the_slider_rebuilds_a_scenarios_pregens_to_its_new_level(server: TestClient, world: dict[str, Any]) -> None:
+    owner = world["owner"]
+    registry = world["registry"]
+    fifth = next(one for one in GameSystemManager(requester_id=env("ROOT_ID"), model_registry=registry).list(slug="srd-5e"))
+    woods = _create(server, owner, "campaign", name="Through the Old Woods", user_id=owner.id, game_system_id=fifth.id)
+    rowan = _create(
+        server, owner, "person", name="Rowan Hale", kind="pc", campaign_id=woods["id"],
+        description="Level 1 Human Fighter, Acolyte background (SRD 5.2.1).",
+    )
+    _create(server, owner, "person", name="Kestrel Vane", kind="pc", campaign_id=woods["id"], description="A ranger, built by hand.")
+
+    def commit(user: Any, **body: Any) -> Any:
+        return server.post("/v1/builder/pregens", json={"pregens": {"campaign_id": woods["id"], **body}}, headers=_headers(user))
+
+    moved = commit(owner, level=4)
+    assert moved.status_code == 200, moved.text
+    got = moved.json()["pregens"]
+    assert got["starting_level"] == 4
+    assert [(one["name"], one["level"], one["built"]) for one in got["results"]] == [("Rowan Hale", 4, True)]
+    assert got["results"][0]["written"] > 0 and got["results"][0]["hp"] == (10 + 1) + 3 * (6 + 1)
+    assert [one["name"] for one in got["skipped"]] == ["Kestrel Vane"], "no builder line: left as it is"
+    levels = server.post("/v1/builder/levels", json={"levels": {"campaign_id": woods["id"]}}, headers=_headers(owner))
+    assert levels.json()["levels"]["starting_level"] == 4
+    # Moving it again re-levels the sheet already there.
+    again = commit(owner, level=2).json()["pregens"]
+    assert again["results"][0]["level"] == 2 and again["results"][0]["has_sheet"]
+    assert commit(owner, level=25).status_code == 422
+    assert commit(create_user(server), level=3).status_code == 404
+    assert rowan["id"] == got["results"][0]["person_id"]
