@@ -26,3 +26,8 @@ optional = false
 [[extension_dependencies]]
 name = "genealogy"
 optional = false
+
+# A combatant's stance comes from its dispositions toward the others (the wiki's)
+[[extension_dependencies]]
+name = "world_narrative"
+optional = false

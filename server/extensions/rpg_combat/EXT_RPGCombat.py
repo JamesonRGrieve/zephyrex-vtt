@@ -67,29 +67,30 @@ class RPGCombatExtension(AbstractStaticExtension):
         person_ids: Optional[list[str]] = None,
         name: Optional[str] = None,
         hidden_person_ids: Optional[list[str]] = None,
-        sides: Optional[dict[str, str]] = None,
+        dispositions: Optional[dict[str, dict[str, Any]]] = None,
     ) -> dict[str, Any]:
         """Start a fight in a campaign: its combatants are ``person_ids`` (characters of the campaign),
         or else every character with a token on ``scene_id`` (hidden tokens stay hidden combatants).
         Initiative is rolled under the campaign's pack and round 1 begins; a combatant with no stats
         to roll is listed in ``unrolled`` with why, and acts last until the GM sets theirs.
-        ``sides`` gives a combatant its side in this fight by person id (friendly, hostile or neutral:
-        the party, whoever the fight is against, a bystander); one not named follows its token's
-        disposition, else a player character is friendly and anyone else hostile.
+        Who fights whom comes from each combatant's own dispositions in the wiki toward the others
+        (toward a person, else toward the party): hostile or enraged is hostile, and hostility runs
+        both ways; someone with none on record stays neutral, not an enemy for being present, and is
+        returned in ``open_choices`` (with the options to choose from). ``dispositions`` overrides
+        a person's stance by person id: {disposition: friendly|neutral|hostile, hostile_to: [person
+        ids]}. set_disposition changes it mid-fight.
         The campaign's GM only. Returns the encounter in initiative order."""
-        given = dict(sides or {})
-        unknown = {side for side in given.values() if side not in ("friendly", "hostile", "neutral")}
-        if unknown:
-            raise HTTPException(status_code=422, detail={"message": f"A side is friendly, hostile or neutral, not {sorted(unknown)[0]!r}"})
+        given = {person_id: dict(change or {}) for person_id, change in (dispositions or {}).items()}
+        wrong = [one.get("disposition") for one in given.values() if one.get("disposition") not in (None, "friendly", "neutral", "hostile")]
+        if wrong:
+            raise HTTPException(status_code=422, detail={"message": f"A disposition is friendly, neutral or hostile, not {wrong[0]!r}"})
         encounters = cls.encounters(requester_id)
         combatants = cls.as_requester(CombatantManager, requester_id)
         encounter = encounters.create(campaign_id=campaign_id, scene_id=scene_id, name=name or "Encounter")
         hidden = set(hidden_person_ids or [])
         if person_ids:
             for person_id in person_ids:
-                combatants.create(
-                    encounter_id=encounter.id, person_id=person_id, is_hidden=person_id in hidden, side=given.get(person_id)
-                )
+                combatants.create(encounter_id=encounter.id, person_id=person_id, is_hidden=person_id in hidden)
         elif scene_id is not None:
             for token in cls.as_requester(SceneManager, requester_id).tokens_for(scene_id):
                 if token.entity_id:
@@ -98,15 +99,17 @@ class RPGCombatExtension(AbstractStaticExtension):
                         person_id=token.entity_id,
                         scene_token_id=token.token_id,
                         is_hidden=token.hidden or token.entity_id in hidden,
-                        side=given.get(token.entity_id),
                     )
+        choices = encounters.assign_stances(encounter, given)
         rolled = encounters.roll_initiative_for(encounter.id, RollRequest())
+        rolled.open_choices = choices
         if not rolled.combatants:
             return rolled.model_dump()
         # The fight starts even when some couldn't be rolled (no sheet, no rule to roll them by): they
         # act last and are listed, with why, until the GM sets their initiative.
         started = encounters.start_for(encounter.id)
         started.unrolled = rolled.unrolled
+        started.open_choices = choices
         return started.model_dump()
 
     @classmethod
@@ -141,6 +144,23 @@ class RPGCombatExtension(AbstractStaticExtension):
             person_id=person_id, action_id=action_id, target_ids=target_ids or [], slot_level=slot_level, use_reaction=use_reaction
         )
         return cls.encounters(requester_id).take_combat_action_for(encounter_id, body).model_dump()
+
+    @classmethod
+    @ability("set_disposition")
+    async def set_disposition(
+        cls,
+        requester_id: str,
+        encounter_id: str,
+        person_id: str,
+        disposition: Optional[str] = None,
+        hostile_to: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """Change a combatant's stance mid-fight: its ``disposition`` toward the party (friendly,
+        neutral, hostile) and/or whom it is ``hostile_to`` (person ids; [] is a surrender, the party
+        a betrayal). Hostility runs both ways, so this moves both directions at once. Returns the
+        encounter in initiative order with each combatant's disposition and hostile_to, and any
+        open choices left. The campaign's GM only."""
+        return cls.encounters(requester_id).set_disposition_for(encounter_id, person_id, disposition, hostile_to).model_dump()
 
     @classmethod
     @ability("roll_initiative")

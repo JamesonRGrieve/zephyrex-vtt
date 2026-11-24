@@ -64,6 +64,8 @@ def fight(server: TestClient) -> dict[str, Any]:
         _create(server, gm, "person_trait", person_id=brann["id"], trait_id=_template(server, gm, system_id, slug), **fields)
     guard = _create(server, gm, "person", name="Holt", kind="npc", campaign_id=campaign["id"])
     _run(RPGBuilderExtension.npc_sheet(str(gm.id), guard["id"], "guard"))
+    # The guard's stance is the wiki's: a default disposition, hostile toward the party.
+    _create(server, gm, "disposition", person_id=guard["id"], target_kind="party", attitude="hostile", is_default=True)
     started = _run(RPGCombatExtension.start_encounter(str(gm.id), campaign["id"], person_ids=[brann["id"], guard["id"]]))
     assert started["status"] == "running", started
     return {"gm": gm, "player": player, "encounter": started, "brann": brann, "guard": guard}
@@ -120,24 +122,36 @@ def test_anything_not_offered_is_refused_and_only_the_gm_asks(fight: dict[str, A
     assert player.value.status_code == 404
 
 
-def test_the_encounter_says_whose_side_each_is_on(server: TestClient, fight: dict[str, Any]) -> None:
-    """The fight is against whoever the encounter says: a combatant's side overrides its token and
-    its kind, so a friendly NPC needn't be a foe and an authored monster needn't be neutral."""
+def test_stances_come_from_each_ones_dispositions_and_change_mid_fight(server: TestClient, fight: dict[str, Any]) -> None:
+    """The operator: "Combat sides should be based on character disposition not blanket red team and
+    blue team". A foe hostile to the party on record is an enemy, and hostility runs both ways; a
+    bystander with nothing on record stays neutral, not an enemy, and is an open choice; a betrayal
+    and a surrender change it mid-fight."""
     gm = str(fight["gm"].id)
     campaign_id = fight["brann"]["campaign_id"]
     hesk = _create(server, fight["gm"], "person", name="Old Hesk", kind="npc", campaign_id=campaign_id)
     drowned = _create(server, fight["gm"], "person", name="The drowned thing", kind="npc", campaign_id=campaign_id)
-    started = _run(
-        RPGCombatExtension.start_encounter(
-            gm, campaign_id, person_ids=[fight["brann"]["id"], hesk["id"], drowned["id"]],
-            sides={hesk["id"]: "neutral", drowned["id"]: "hostile", fight["brann"]["id"]: "friendly"},
-        )
-    )
-    assert {one["name"]: one["side"] for one in started["combatants"]} == {
-        "Brann": "friendly", "Old Hesk": "neutral", "The drowned thing": "hostile",
-    }
-    seen = _run(RPGCombatExtension.combat_options(gm, started["id"], fight["brann"]["id"]))
-    assert {one["name"]: one["hostile"] for one in seen["targets"]} == {"Old Hesk": False, "The drowned thing": True}
+    _create(server, fight["gm"], "disposition", person_id=drowned["id"], target_kind="party", attitude="enraged", is_default=True)
+    started = _run(RPGCombatExtension.start_encounter(gm, campaign_id, person_ids=[fight["brann"]["id"], hesk["id"], drowned["id"]]))
+    stances = {one["name"]: (one["disposition"], one["hostile_to"]) for one in started["combatants"]}
+    assert stances["The drowned thing"] == ("hostile", [fight["brann"]["id"]])
+    assert stances["Old Hesk"] == ("neutral", []) and stances["Brann"][0] == "friendly"
+    assert {one["name"] for one in started["open_choices"]} == {"Old Hesk"}
+    assert started["open_choices"][0]["options"] == ["friendly", "neutral", "hostile"]
+
+    def targets() -> dict[str, bool]:
+        seen = _run(RPGCombatExtension.combat_options(gm, started["id"], fight["brann"]["id"]))
+        return {one["name"]: one["hostile"] for one in seen["targets"]}
+
+    assert targets() == {"Old Hesk": False, "The drowned thing": True}
+    # Hesk turns on Brann; the drowned thing yields.
+    turned = _run(RPGCombatExtension.set_disposition(gm, started["id"], hesk["id"], disposition="hostile", hostile_to=[fight["brann"]["id"]]))
+    assert {one["name"]: one["disposition"] for one in turned["combatants"]}["Old Hesk"] == "hostile"
+    _run(RPGCombatExtension.set_disposition(gm, started["id"], drowned["id"], disposition="neutral", hostile_to=[]))
+    assert targets() == {"Old Hesk": True, "The drowned thing": False}
     with pytest.raises(HTTPException) as wrong:
-        _run(RPGCombatExtension.start_encounter(gm, campaign_id, person_ids=[hesk["id"]], sides={hesk["id"]: "party"}))
-    assert wrong.value.status_code == 422 and "friendly, hostile or neutral" in wrong.value.detail["message"]
+        _run(RPGCombatExtension.set_disposition(gm, started["id"], hesk["id"], disposition="red team"))
+    assert wrong.value.status_code == 422 and "friendly, neutral or hostile" in wrong.value.detail["message"]
+    with pytest.raises(HTTPException) as player:
+        _run(RPGCombatExtension.set_disposition(str(fight["player"].id), started["id"], hesk["id"], disposition="hostile"))
+    assert player.value.status_code == 404

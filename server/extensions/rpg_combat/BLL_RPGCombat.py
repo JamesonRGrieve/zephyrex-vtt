@@ -13,6 +13,8 @@ through start, next and end, never through an update.
 
 from __future__ import annotations
 
+import json
+
 from typing import Any, ClassVar, Literal, Optional, Type
 
 from fastapi import HTTPException
@@ -21,6 +23,7 @@ from pydantic import Field
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager, PersonModel
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_combat.Attacks import Attack, armor_class, attacks_for, resolve
+from zephyrex.extensions.rpg_combat.Stances import STANCES, Fighter, Record, Stance, hostile_between, work_out
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import DiceManager, InitiativeRequest, live_draw  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import PersonTraitManager, TraitManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_scene.BLL_RPGScene import SceneManager, SceneModel, SceneTokenManager, SceneTokenModel  # type: ignore[import-not-found]
@@ -66,10 +69,6 @@ class EncounterModel(
         name: Optional[StringSearchModel] = None
 
 
-# A combatant's side in a fight, in the tokens' own words (rpg_scene's dispositions).
-Side = Literal["friendly", "hostile", "neutral"]
-
-
 class CombatantModel(
     ApplicationModel.Optional,
     UpdateMixinModel.Optional,
@@ -89,7 +88,8 @@ class CombatantModel(
     hp_max: Optional[int] = Field(None, description="The hit point maximum, from the sheet")
     reaction_round: Optional[int] = Field(None, description="The round its reaction was used in; free again the next round")
     action_round: Optional[int] = Field(None, description="The round it took its action in, on its turn")
-    side: Optional[Side] = Field(None, description="Its side in this fight (friendly, hostile, neutral); none follows its token's disposition")
+    disposition: Optional[Stance] = Field(None, description="Its stance toward the party in this fight (friendly, neutral, hostile)")
+    hostile_to: Optional[str] = Field(None, description="Whom it is hostile to, person ids as JSON text; hostility runs both ways")
     table_comment: ClassVar[str] = "A character in an encounter, with their initiative"
 
     class Create(
@@ -98,12 +98,10 @@ class CombatantModel(
         name: Optional[str] = Field(None, description="Defaults to the character's name")
         initiative: Optional[float] = None
         is_hidden: bool = False
-        side: Optional[Side] = None
 
     class Update(BaseModel):
         name: Optional[str] = None
         initiative: Optional[float] = None
-        side: Optional[Side] = None
         is_defeated: Optional[bool] = None
         is_hidden: Optional[bool] = None
 
@@ -124,6 +122,18 @@ def _refuse(message: str) -> HTTPException:
 def _live(manager: Any, **filters: Any) -> list[Any]:
     """A trusted manager's rows without soft-deleted ones (ROOT reads include tombstones)."""
     return list(manager.list(filters=[manager.DB.deleted_at.is_(None)], **filters))
+
+
+def _hostile_of(combatant: Any) -> list[str]:
+    """A combatant's own hostility (person ids), stored as JSON text."""
+    raw = getattr(combatant, "hostile_to", None)
+    if not raw:
+        return []
+    try:
+        found = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    return [str(one) for one in found] if isinstance(found, list) else []
 
 
 def _gms_of(campaign: Any) -> set[str]:
@@ -160,7 +170,8 @@ class CombatantOut(PlainModel):
     is_defeated: bool
     is_hidden: bool
     controlled: bool = Field(description="The requester's own character, or (for the GM) every combatant")
-    side: Optional[str] = Field(None, description="Its side in this fight, when the encounter set one")
+    disposition: Optional[str] = Field(None, description="Its stance toward the party in this fight")
+    hostile_to: list[str] = Field(default_factory=list, description="The person ids it is hostile to")
 
 
 class Unrolled(PlainModel):
@@ -180,6 +191,9 @@ class OrderOut(PlainModel):
     gm: bool
     combatants: list[CombatantOut]
     unrolled: list[Unrolled] = Field(default_factory=list, description="Combatants a roll left without initiative")
+    open_choices: list[dict[str, Any]] = Field(
+        default_factory=list, description="Stances the record doesn't settle: {person_id, name, toward, toward_name, reason, options}"
+    )
 
 
 class OrderEnvelope(PlainModel):
@@ -375,7 +389,8 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
                     is_defeated=bool(one.is_defeated),
                     is_hidden=bool(one.is_hidden),
                     controlled=gm or (one.person_id is not None and owners.get(one.person_id) == requester),
-                    side=getattr(one, "side", None),
+                    disposition=getattr(one, "disposition", None),
+                    hostile_to=_hostile_of(one),
                 )
             )
         current = encounter.current_combatant_id
@@ -532,15 +547,63 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
             combatant = self._find(CombatantManager, combatant.id)
         return combatant, person, pack, attacks, armor_class(pack, scores, resources.get("armor-class"))
 
-    def _side(self, combatant: Any, person: Any) -> str:
-        """Whose side a combatant fights on: the side the encounter gave it, else its token's
-        disposition, else a player character friendly and anyone else hostile."""
-        if getattr(combatant, "side", None):
-            return str(combatant.side)
-        token = self._find(SceneTokenManager, getattr(combatant, "scene_token_id", None))
-        if token is not None and getattr(token, "disposition", None):
-            return str(token.disposition)
-        return "friendly" if getattr(person, "kind", None) == "pc" else "hostile"
+    def assign_stances(self, encounter: Any, overrides: Optional[dict[str, dict[str, Any]]] = None) -> list[dict[str, Any]]:
+        """Each combatant's stance in the fight, from its own dispositions in the wiki toward the
+        others (rpg_combat.Stances), with ``overrides`` (person id → disposition and/or hostile_to)
+        in their place; stored on the combatants. Returns the open choices the record leaves."""
+        from zephyrex.extensions.world_narrative.BLL_WorldNarrative import DispositionManager  # type: ignore[import-not-found]
+
+        members = [one for one in _live(self._trusted(CombatantManager), encounter_id=encounter.id) if one.person_id]
+        fighters = []
+        for one in members:
+            person = self._find(PersonManager, one.person_id)
+            fighters.append(Fighter(one.person_id, one.name or getattr(person, "name", None) or "", getattr(person, "kind", None) == "pc"))
+        rows = self._trusted(DispositionManager)
+        records = [
+            Record(row.person_id, row.target_kind, row.target_person_id, row.attitude, bool(row.is_default))
+            for one in fighters
+            for row in _live(rows, person_id=one.person_id)
+        ]
+        # The stances already set on this encounter's combatants stay, unless an override replaces them.
+        kept = {
+            one.person_id: {"disposition": one.disposition, "hostile_to": _hostile_of(one)}
+            for one in members
+            if getattr(one, "disposition", None) is not None
+        }
+        worked = work_out(fighters, records, {**kept, **(overrides or {})})
+        combatants = self._trusted(CombatantManager)
+        for one in members:
+            combatants.update_trusted(
+                id=one.id,
+                disposition=worked.disposition.get(one.person_id),
+                hostile_to=json.dumps(worked.hostile_to.get(one.person_id, [])),
+            )
+        return [vars(choice) for choice in worked.open_choices]
+
+    def set_disposition_for(
+        self, encounter_id: str, person_id: str, disposition: Optional[str] = None, hostile_to: Optional[list[str]] = None
+    ) -> OrderOut:
+        """Change a combatant's stance mid-fight (a surrender: hostile_to []; a betrayal: hostile_to
+        the party): its disposition toward the party and/or whom it is hostile to. Hostility runs
+        both ways, so this moves both directions. The campaign's GM only."""
+        encounter, _ = self._gm_encounter(encounter_id)
+        if disposition is not None and disposition not in STANCES:
+            raise _refuse(f"A disposition is friendly, neutral or hostile, not {disposition!r}")
+        members = {one.person_id for one in self._members(encounter) if one.person_id}
+        if person_id not in members:
+            raise _refuse("That character isn't in this encounter")
+        change: dict[str, Any] = {}
+        if disposition is not None:
+            change["disposition"] = disposition
+        if hostile_to is not None:
+            strangers = [one for one in hostile_to if one not in members]
+            if strangers:
+                raise _refuse("hostile_to names someone who isn't in this encounter")
+            change["hostile_to"] = hostile_to
+        choices = self.assign_stances(encounter, {person_id: change})
+        order = self.order_for(encounter.id)
+        order.open_choices = choices
+        return order
 
     def combat_options_for(self, encounter_id: str, body: CombatOptionsRequest) -> CombatOptionsOut:
         """A combatant's legal choices now, from its sheet and the system pack: whether it's its turn
@@ -548,17 +611,17 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
         target (distance isn't checked yet). The campaign's GM only."""
         encounter, campaign = self._gm_encounter(encounter_id)
         combatant, person, _, attacks, _ = self._fighter(encounter, campaign, body.person_id)
-        side = self._side(combatant, person)
         round_now = int(encounter.round or 0)
+        everyone = _live(self._trusted(CombatantManager), encounter_id=encounter.id)
+        own = {one.person_id: _hostile_of(one) for one in everyone if one.person_id}
         targets = []
-        for other in _live(self._trusted(CombatantManager), encounter_id=encounter.id):
+        for other in everyone:
             if other.id == combatant.id or other.is_defeated or other.person_id is None:
                 continue
             who = self._find(PersonManager, other.person_id)
             if who is None:
                 continue
-            theirs = self._side(other, who)
-            hostile = "neutral" not in (side, theirs) and theirs != side
+            hostile = hostile_between(own, body.person_id, other.person_id)
             targets.append(CombatTargetOut(person_id=who.id, name=other.name or who.name or "", hostile=hostile, hp=other.hp))
         turn = encounter.status == "running" and encounter.current_combatant_id == combatant.id
         ids = [one.person_id for one in targets]
