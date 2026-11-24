@@ -117,6 +117,29 @@ def test_a_scenarios_scenes_copy_into_its_playthrough(server: TestClient) -> Non
     assert refused.value.status_code == 404
 
 
+def test_a_playthrough_opens_on_the_scene_where_the_party_starts(server: TestClient) -> None:
+    """The operator: The Missing Merchant opens in the Halloway parlour, so play must open on the
+    house map, not the town the scenario last had current."""
+    author, player = create_user(server), create_user(server)
+    scenario = _create(server, author, "campaign", name="The Missing Merchant", user_id=author.id)
+    town = _create(server, author, "location", name="Saltmere", kind="city", campaign_id=scenario["id"])
+    house = _create(server, author, "location", name="Halloway house", kind="building", parent_id=town["id"], campaign_id=scenario["id"])
+    _create(server, author, "scene", name="Halloway house, ground floor", campaign_id=scenario["id"], location_id=house["id"])
+    saltmere = _create(server, author, "scene", name="Saltmere", campaign_id=scenario["id"], location_id=town["id"])
+    asyncio.run(RPGSceneExtension.activate_scene(str(author.id), saltmere["id"]))
+
+    playthrough = _create(server, author, "campaign", name="Playthrough", user_id=author.id)
+    copy_town = _create(server, author, "location", name="Saltmere", kind="city", campaign_id=playthrough["id"])
+    copy_house = _create(server, author, "location", name="Halloway house", kind="building", parent_id=copy_town["id"], campaign_id=playthrough["id"])
+    parlour = _create(server, author, "location", name="The parlour", kind="room", parent_id=copy_house["id"], campaign_id=playthrough["id"])
+    _create(server, author, "person", name="Brann", kind="pc", user_id=player.id, campaign_id=playthrough["id"], location_id=parlour["id"])
+    copied = asyncio.run(
+        RPGSceneExtension.copy_scenes(str(author.id), scenario["id"], playthrough["id"], {town["id"]: copy_town["id"], house["id"]: copy_house["id"]})
+    )
+    opened = _current(server, author, playthrough["id"])
+    assert opened["name"] == "Halloway house, ground floor" and opened["id"] in {one["id"] for one in copied}
+
+
 def test_starting_a_playthrough_copies_the_scenarios_scenes(server: TestClient) -> None:
     """The wiki's start (POST /v1/campaign/{id}/instantiate, its AFTER_INSTANTIATE callbacks) brings the
     scenario's scenes into the playthrough, tokens on the copied characters, the current one current."""

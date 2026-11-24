@@ -1616,13 +1616,47 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 copy(ScopePlaceManager, pin, campaign_id=to_campaign_id)
         if not copied:
             return []
-        current = next((scene for source, scene in copied if source.is_active), copied[0][1])
+        # The play opens where the story does: the scene of the party's starting place, else the
+        # scenario's current one (the operator: The Missing Merchant opens in the Halloway parlour, so
+        # its house map, not the town).
+        current = self._party_scene(to_campaign_id, [scene for _, scene in copied]) or next(
+            (scene for source, scene in copied if source.is_active), copied[0][1]
+        )
         scenes = self._trusted(SceneManager)
         for other in _live(scenes, campaign_id=to_campaign_id):
             if other.is_active and other.id != current.id:
                 scenes.update_trusted(id=other.id, is_active=False)
         scenes.update_trusted(id=current.id, is_active=True)
         return [self._summarize(self._get(SceneManager, scene.id) or scene) for _, scene in copied]
+
+    def _party_scene(self, campaign_id: str, scenes: list[Any]) -> Any | None:
+        """Of ``scenes``, the one where the campaign's party starts: bound to the place its player
+        characters are in, else the nearest place above it (a room's house, a house's town); a
+        scene bound to the place itself before any other. The first player character by name
+        decides; None when no player character is anywhere a scene shows."""
+        bound: dict[str, list[Any]] = {}
+        for scene in scenes:
+            if getattr(scene, "location_id", None):
+                bound.setdefault(scene.location_id, []).append(scene)
+        if not bound:
+            return None
+        party = sorted(
+            (one for one in _live(self._trusted(PersonManager), campaign_id=campaign_id) if getattr(one, "kind", None) == "pc" and getattr(one, "location_id", None)),
+            key=lambda one: (str(one.name or ""), str(one.id)),
+        )
+        locations = self._trusted(LocationManager)
+        for person in party:
+            seen: set[str] = set()
+            current: Optional[str] = person.location_id
+            while current and current not in seen:
+                seen.add(current)
+                if current in bound:
+                    return bound[current][0]
+                try:
+                    current = getattr(locations.get(id=current), "parent_id", None)
+                except HTTPException:
+                    current = None
+        return None
 
     def _arrival_point(self, scene: Any) -> tuple[float, float]:
         """Where arrivals appear: the scene's entry point, else its centre."""

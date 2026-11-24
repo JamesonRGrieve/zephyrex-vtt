@@ -61,10 +61,14 @@ class Plan:
     gaps: list[Gap] = field(default_factory=list)
 
     level: int = 1
+    # The species is one of several lineages the module holds ("Gnome": Forest or Rock), the
+    # player's choice: the rest builds, the lineage is an open choice.
+    lineage_open: bool = False
 
     @property
     def buildable(self) -> bool:
-        needed = {"class", "background"} | (set() if self.line is not None and is_unknown(self.line.species) else {"species"})
+        species_settled = self.line is not None and (is_unknown(self.line.species) or self.lineage_open)
+        needed = {"class", "background"} | (set() if species_settled else {"species"})
         return self.line is not None and needed <= set(self.origins) and bool(self.abilities)
 
 
@@ -79,6 +83,20 @@ def name_key(name: str) -> str:
     first, _, rest = name.partition(",")
     words = f"{rest} {first}" if rest else first
     return " ".join(re.findall(r"[a-z]+", words.lower()))
+
+
+def spoken(name: str) -> str:
+    """A name as said: "Gnome, Forest" is "Forest Gnome"."""
+    first, _, rest = name.partition(",")
+    return f"{rest.strip()} {first.strip()}" if rest.strip() else name.strip()
+
+
+def lineages_of(species: Mapping[str, Document], name: str) -> list[Document]:
+    """The module's lineages of a species named alone: "Gnome" is "Gnome, Forest" and "Gnome, Rock"
+    (their keys end with the species' own), in name order."""
+    key = name_key(name)
+    found = [document for found_key, document in species.items() if found_key != key and found_key.endswith(f" {key}")]
+    return sorted(found, key=lambda one: one.name)
 
 
 def parse_line(text: str, classes: Sequence[str]) -> Optional[PregenLine]:
@@ -96,6 +114,20 @@ def parse_line(text: str, classes: Sequence[str]) -> Optional[PregenLine]:
 
 def _modifier(score: int) -> int:
     return (score - 10) // 2
+
+
+def advancements_of(system: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """A document's advancements, whichever form its module stored them in: a list, or (newer
+    dnd5e data) an object keyed by each advancement's id, whose keys alone would read as strings.
+    Anything that isn't an advancement is skipped."""
+    raw = system.get("advancement") or []
+    if isinstance(raw, Mapping):
+        values: list[Any] = list(raw.values())
+    elif isinstance(raw, (list, tuple)):
+        values = list(raw)
+    else:
+        values = []
+    return [one for one in values if isinstance(one, Mapping)]
 
 
 def _at(advancement: Mapping[str, Any], level: int) -> bool:
@@ -136,6 +168,15 @@ def plan(
         if kind == "species" and is_unknown(name):
             continue
         document = catalog.get(kind, {}).get(name_key(name)) if name else None
+        if document is None and kind == "species" and name:
+            lineages = lineages_of(catalog.get("species", {}), name)
+            if len(lineages) == 1:
+                document = lineages[0]
+            elif lineages:
+                # The SRD's lineages are the player's choice (a Forest or a Rock Gnome): never guessed.
+                result.lineage_open = True
+                result.gaps.append(Gap("species", f"{name}: choose a lineage: {' or '.join(spoken(one.name) for one in lineages)}"))
+                continue
         if document is None:
             result.gaps.append(Gap(kind, f"No {kind} called {name or '(none)'!r} in the srd5e module"))
         else:
@@ -154,7 +195,7 @@ def plan(
 
     for kind, document in chosen.items():
         system = document.data or {}
-        for advancement in system.get("advancement") or []:
+        for advancement in advancements_of(system):
             if not _at(advancement, target):
                 continue
             kind_of = advancement.get("type")

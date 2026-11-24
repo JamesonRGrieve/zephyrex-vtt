@@ -116,3 +116,33 @@ def test_a_level_past_the_packs_last_or_an_unknown_species() -> None:
     unknown = plan(parse_line("Level 1 Unknown Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"]), _catalog(), PACK)
     assert unknown.buildable and "species" not in unknown.origins
     assert not any(gap.what == "species" for gap in unknown.gaps)
+
+
+def test_advancements_stored_as_an_object_keyed_by_id_build_the_same() -> None:
+    """Newer dnd5e data keeps a document's advancements as {id: advancement}: iterating it gave the
+    keys, strings, and build_campaign_pregens 500'd at level 4 (The Haunted Manor, Goblin Ambush)."""
+    catalog = _catalog()
+    fighter = catalog["class"]["fighter"]
+    keyed = {f"adv{index}": one for index, one in enumerate(fighter.data["advancement"])}
+    keyed["stray"] = "not an advancement"
+    catalog["class"]["fighter"] = Document(fighter.trait_id, fighter.source_id, fighter.name, {**fighter.data, "advancement": keyed})
+    line = parse_line("Level 1 High Elf Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"])
+    as_object = plan(line, catalog, PACK, level=4)
+    as_list = plan(line, _catalog(), PACK, level=4)
+    assert as_object.buildable and as_object.features == as_list.features and as_object.hp == as_list.hp
+    assert sorted(gap.detail for gap in as_object.gaps) == sorted(gap.detail for gap in as_list.gaps)
+
+
+def test_a_species_named_alone_with_several_lineages_builds_with_the_lineage_open() -> None:
+    """The srd5e module holds Gnome only as "Gnome, Forest" and "Gnome, Rock" (and Tiefling as three
+    legacies): "Level 1 Gnome Wizard" matched nothing and built nothing (Nix Copperpot, Kestrel Vane).
+    The lineage is the player's choice, never guessed; the rest builds."""
+    catalog = _catalog()
+    for lineage in ("Gnome, Forest", "Gnome, Rock"):
+        catalog["species"][name_key(lineage)] = Document(f"t-{lineage}", f"S-{lineage}", lineage, {"advancement": []})
+    got = plan(parse_line("Level 1 Gnome Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"]), catalog, PACK)
+    assert got.buildable and "species" not in got.origins and got.hp is not None
+    assert [gap.detail for gap in got.gaps if gap.what == "species"] == ["Gnome: choose a lineage: Forest Gnome or Rock Gnome"]
+    # A species the module holds as one lineage only is that lineage: nothing to choose.
+    only = plan(parse_line("Level 1 Elf Fighter, Acolyte background (SRD 5.2.1).", ["Fighter"]), _catalog(), PACK)
+    assert only.buildable and only.origins["species"] == "t-elf"
