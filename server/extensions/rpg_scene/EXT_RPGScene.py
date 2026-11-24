@@ -5,7 +5,7 @@
 from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_scene.BLL_RPGScene import PlaceOnScopeRequest, SceneManager, ScopeRequest, SnapshotRequest
+from zephyrex.extensions.rpg_scene.BLL_RPGScene import PlaceOnScopeRequest, SceneManager, ScopeRequest, SnapshotRequest, UvttRequest
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -48,6 +48,16 @@ class RPGSceneExtension(AbstractStaticExtension):
         first, with their distance in the scene's units) and the doors. Hidden tokens and what walls
         cut off are never included."""
         return cls.scenes(requester_id).snapshot_for(scene_id, SnapshotRequest(token_id=token_id)).model_dump()
+
+    @classmethod
+    @ability("import_uvtt")
+    async def import_uvtt(cls, requester_id: str, scene_id: str, uvtt: dict[str, Any], replace: bool = True) -> dict[str, Any]:
+        """A Universal VTT map's (.uvtt / .dd2vtt JSON) walls, doors and lights onto a scene, which
+        takes the map's size and grid: {scene_id, level, width, height, grid_size, walls, doors,
+        lights, removed}. replace takes off the scene's hand-placed and imported walls and lights
+        first. The art is the scene's background, set apart (set_scene_background). The campaign's
+        GM only."""
+        return cls.scenes(requester_id).import_uvtt_for(scene_id, UvttRequest(uvtt=uvtt, replace=replace)).model_dump()
 
     @classmethod
     @ability("scene_scope")

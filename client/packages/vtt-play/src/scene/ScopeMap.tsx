@@ -16,6 +16,7 @@ import { Button } from 'zephyrex/ui/button';
 import { LoadProblem } from 'zephyrex/ui/load-problem';
 import { SkeletonRows } from 'zephyrex/ui/skeleton';
 import { z } from 'zod';
+import { pictureUrl } from './pictures';
 
 const personSchema = z.object({ person_id: z.string(), name: z.string(), picture: z.string().nullish() });
 const placeSchema = z.object({
@@ -163,7 +164,23 @@ export function ScopeMap({ campaignId, locationId = null, onOpenRecord, onOpenSc
   const read = useCallback(async (): Promise<void> => {
     try {
       const answer = await client.post('/v1/scene/scope', { scope: { campaign_id: campaignId, location_id: at } });
-      setData({ state: 'ready', scope: scopeSchema.parse(answer) });
+      const scope = scopeSchema.parse(answer);
+      // An uploaded map or portrait is the API's: at the client's base, with the session cookie.
+      const person = (one: ScopePerson): ScopePerson => ({ ...one, picture: pictureUrl(client, one.picture) });
+      setData({
+        state: 'ready',
+        scope: {
+          ...scope,
+          background: { ...scope.background, url: pictureUrl(client, scope.background.url) },
+          markers: scope.markers.map((one) => ({
+            ...one,
+            picture: pictureUrl(client, one.picture),
+            people: one.people.map(person),
+          })),
+          parties: scope.parties.map((one) => ({ ...one, people: one.people.map(person) })),
+          here: scope.here.map(person),
+        },
+      });
     } catch (error) {
       setData({ state: 'failed', error: error instanceof Error ? error : new Error(String(error)) });
     }

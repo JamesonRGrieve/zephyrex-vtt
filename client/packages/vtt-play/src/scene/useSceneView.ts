@@ -2,6 +2,7 @@
 import { useRoom } from '@zephyrex/rooms';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useClient, writeProblem } from 'zephyrex';
+import { pictureUrl } from './pictures';
 import { z } from 'zod';
 import { viewSchema, type SceneViewData, type ViewToken, type ViewWall } from './schemas';
 
@@ -24,7 +25,16 @@ export function useSceneView(sceneId: string, tokenId?: string) {
   const read = useCallback(async (): Promise<void> => {
     try {
       const answer = await client.post(`/v1/scene/${sceneId}/view`, { view: tokenId ? { token_id: tokenId } : {} });
-      setData({ state: 'ready', view: viewSchema.parse(answer).view });
+      const view = viewSchema.parse(answer).view;
+      // An uploaded map or portrait is the API's: at the client's base, with the session cookie.
+      setData({
+        state: 'ready',
+        view: {
+          ...view,
+          background_url: pictureUrl(client, view.background_url),
+          tokens: view.tokens.map((one) => ({ ...one, picture_url: pictureUrl(client, one.picture_url) })),
+        },
+      });
     } catch (error) {
       const failed = error instanceof Error ? error : new Error(String(error));
       setData((current) => (current.state === 'ready' ? current : { state: 'failed', error: failed }));

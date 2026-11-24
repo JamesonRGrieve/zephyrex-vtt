@@ -20,9 +20,11 @@ Not yet: fog memory, elevation in sight, and lights in what a token sees.
 
 from __future__ import annotations
 
+import re
+
 from typing import Any, ClassVar, Literal, Optional, Type
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from pydantic import BaseModel as PlainModel
 from pydantic import Field
 from zephyrex.lib.Rooms import room_of
@@ -31,9 +33,11 @@ from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
 from zephyrex.extensions.rpg_scene.Scopes import Person as ScopedPerson
 from zephyrex.extensions.rpg_scene.Scopes import Place as ScopedPlace
 from zephyrex.extensions.rpg_scene.Scopes import party_spot, scope as scope_of
+from zephyrex.extensions.rpg_scene.Uvtt import UvttError, read as read_uvtt
 from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, blocks_move, find_path, in_shape, perceive, shape_box
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
 from zephyrex.extensions.world_spatial.BLL_WorldSpatial import LocationManager, LocationModel  # type: ignore[import-not-found]
+from zephyrex.lib.ContentNegotiation import skip_negotiation
 from zephyrex.lib.CustomRoute import ExposeIn, custom_route
 from zephyrex.lib.Environment import env
 from zephyrex.logic.AbstractLogicManager.models import FieldComparison
@@ -60,6 +64,10 @@ Direction = Literal["both", "left", "right"]
 # zephyr-cartography's scene-spec v1 feature kinds (@zephyrex/cartography is their source of truth).
 FeatureKind = Literal["region", "stroke", "path", "room", "stamp", "pin", "label", "zone", "shape", "token"]
 MAX_FEATURE_KEY = 200
+# An uploaded picture's own address (the attachments extension's content route).
+ASSET_PATH = re.compile(r"/v1/asset/([^/?#]+)/content")
+# A scene's art comes back as its own bytes: out of content negotiation, as the asset route is.
+skip_negotiation(r"/v1/scene/[^/]+/background")
 
 
 class SceneModel(
@@ -934,6 +942,27 @@ class PlaceOnScopeEnvelope(PlainModel):
     place_on_scope: PlaceOnScopeRequest
 
 
+class UvttRequest(PlainModel):
+    uvtt: dict[str, Any] = Field(description="A Universal VTT map's JSON (.uvtt / .dd2vtt); its embedded image is ignored")
+    replace: bool = Field(True, description="Take off the scene's hand-placed and imported walls and lights first")
+
+
+class UvttEnvelope(PlainModel):
+    import_uvtt: UvttRequest
+
+
+class UvttOut(PlainModel):
+    scene_id: str
+    level: Optional[str] = Field(None, description="The file's level name, e.g. Ground floor")
+    width: int
+    height: int
+    grid_size: float
+    walls: int
+    doors: int
+    lights: int
+    removed: int = Field(description="Walls and lights taken off first")
+
+
 def _summary(scene: Any) -> SceneSummary:
     return SceneSummary(
         id=scene.id,
@@ -1175,7 +1204,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             lit=lit,
             tokens=tokens,
             walls=shown,
-            background_url=self._background_of(scene),
+            background_url=self._drawn_background(scene),
         )
 
     def _portraits(self, person_ids: list[str]) -> dict[str, Optional[str]]:
@@ -1187,6 +1216,48 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             return {}
         found = by_id(self.model_registry, str(self.requester.id), person_ids).get("world_entities") or []
         return {str(one["id"]): one.get("picture") for one in found if one.get("kind") == "person" and one.get("picture")}
+
+    def import_uvtt_for(self, scene_id: str, body: UvttRequest) -> UvttOut:
+        """A Universal VTT map's walls, doors and lights onto a scene (rpg_scene.Uvtt), which takes
+        the map's size and grid: the picture alone isn't a scene (Cartography's exports, Dungeondraft).
+        Replacing takes off the walls and lights no feature made (hand-placed or imported) first; a
+        feature's own records stay. Made as the requester, the campaign's GM only."""
+        scene = self._get(SceneManager, scene_id)
+        campaign = None if scene is None or scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        if scene is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("SceneModel")
+        try:
+            found = read_uvtt(body.uvtt, float(scene.grid_distance or DEFAULT_GRID_DISTANCE))
+        except (UvttError, TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail={"message": f"Not a Universal VTT map this reads: {error}"}) from error
+        mine = lambda manager: manager(requester_id=str(self.requester.id), model_registry=self.model_registry)  # noqa: E731
+        removed = 0
+        if body.replace:
+            for manager in (SceneWallManager, SceneLightManager):
+                for row in _live(self._trusted(manager), scene_id=scene.id):
+                    if getattr(row, "scene_feature_id", None) is None:
+                        self._trusted(manager).delete(id=row.id)
+                        removed += 1
+        self._trusted(SceneManager).update(id=scene.id, width=found.width, height=found.height, grid_size=found.grid_size)
+        walls = mine(SceneWallManager)
+        for points in found.walls:
+            walls.create(scene_id=scene.id, points=points)
+        for door in found.doors:
+            walls.create(scene_id=scene.id, points=door["points"], door_type="door", door_state=door["door_state"])
+        lights = mine(SceneLightManager)
+        for light in found.lights:
+            lights.create(scene_id=scene.id, **light)
+        return UvttOut(
+            scene_id=scene.id,
+            level=found.level,
+            width=found.width,
+            height=found.height,
+            grid_size=found.grid_size,
+            walls=len(found.walls),
+            doors=len(found.doors),
+            lights=len(found.lights),
+            removed=removed,
+        )
 
     def _summarize(self, scene: Any) -> SceneSummary:
         """A scene's summary with what its map draws under the grid (_background_of)."""
@@ -1211,6 +1282,41 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         picture: that's an illustration (a ship's mast), not a top-down map (the operator, 2026-11-22)."""
         return str(scene.background_url) if getattr(scene, "background_url", None) else None
 
+    def _drawn_background(self, scene: Any) -> Optional[str]:
+        """The map art's address to draw from: an uploaded picture (/v1/asset/{id}/content) is served
+        by the scene's own background route, which lets the campaign's players load it (the asset's
+        own route serves only its uploader and viewers of a record it's attached to, and players
+        can't view the GM's rows); a link elsewhere is drawn as it is."""
+        stored = self._background_of(scene)
+        if stored and ASSET_PATH.fullmatch(stored):
+            return f"/v1/scene/{scene.id}/background"
+        return stored
+
+    async def background_for(self, scene_id: str) -> Response:
+        """A scene's uploaded map art, for its campaign's GM and players: the asset its background
+        names, read as the system once membership is checked. A scene whose art is a link elsewhere,
+        or has none, has nothing here (404), as does anyone outside the campaign."""
+        scene = self._get(SceneManager, scene_id)
+        campaign = None if scene is None or scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        if scene is None or campaign is None or not self._is_member(campaign):
+            raise _not_found("SceneModel")
+        found = ASSET_PATH.fullmatch(self._background_of(scene) or "")
+        if found is None:
+            raise _not_found("SceneModel")
+        from zephyrex.extensions.attachments.BLL_Attachments import AssetManager  # type: ignore[import-not-found]
+        from zephyrex.extensions.cloud.EXT_Cloud import EXT_Cloud  # type: ignore[import-not-found]
+
+        try:
+            asset = AssetManager(requester_id=env("SYSTEM_ID"), model_registry=self.model_registry).get(id=found.group(1))
+        except HTTPException:
+            raise _not_found("SceneModel") from None
+        content = await EXT_Cloud.download_file(asset.provider, asset.path)
+        return Response(
+            content=content,
+            media_type=asset.content_type,
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+        )
+
     def _empty_view(self, scene: Any) -> dict[str, Any]:
         """A scene's map with nothing on it: for a player of the campaign with no token there."""
         return {
@@ -1227,7 +1333,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             "lit": False,
             "tokens": [],
             "walls": [],
-            "background_url": self._background_of(scene),
+            "background_url": self._drawn_background(scene),
         }
 
     def _gms_of(self, campaign: Any) -> set[str]:
@@ -1391,7 +1497,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             parent=None if scoped.parent is None else place(scoped.parent),
             path=[place(one) for one in scoped.path],
             background=ScopeBackground(
-                url=None if scene is None else self._background_of(scene),
+                url=None if scene is None else self._drawn_background(scene),
                 scene_id=None if scene is None else scene.id,
                 label=scoped.place.name,
             ),
@@ -1778,6 +1884,31 @@ class SceneManager(AbstractBLLManager, RouterMixin):
     )
     async def activate_route(self, scene_id: str, body: ActivateEnvelope) -> SceneSummary:
         return self.activate_scene_for(scene_id)
+
+    @custom_route(
+        method="POST",
+        path="/{scene_id}/import_uvtt",
+        input_model=UvttEnvelope,
+        output_model=UvttOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="A Universal VTT map's walls, doors and lights onto a scene, which takes its size and grid (the campaign's GM)",
+    )
+    async def import_uvtt_route(self, scene_id: str, body: UvttEnvelope) -> UvttOut:
+        return self.import_uvtt_for(scene_id, body.import_uvtt)
+
+    @custom_route(
+        method="GET",
+        path="/{scene_id}/background",
+        authentication_type="jwt",
+        response_class=Response,
+        openapi_tags=("Scenes",),
+        summary="A scene's uploaded map art, for its campaign's GM and players",
+        expose_in=(ExposeIn.REST,),
+    )
+    async def background_route(self, scene_id: str) -> Response:
+        return await self.background_for(scene_id)
 
     @custom_route(
         method="POST",
