@@ -33,7 +33,7 @@ importers:
         version: 7.10.1(@typescript/typescript6@6.0.2)(prisma@7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@12.11.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
       '@zephyrex-rpg/wiki':
         specifier: file:../../zephyrex-rpg-wiki/client/packages/wiki
-        version: file:../../zephyrex-rpg-wiki/client/packages/wiki(2758b9fc9070f8e69e76791f1d41600a)
+        version: file:../../zephyrex-rpg-wiki/client/packages/wiki(1c67d3b6c0e179d55af28e26c1f41a9f)
       '@zephyrex/auth':
         specifier: file:../../auth
         version: file:../../auth(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7)
@@ -3888,9 +3888,11 @@ packages:
     peerDependencies:
       '@prisma/client': '*'
       '@zephyrex/lite': '*'
+      better-sqlite3: '*'
       lucide-react: '*'
       next: '*'
       react: '*'
+      sqlite-vec: '*'
       swr: '*'
       zephyrex: '*'
       zod: '*'
@@ -3898,6 +3900,10 @@ packages:
       '@prisma/client':
         optional: true
       '@zephyrex/lite':
+        optional: true
+      better-sqlite3:
+        optional: true
+      sqlite-vec:
         optional: true
 
   '@zephyrex/auth@file:../../auth':
@@ -12487,7 +12493,7 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
-  '@zephyrex-rpg/wiki@file:../../zephyrex-rpg-wiki/client/packages/wiki(2758b9fc9070f8e69e76791f1d41600a)':
+  '@zephyrex-rpg/wiki@file:../../zephyrex-rpg-wiki/client/packages/wiki(1c67d3b6c0e179d55af28e26c1f41a9f)':
     dependencies:
       lucide-react: 1.76.0(@types/react@19.3.0)(react@19.3.1)
       next: 16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -12498,6 +12504,7 @@ snapshots:
     optionalDependencies:
       '@prisma/client': 7.10.1(@typescript/typescript6@6.0.2)(prisma@7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@12.11.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
       '@zephyrex/lite': file:../../client-framework/packages/lite(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(zephyrex@file:../../client-framework/packages/zephyrex(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@testing-library/react@16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(tailwindcss-animate@1.0.7(tailwindcss@4.3.5))(tailwindcss@4.3.5)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7))(zod@4.6.7)
+      better-sqlite3: 12.11.1
 
   '@zephyrex/auth@file:../../auth(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(effect@3.20.0)(joi@17.13.9)(next@16.4.6(@babel/core@7.29.13)(@playwright/test@1.63.0(zod@4.6.7))(@types/node@26.6.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(valibot@1.4.2(@typescript/typescript6@6.0.2))(zod@4.6.7)':
     dependencies:

@@ -22,8 +22,9 @@ from pydantic import BaseModel as PlainModel
 from pydantic import Field
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager, PersonModel
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
+from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
 from zephyrex.extensions.rpg_combat.Attacks import Attack, armor_class, attacks_for, resolve
-from zephyrex.extensions.rpg_combat.Stances import STANCES, Fighter, Record, Stance, hostile_between, work_out
+from zephyrex.extensions.rpg_combat.Stances import STANCES, Fighter, Stance, hostile_between, work_out
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import DiceManager, InitiativeRequest, live_draw  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import PersonTraitManager, TraitManager  # type: ignore[import-not-found]
 from zephyrex.extensions.rpg_scene.BLL_RPGScene import SceneManager, SceneModel, SceneTokenManager, SceneTokenModel  # type: ignore[import-not-found]
@@ -548,29 +549,28 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
         return combatant, person, pack, attacks, armor_class(pack, scores, resources.get("armor-class"))
 
     def assign_stances(self, encounter: Any, overrides: Optional[dict[str, dict[str, Any]]] = None) -> list[dict[str, Any]]:
-        """Each combatant's stance in the fight, from its own dispositions in the wiki toward the
-        others (rpg_combat.Stances), with ``overrides`` (person id → disposition and/or hostile_to)
+        """Each combatant's stance in the fight, from its current attitudes in the wiki toward the
+        others (rpg_core's current_attitudes, read by rpg_combat.Stances), with ``overrides`` (person id → disposition and/or hostile_to)
         in their place; stored on the combatants. Returns the open choices the record leaves."""
-        from zephyrex.extensions.world_narrative.BLL_WorldNarrative import DispositionManager  # type: ignore[import-not-found]
-
         members = [one for one in _live(self._trusted(CombatantManager), encounter_id=encounter.id) if one.person_id]
         fighters = []
         for one in members:
             person = self._find(PersonManager, one.person_id)
             fighters.append(Fighter(one.person_id, one.name or getattr(person, "name", None) or "", getattr(person, "kind", None) == "pc"))
-        rows = self._trusted(DispositionManager)
-        records = [
-            Record(row.person_id, row.target_kind, row.target_person_id, row.attitude, bool(row.is_default))
-            for one in fighters
-            for row in _live(rows, person_id=one.person_id)
-        ]
+        # The wiki's own reading of who regards whom how (resolved triggers, else the default),
+        # through its ability, never its tables; as the GM, who may see every disposition.
+        current_attitudes = loaded_ability(self.model_registry, "rpg_core", "current_attitudes")
+        if current_attitudes is None:
+            raise HTTPException(status_code=503, detail={"message": "The wiki's current_attitudes isn't loaded"})
+        people = sorted({one.person_id for one in fighters})
+        attitudes = current_attitudes(self.model_registry, str(self.requester.id), encounter.campaign_id, people) if people else {}
         # The stances already set on this encounter's combatants stay, unless an override replaces them.
         kept = {
             one.person_id: {"disposition": one.disposition, "hostile_to": _hostile_of(one)}
             for one in members
             if getattr(one, "disposition", None) is not None
         }
-        worked = work_out(fighters, records, {**kept, **(overrides or {})})
+        worked = work_out(fighters, attitudes, {**kept, **(overrides or {})})
         combatants = self._trusted(CombatantManager)
         for one in members:
             combatants.update_trusted(

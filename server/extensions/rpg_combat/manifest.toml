@@ -7,7 +7,7 @@ minimum_framework_version = "0.0.1"
 # Where this extension's source is offered (AGPL-3.0 section 13).
 repository = "https://github.com/JamesonRGrieve/zephyrex-vtt"
 
-# An encounter belongs to a campaign, whose GM runs it
+# An encounter belongs to a campaign, whose GM runs it; its current_attitudes give the stances
 [[extension_dependencies]]
 name = "rpg_core"
 optional = false
@@ -25,9 +25,4 @@ optional = false
 # A combatant is one of genealogy's persons
 [[extension_dependencies]]
 name = "genealogy"
-optional = false
-
-# A combatant's stance comes from its dispositions toward the others (the wiki's)
-[[extension_dependencies]]
-name = "world_narrative"
 optional = false
