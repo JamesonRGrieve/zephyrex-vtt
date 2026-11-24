@@ -34,12 +34,15 @@ def main() -> int:
     args = parser.parse_args()
 
     from fastapi.testclient import TestClient
-    from zephyrex.extensions.rpg_modules.Install import install
 
     module, _, factory = args.app.partition(":")
     sys.path.insert(0, str(Path.cwd()))
     app = getattr(importlib.import_module(module), factory or "create")()
     with TestClient(app):
+        # The extensions are importable as zephyrex.extensions.* only once the app has loaded them
+        # (a composing app such as rpg-ai loads the suite's from its own roots).
+        from zephyrex.extensions.rpg_modules.Install import install
+
         summary = install(
             app.state.model_registry,
             args.owner,

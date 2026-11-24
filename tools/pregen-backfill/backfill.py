@@ -38,14 +38,17 @@ def main() -> int:
 
     from fastapi import HTTPException
     from fastapi.testclient import TestClient
-    from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
-    from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import BuilderManager, PregenRequest
 
     module, _, factory = args.app.partition(":")
     sys.path.insert(0, str(Path.cwd()))
     app = getattr(importlib.import_module(module), factory or "create")()
     results, skipped = [], []
     with TestClient(app):
+        # The extensions are importable as zephyrex.extensions.* only once the app has loaded them
+        # (a composing app such as rpg-ai loads the suite's from its own roots).
+        from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
+        from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import BuilderManager, PregenRequest
+
         registry = app.state.model_registry
         persons = PersonManager(requester_id=args.owner, model_registry=registry)
         builder = BuilderManager(requester_id=args.owner, model_registry=registry)

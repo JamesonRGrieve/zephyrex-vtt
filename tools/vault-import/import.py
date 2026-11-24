@@ -8,7 +8,8 @@ Each note whose frontmatter has a ``canonical_sheet`` becomes the sheet of the c
 with the note's ``name`` (the wiki importer makes the persons first). The line's module must be
 installed for --owner (tools/foundry-bridge); this enables it on the campaign, then writes the
 sheet through it (rpg_modules.Sheet). Run with the app's environment, never through a route; --app
-boots a composing app (rpg-ai) from the current directory, as foundry-bridge/install.py does.
+boots a composing app (rpg-ai) from the current directory, as foundry-bridge/install.py does. The
+dry run boots it too (the sheet reader is an extension's) and writes nothing.
 """
 
 from __future__ import annotations
@@ -46,26 +47,28 @@ def main() -> int:
     args = parser.parse_args()
 
     notes = sorted(args.notes.glob("*.md")) if args.notes.is_dir() else [args.notes]
-    from zephyrex.extensions.rpg_modules.Sheet import import_sheet, sheet_from_frontmatter
-
-    sheets = []
-    for note in notes:
-        matter = frontmatter(note)
-        sheet = sheet_from_frontmatter(matter)
-        if sheet is not None:
-            sheets.append((str(matter.get("name") or note.stem), sheet))
-    if args.dry_run:
-        print(json.dumps(dict(sheets), indent=1))
-        return 0
-
     from fastapi.testclient import TestClient
-    from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
-    from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ContentModuleManager
 
     module, _, factory = args.app.partition(":")
     sys.path.insert(0, str(Path.cwd()))
     app = getattr(importlib.import_module(module), factory or "create")()
     with TestClient(app):
+        # The extensions are importable as zephyrex.extensions.* only once the app has loaded them
+        # (a composing app such as rpg-ai loads the suite's from its own roots), the dry run's too.
+        from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
+        from zephyrex.extensions.rpg_modules.BLL_RPGModules import CampaignModuleManager, ContentModuleManager
+        from zephyrex.extensions.rpg_modules.Sheet import import_sheet, sheet_from_frontmatter
+
+        sheets = []
+        for note in notes:
+            matter = frontmatter(note)
+            sheet = sheet_from_frontmatter(matter)
+            if sheet is not None:
+                sheets.append((str(matter.get("name") or note.stem), sheet))
+        if args.dry_run:
+            print(json.dumps(dict(sheets), indent=1))
+            return 0
+
         registry = app.state.model_registry
 
         def as_owner(manager: type) -> object:
