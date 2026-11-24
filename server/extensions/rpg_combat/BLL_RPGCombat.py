@@ -66,6 +66,10 @@ class EncounterModel(
         name: Optional[StringSearchModel] = None
 
 
+# A combatant's side in a fight, in the tokens' own words (rpg_scene's dispositions).
+Side = Literal["friendly", "hostile", "neutral"]
+
+
 class CombatantModel(
     ApplicationModel.Optional,
     UpdateMixinModel.Optional,
@@ -85,6 +89,7 @@ class CombatantModel(
     hp_max: Optional[int] = Field(None, description="The hit point maximum, from the sheet")
     reaction_round: Optional[int] = Field(None, description="The round its reaction was used in; free again the next round")
     action_round: Optional[int] = Field(None, description="The round it took its action in, on its turn")
+    side: Optional[Side] = Field(None, description="Its side in this fight (friendly, hostile, neutral); none follows its token's disposition")
     table_comment: ClassVar[str] = "A character in an encounter, with their initiative"
 
     class Create(
@@ -93,10 +98,12 @@ class CombatantModel(
         name: Optional[str] = Field(None, description="Defaults to the character's name")
         initiative: Optional[float] = None
         is_hidden: bool = False
+        side: Optional[Side] = None
 
     class Update(BaseModel):
         name: Optional[str] = None
         initiative: Optional[float] = None
+        side: Optional[Side] = None
         is_defeated: Optional[bool] = None
         is_hidden: Optional[bool] = None
 
@@ -153,6 +160,7 @@ class CombatantOut(PlainModel):
     is_defeated: bool
     is_hidden: bool
     controlled: bool = Field(description="The requester's own character, or (for the GM) every combatant")
+    side: Optional[str] = Field(None, description="Its side in this fight, when the encounter set one")
 
 
 class Unrolled(PlainModel):
@@ -367,6 +375,7 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
                     is_defeated=bool(one.is_defeated),
                     is_hidden=bool(one.is_hidden),
                     controlled=gm or (one.person_id is not None and owners.get(one.person_id) == requester),
+                    side=getattr(one, "side", None),
                 )
             )
         current = encounter.current_combatant_id
@@ -524,8 +533,10 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
         return combatant, person, pack, attacks, armor_class(pack, scores, resources.get("armor-class"))
 
     def _side(self, combatant: Any, person: Any) -> str:
-        """Whose side a combatant fights on: its token's disposition, else a player character friendly
-        and anyone else hostile."""
+        """Whose side a combatant fights on: the side the encounter gave it, else its token's
+        disposition, else a player character friendly and anyone else hostile."""
+        if getattr(combatant, "side", None):
+            return str(combatant.side)
         token = self._find(SceneTokenManager, getattr(combatant, "scene_token_id", None))
         if token is not None and getattr(token, "disposition", None):
             return str(token.disposition)

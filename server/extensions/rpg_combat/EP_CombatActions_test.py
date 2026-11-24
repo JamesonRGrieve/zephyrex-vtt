@@ -118,3 +118,26 @@ def test_anything_not_offered_is_refused_and_only_the_gm_asks(fight: dict[str, A
     with pytest.raises(HTTPException) as player:
         _run(RPGCombatExtension.combat_options(str(fight["player"].id), encounter, fight["brann"]["id"]))
     assert player.value.status_code == 404
+
+
+def test_the_encounter_says_whose_side_each_is_on(server: TestClient, fight: dict[str, Any]) -> None:
+    """The fight is against whoever the encounter says: a combatant's side overrides its token and
+    its kind, so a friendly NPC needn't be a foe and an authored monster needn't be neutral."""
+    gm = str(fight["gm"].id)
+    campaign_id = fight["brann"]["campaign_id"]
+    hesk = _create(server, fight["gm"], "person", name="Old Hesk", kind="npc", campaign_id=campaign_id)
+    drowned = _create(server, fight["gm"], "person", name="The drowned thing", kind="npc", campaign_id=campaign_id)
+    started = _run(
+        RPGCombatExtension.start_encounter(
+            gm, campaign_id, person_ids=[fight["brann"]["id"], hesk["id"], drowned["id"]],
+            sides={hesk["id"]: "neutral", drowned["id"]: "hostile", fight["brann"]["id"]: "friendly"},
+        )
+    )
+    assert {one["name"]: one["side"] for one in started["combatants"]} == {
+        "Brann": "friendly", "Old Hesk": "neutral", "The drowned thing": "hostile",
+    }
+    seen = _run(RPGCombatExtension.combat_options(gm, started["id"], fight["brann"]["id"]))
+    assert {one["name"]: one["hostile"] for one in seen["targets"]} == {"Old Hesk": False, "The drowned thing": True}
+    with pytest.raises(HTTPException) as wrong:
+        _run(RPGCombatExtension.start_encounter(gm, campaign_id, person_ids=[hesk["id"]], sides={hesk["id"]: "party"}))
+    assert wrong.value.status_code == 422 and "friendly, hostile or neutral" in wrong.value.detail["message"]

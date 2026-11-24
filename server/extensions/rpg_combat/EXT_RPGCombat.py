@@ -5,6 +5,8 @@ read the order. The AI GM acts as the campaign's GM, under the same rules as a h
 
 from typing import Any, ClassVar, Optional
 
+from fastapi import HTTPException
+
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
 from zephyrex.extensions.rpg_combat.BLL_RPGCombat import (
     CombatActionRequest,
@@ -65,19 +67,29 @@ class RPGCombatExtension(AbstractStaticExtension):
         person_ids: Optional[list[str]] = None,
         name: Optional[str] = None,
         hidden_person_ids: Optional[list[str]] = None,
+        sides: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Start a fight in a campaign: its combatants are ``person_ids`` (characters of the campaign),
         or else every character with a token on ``scene_id`` (hidden tokens stay hidden combatants).
         Initiative is rolled under the campaign's pack and round 1 begins; a combatant with no stats
         to roll is listed in ``unrolled`` with why, and acts last until the GM sets theirs.
+        ``sides`` gives a combatant its side in this fight by person id (friendly, hostile or neutral:
+        the party, whoever the fight is against, a bystander); one not named follows its token's
+        disposition, else a player character is friendly and anyone else hostile.
         The campaign's GM only. Returns the encounter in initiative order."""
+        given = dict(sides or {})
+        unknown = {side for side in given.values() if side not in ("friendly", "hostile", "neutral")}
+        if unknown:
+            raise HTTPException(status_code=422, detail={"message": f"A side is friendly, hostile or neutral, not {sorted(unknown)[0]!r}"})
         encounters = cls.encounters(requester_id)
         combatants = cls.as_requester(CombatantManager, requester_id)
         encounter = encounters.create(campaign_id=campaign_id, scene_id=scene_id, name=name or "Encounter")
         hidden = set(hidden_person_ids or [])
         if person_ids:
             for person_id in person_ids:
-                combatants.create(encounter_id=encounter.id, person_id=person_id, is_hidden=person_id in hidden)
+                combatants.create(
+                    encounter_id=encounter.id, person_id=person_id, is_hidden=person_id in hidden, side=given.get(person_id)
+                )
         elif scene_id is not None:
             for token in cls.as_requester(SceneManager, requester_id).tokens_for(scene_id):
                 if token.entity_id:
@@ -86,6 +98,7 @@ class RPGCombatExtension(AbstractStaticExtension):
                         person_id=token.entity_id,
                         scene_token_id=token.token_id,
                         is_hidden=token.hidden or token.entity_id in hidden,
+                        side=given.get(token.entity_id),
                     )
         rolled = encounters.roll_initiative_for(encounter.id, RollRequest())
         if not rolled.combatants:
