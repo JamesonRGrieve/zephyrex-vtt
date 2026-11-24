@@ -69,7 +69,7 @@ class RPGCombatExtension(AbstractStaticExtension):
         """Start a fight in a campaign: its combatants are ``person_ids`` (characters of the campaign),
         or else every character with a token on ``scene_id`` (hidden tokens stay hidden combatants).
         Initiative is rolled under the campaign's pack and round 1 begins; a combatant with no stats
-        to roll is listed in ``unrolled`` and the fight waits in setup until the GM sets theirs.
+        to roll is listed in ``unrolled`` with why, and acts last until the GM sets theirs.
         The campaign's GM only. Returns the encounter in initiative order."""
         encounters = cls.encounters(requester_id)
         combatants = cls.as_requester(CombatantManager, requester_id)
@@ -88,9 +88,13 @@ class RPGCombatExtension(AbstractStaticExtension):
                         is_hidden=token.hidden or token.entity_id in hidden,
                     )
         rolled = encounters.roll_initiative_for(encounter.id, RollRequest())
-        if rolled.unrolled or not rolled.combatants:
+        if not rolled.combatants:
             return rolled.model_dump()
-        return encounters.start_for(encounter.id).model_dump()
+        # The fight starts even when some couldn't be rolled (no sheet, no rule to roll them by): they
+        # act last and are listed, with why, until the GM sets their initiative.
+        started = encounters.start_for(encounter.id)
+        started.unrolled = rolled.unrolled
+        return started.model_dump()
 
     @classmethod
     @ability("combat_options")

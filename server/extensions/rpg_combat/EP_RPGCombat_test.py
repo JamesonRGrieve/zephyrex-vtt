@@ -87,15 +87,16 @@ def test_ties_go_to_the_higher_characteristic_then_the_roll_off() -> None:
 def test_the_gm_runs_a_fight_from_the_scene(server: TestClient, fight: dict[str, Any]) -> None:
     gm = str(fight["gm"].id)
     started = asyncio.run(RPGCombatExtension.start_encounter(gm, fight["campaign"]["id"], scene_id=fight["scene"]["id"]))
-    assert started["status"] == "setup", "the NPCs have no stats: the fight waits for the GM's numbers"
+    # The NPCs have no stats and this pack states no average to roll them at: the fight starts all
+    # the same, they act last, and they're listed (with why) until the GM sets their numbers.
+    assert (started["status"], started["round"]) == ("running", 1)
     assert {one["name"] for one in started["unrolled"]} == {"Cultist", "Lurker"}
+    assert all(one["reason"] for one in started["unrolled"])
     by_name = {one["name"]: one for one in started["combatants"]}
     assert set(by_name) == {"Rhia", "Osk", "Cultist", "Lurker"} and by_name["Lurker"]["is_hidden"] is True
     assert 4 <= by_name["Rhia"]["initiative"] <= 13 and 5 <= by_name["Osk"]["initiative"] <= 14
-
-    with pytest.raises(HTTPException) as early:
-        asyncio.run(RPGCombatExtension.start_combat(gm, started["id"]))
-    assert early.value.status_code == 422 and "Cultist" in early.value.detail["message"]
+    assert {one["name"] for one in started["combatants"][-2:]} == {"Cultist", "Lurker"}
+    assert started["current_combatant_id"] in {by_name["Rhia"]["id"], by_name["Osk"]["id"]}
 
     for name, value in (("Cultist", 20), ("Lurker", 0)):
         path = f"/v1/combatant/{by_name[name]['id']}"
@@ -165,8 +166,8 @@ def test_players_see_the_order_but_not_hidden_combatants_and_cant_run_it(server:
         headers={**_headers(fight["gm"]), "If-Match": current.headers["ETag"]},
     )
     after = server.get(f"/v1/encounter/{encounter['id']}/order", headers=_headers(fight["gm"])).json()["encounter"]
-    # The Lurker has no Grace, so this fight is still in setup: the update moved neither.
-    assert (after["name"], after["status"], after["round"]) == ("Ambush", "setup", 0)
+    # The fight is running (the Lurker, with no Grace, acts last): the update moved neither status nor round.
+    assert (after["name"], after["status"], after["round"]) == ("Ambush", "running", 1)
 
 
 def test_only_the_gm_makes_encounters_and_combatants_must_be_the_campaigns(server: TestClient, fight: dict[str, Any]) -> None:

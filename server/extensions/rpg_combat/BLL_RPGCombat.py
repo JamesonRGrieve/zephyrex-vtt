@@ -413,21 +413,27 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
         return self.order_for(encounter.id, unrolled)
 
     def start_for(self, encounter_id: str) -> OrderOut:
-        """Start the fight: round 1, the first in the order to act. Every combatant needs an initiative."""
+        """Start the fight: round 1, the first in the order to act. A combatant with no initiative yet
+        (nothing on their sheet to roll, the GM's number not set) doesn't hold the fight up: they act
+        after everyone who has one, in name order, and are listed as waiting until the GM sets it.
+        Nothing is rolled for them that the pack doesn't state (operator: fights start before every
+        sheet is built)."""
         encounter, _ = self._gm_encounter(encounter_id)
         if encounter.status == "ended":
             raise _refuse("This encounter has ended")
         members = ordered(self._members(encounter))
-        waiting = [one.name or "Unnamed" for one in members if one.initiative is None]
-        if waiting:
-            raise _refuse(f"Roll or set initiative first for: {', '.join(waiting)}")
         acting = [one for one in members if not one.is_defeated]
         if not acting:
             raise _refuse("No one is left to fight")
         self._trusted(EncounterManager).update_trusted(
             id=encounter.id, status="running", round=1, current_combatant_id=acting[0].id
         )
-        return self.order_for(encounter.id)
+        waiting = [
+            Unrolled(combatant_id=one.id, name=one.name, reason="No initiative yet: acts last until the GM sets it")
+            for one in members
+            if one.initiative is None
+        ]
+        return self.order_for(encounter.id, waiting)
 
     def next_turn_for(self, encounter_id: str) -> OrderOut:
         """Pass the turn to the next combatant still fighting; after the last, a new round begins."""
