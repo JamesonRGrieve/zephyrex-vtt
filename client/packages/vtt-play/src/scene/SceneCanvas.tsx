@@ -17,7 +17,19 @@
  * - The GM taps a door to open or close it (onDoor).
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { doorAt, fitWidth, measure, MIN_TARGET, panBy, snap, toScene, tokenAt, zoomAt, type Camera } from './geometry';
+import {
+  doorAt,
+  fitCover,
+  fitWidth,
+  measure,
+  MIN_TARGET,
+  panBy,
+  snap,
+  toScene,
+  tokenAt,
+  zoomAt,
+  type Camera,
+} from './geometry';
 import { drawScene, paletteOf, type Drag, type Ruler } from './render';
 import type { SceneViewData, ViewToken, ViewWall } from './schemas';
 
@@ -38,6 +50,10 @@ export interface SceneCanvasProps {
   tool?: 'select' | 'measure';
   /** The GM tapped a door: open or close it. */
   onDoor?: (wall: ViewWall) => void;
+  /** Fill the container's height (a host that gives the map the screen, e.g. rpg-ai's MapView),
+   * opening filled by the map's width or height, whichever fills more; else a box shaped like the
+   * map, opening on its whole width. */
+  fill?: boolean;
 }
 
 interface Press {
@@ -48,7 +64,14 @@ interface Press {
   long: boolean;
 }
 
-export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onDoor }: SceneCanvasProps): ReactNode {
+export function SceneCanvas({
+  view,
+  onMove,
+  onTokenDetails,
+  tool = 'select',
+  onDoor,
+  fill = false,
+}: SceneCanvasProps): ReactNode {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const camera = useRef<Camera | null>(null);
@@ -63,6 +86,7 @@ export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onD
   const ruler = useRef<Ruler | null>(null);
   const measuring = useRef(false);
   const toolRef = useRef(tool);
+  const fillRef = useRef(fill);
 
   const refit = useCallback(() => {
     const element = canvas.current;
@@ -74,7 +98,8 @@ export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onD
     const grid = current.grid_size;
     // The whole map, fitted to the width of a box shaped like it (the operator, 2026-11-24: a town
     // opened on a few houses around one token).
-    camera.current = fitWidth(current.width ?? 40 * grid, current.height ?? 30 * grid, [width, height]);
+    const fitted = fillRef.current ? fitCover : fitWidth;
+    camera.current = fitted(current.width ?? 40 * grid, current.height ?? 30 * grid, [width, height]);
   }, []);
 
   // A picture's arrival draws again through this, so the callback below needn't depend on itself.
@@ -118,6 +143,10 @@ export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onD
     },
     [draw],
   );
+
+  useEffect(() => {
+    fillRef.current = fill;
+  }, [fill]);
 
   useEffect(() => {
     toolRef.current = tool;
@@ -332,9 +361,11 @@ export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onD
   return (
     <div
       ref={box}
-      className='bg-muted relative max-h-[70svh] min-h-64 w-full overflow-hidden rounded-md'
-      // Shaped like the map, so its width shows it whole with no empty band.
-      style={{ aspectRatio: `${view.width ?? 40 * view.grid_size} / ${view.height ?? 30 * view.grid_size}` }}
+      className={`bg-muted relative min-h-64 w-full overflow-hidden rounded-md ${fill ? 'h-full' : 'max-h-[70svh]'}`}
+      // Shaped like the map, so its width shows it whole with no empty band; or the host's height.
+      style={
+        fill ? undefined : { aspectRatio: `${view.width ?? 40 * view.grid_size} / ${view.height ?? 30 * view.grid_size}` }
+      }
     >
       <canvas
         ref={canvas}

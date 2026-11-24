@@ -117,3 +117,26 @@ def test_the_map_picture_uploaded_is_served_to_the_campaigns_players(server: Tes
     assert picture.status_code == 200, picture.text
     assert picture.content == PNG and picture.headers["content-type"] == "image/png"
     assert server.get(f"/v1/scene/{scene['id']}/background", headers=_headers(stranger)).status_code == 404
+
+
+def test_an_uploaded_portrait_is_served_to_the_campaigns_players(server: TestClient, parlour: dict[str, Any]) -> None:
+    """A player sees the cast's faces: an upload attached to an NPC (the GM's row) as its picture is
+    handed out on the scene as the portrait route, which serves it to the campaign's members."""
+    gm, player, stranger, scene = parlour["gm"], parlour["player"], parlour["stranger"], parlour["scene"]
+    hesk = _create(server, gm, "person", name="Old Hesk", kind="npc", campaign_id=parlour["campaign"]["id"], location_id=parlour["house"]["id"])
+    face = b"\x89PNG\r\n\x1a\n" + b"old hesk" * 4
+    uploaded = server.post("/v1/asset/upload", params={"name": "hesk.png"}, content=face, headers={**_headers(gm), "Content-Type": "image/png"})
+    assert uploaded.status_code == 201, uploaded.text
+    _create(server, gm, "attachment", asset_id=uploaded.json()["asset"]["id"], target_entity_type="person", target_entity_id=hesk["id"], role="primary_image")
+    _create(server, gm, "scene_token", name="Old Hesk", scene_id=scene["id"], person_id=hesk["id"], x=400, y=700)
+    pc = next(one for one in server.get(f"/v1/person?campaign_id={parlour['campaign']['id']}", headers=_headers(gm)).json()["persons"] if one["name"] == "Brann")
+    _create(server, gm, "scene_token", name="Brann", scene_id=scene["id"], person_id=pc["id"], x=1000, y=1100)
+
+    view = server.post(f"/v1/scene/{scene['id']}/view", json={"view": {}}, headers=_headers(player))
+    assert view.status_code == 200, view.text
+    drawn = {one["name"]: one["picture_url"] for one in view.json()["view"]["tokens"]}
+    assert drawn.get("Old Hesk") == f"/v1/scene/portrait/{hesk['id']}", drawn
+    picture = server.get(f"/v1/scene/portrait/{hesk['id']}", headers=_headers(player))
+    assert picture.status_code == 200, picture.text
+    assert picture.content == face
+    assert server.get(f"/v1/scene/portrait/{hesk['id']}", headers=_headers(stranger)).status_code == 404

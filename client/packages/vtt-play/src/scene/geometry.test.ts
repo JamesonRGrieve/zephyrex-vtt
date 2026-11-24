@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   doorAt,
   fit,
+  fitCover,
   fitWidth,
   MAX_ZOOM,
   measure,
@@ -109,5 +110,11 @@ describe('the measure tool and doors', () => {
     expect(doorAt(walls, 250, 10, 44)?.id).toBe('door');
     expect(doorAt(walls, 50, 0, 44)).toBeNull();
     expect(doorAt(walls, 250, 100, 44)).toBeNull();
+  });
+
+  it('fills a tall box with a wide map by its height, centred', () => {
+    const camera = fitCover(2000, 1500, [400, 800]);
+    expect(camera.zoom).toBeCloseTo(800 / 1500, 6);
+    expect(toScreen(camera, 1000, 750)).toEqual([200, 400]);
   });
 });

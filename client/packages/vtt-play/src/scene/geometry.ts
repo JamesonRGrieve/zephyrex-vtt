@@ -47,6 +47,14 @@ export function fit(width: number, height: number, viewport: [number, number]): 
   return { zoom, x: -(vw / zoom - width) / 2, y: -(vh / zoom - height) / 2 };
 }
 
+/** A camera filling the viewport with the scene (its width or its height, whichever fills more),
+ * centred: a map in a tall phone box opens filling it rather than in a band across it. */
+export function fitCover(width: number, height: number, viewport: [number, number]): Camera {
+  const [vw, vh] = viewport;
+  const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.max(vw / Math.max(width, 1), vh / Math.max(height, 1))));
+  return { zoom, x: -(vw / zoom - width) / 2, y: -(vh / zoom - height) / 2 };
+}
+
 /** A camera fitting the scene's width to the viewport (a phone held upright), centred vertically
  * when the scene is shorter than the viewport, else showing its top. */
 export function fitWidth(width: number, height: number, viewport: [number, number]): Camera {

@@ -218,6 +218,18 @@ export function drawScene(
   const chips: [number, number, number, number][] = [];
   const hits = (box: [number, number, number, number]): boolean =>
     chips.some(([l, t, r, b]) => box[0] < r && box[2] > l && box[1] < b && box[3] > t);
+  // Every token's disc on screen, so a name chip covers no one else's face.
+  const discs = view.tokens.map((one) => {
+    const at = drag && drag.id === one.id ? drag : one;
+    const [x, y] = toScreen(camera, at.x, at.y);
+    const w = one.width * grid * camera.zoom;
+    const h = one.height * grid * camera.zoom;
+    return { id: one.id, cx: x + w / 2, cy: y + h / 2, r: Math.max(Math.min(w, h) / 2 - 2, MIN_DRAWN_RADIUS) };
+  });
+  const coversDisc = (box: [number, number, number, number], id: string): boolean =>
+    discs.some(
+      (d) => d.id !== id && box[0] < d.cx + d.r && box[2] > d.cx - d.r && box[1] < d.cy + d.r && box[3] > d.cy - d.r,
+    );
   for (const one of view.tokens) {
     const at = drag && drag.id === one.id ? drag : one;
     const [sx, sy] = toScreen(camera, at.x, at.y);
@@ -259,19 +271,43 @@ export function drawScene(
       context.font = '600 11px system-ui, sans-serif';
       const label = one.name.length > 18 ? `${one.name.slice(0, 17)}…` : one.name;
       const textWidth = context.measureText(label).width;
-      const chipX = sx + w / 2 - textWidth / 2 - 4;
-      let chipY = sy + h / 2 + radius + 2;
-      for (let tries = 0; tries < 3 && hits([chipX, chipY, chipX + textWidth + 8, chipY + 15]); tries += 1) chipY += 16;
-      chips.push([chipX, chipY, chipX + textWidth + 8, chipY + 15]);
-      context.globalAlpha = one.is_hidden ? 0.45 : 0.85;
-      context.fillStyle = palette.ground;
-      context.beginPath();
-      context.roundRect?.(chipX, chipY, textWidth + 8, 15, 4);
-      context.fill();
-      context.fillStyle = palette.wall;
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(label, sx + w / 2, chipY + 8);
+      // Below the token, else above, right or left: the first place that covers no other name or
+      // face (operator, 2026-11-24: names lay across neighbours in a cluster). With none clear,
+      // the name waits for the token to be selected; its face or initials still say who it is.
+      const cx = sx + w / 2;
+      const cy = sy + h / 2;
+      const chipW = textWidth + 8;
+      // Kept inside the canvas: a name at the edge of the view slides in rather than being cut off.
+      const inside = ([x, y]: [number, number]): [number, number] => [
+        Math.min(Math.max(x, 2), Math.max(2, width - chipW - 2)),
+        Math.min(Math.max(y, 2), Math.max(2, height - 17)),
+      ];
+      const places: [number, number][] = (
+        [
+          [cx - chipW / 2, cy + radius + 2],
+          [cx - chipW / 2, cy - radius - 17],
+          [cx + radius + 3, cy - 7.5],
+          [cx - radius - 3 - chipW, cy - 7.5],
+        ] as [number, number][]
+      ).map(inside);
+      // A token off the view has no name on it: a clamped name would sit beside someone else.
+      const onScreen = cx >= 0 && cx <= width && cy >= 0 && cy <= height;
+      const spot = !onScreen
+        ? undefined
+        : places.find(([x, y]) => !hits([x, y, x + chipW, y + 15]) && !coversDisc([x, y, x + chipW, y + 15], one.id));
+      if (spot) {
+        const [chipX, chipY] = spot;
+        chips.push([chipX, chipY, chipX + chipW, chipY + 15]);
+        context.globalAlpha = one.is_hidden ? 0.45 : 0.85;
+        context.fillStyle = palette.ground;
+        context.beginPath();
+        context.roundRect?.(chipX, chipY, chipW, 15, 4);
+        context.fill();
+        context.fillStyle = palette.wall;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(label, chipX + chipW / 2, chipY + 8);
+      }
     }
     context.globalAlpha = 1;
     if (one.id === selected) {

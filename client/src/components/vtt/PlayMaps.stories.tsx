@@ -114,6 +114,26 @@ export const ParlourPlayer: Story = {
   },
 };
 
+/** A player at the parlour on a phone, the map filling the screen under the host's own controls
+ * (rpg-ai's MapView gives it the height): opened filled by the map's width or height. */
+export const ParlourPlayerFilling: Story = {
+  render: () => (
+    <StoryClient
+      routes={{
+        'POST /v1/scene/s1/view': sceneView(false, PARLOUR_ART, ground, 'Halloway house, ground floor', PARLOUR_TOKENS),
+      }}
+    >
+      <div className='h-[80svh]'>
+        <SceneView sceneId='s1' fill />
+      </div>
+    </StoryClient>
+  ),
+  play: async ({ canvasElement }) => {
+    const map = await within(canvasElement).findByRole('application', { name: /Halloway house, ground floor/ });
+    await expect(map.getBoundingClientRect().height).toBeGreaterThan(300);
+  },
+};
+
 /** Saltmere as a battle scene: the town map at its own scale (68 px squares). */
 export const SaltmereScene: Story = {
   args: {

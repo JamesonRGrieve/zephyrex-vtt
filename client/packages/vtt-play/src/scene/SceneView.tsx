@@ -33,6 +33,8 @@ export interface SceneViewProps {
   campaignId?: string;
   /** The GM picked another scene in the map controls. */
   onScene?: (sceneId: string) => void;
+  /** The map fills its container's height (SceneCanvas fill). */
+  fill?: boolean;
 }
 
 const TOOLS = [
@@ -122,6 +124,7 @@ export function SceneView({
   onTokenDetails,
   campaignId,
   onScene,
+  fill = false,
 }: SceneViewProps): ReactNode {
   const scene = useSceneView(sceneId, tokenId);
   const [announcement, setAnnouncement] = useState('');
@@ -136,16 +139,20 @@ export function SceneView({
   };
 
   return (
-    <section aria-label={view.name ?? 'Scene'} className='space-y-3'>
+    // Filling its host, the map takes the height the toolbar and notes leave.
+    <section aria-label={view.name ?? 'Scene'} className={fill ? 'flex h-full flex-col gap-3' : 'space-y-3'}>
       {view.gm && campaignId && <MapControls campaignId={campaignId} view={view} onScene={onScene} />}
       <ToolBar tool={tool} onTool={setTool} />
-      <SceneCanvas
-        view={view}
-        onMove={move}
-        onTokenDetails={onTokenDetails}
-        tool={tool}
-        onDoor={view.gm ? (wall) => void scene.toggleDoor(wall) : undefined}
-      />
+      <div className={fill ? 'min-h-0 flex-1' : undefined}>
+        <SceneCanvas
+          view={view}
+          onMove={move}
+          onTokenDetails={onTokenDetails}
+          tool={tool}
+          onDoor={view.gm ? (wall) => void scene.toggleDoor(wall) : undefined}
+          fill={fill}
+        />
+      </div>
       {!view.lit && <p className='text-muted-foreground text-sm'>It’s dark here: you see only what’s lit or close.</p>}
       {scene.problem !== null && (
         <p role='alert' className='text-destructive text-sm'>

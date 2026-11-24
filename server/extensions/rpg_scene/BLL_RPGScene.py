@@ -68,6 +68,7 @@ MAX_FEATURE_KEY = 200
 ASSET_PATH = re.compile(r"/v1/asset/([^/?#]+)/content")
 # A scene's art comes back as its own bytes: out of content negotiation, as the asset route is.
 skip_negotiation(r"/v1/scene/[^/]+/background")
+skip_negotiation(r"/v1/scene/portrait/[^/]+")
 
 
 class SceneModel(
@@ -1135,7 +1136,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             return requester in people[row.person_id]
 
         mine = {row.id for row in rows if plays(row)}
-        pictures.update(self._portraits(sorted({row.person_id for row in rows if row.person_id})))
+        pictures.update(self._portraits(campaign, sorted({row.person_id for row in rows if row.person_id})))
         viewer = None
         if body.token_id is not None:
             viewer = next((row for row in rows if row.id == body.token_id), None)
@@ -1207,15 +1208,62 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             background_url=self._drawn_background(scene),
         )
 
-    def _portraits(self, person_ids: list[str]) -> dict[str, Optional[str]]:
+    def _portraits(self, campaign: Any, person_ids: list[str]) -> dict[str, Optional[str]]:
         """Each person's portrait as the wiki gives it (world_entities_by_id: their picture link,
-        else their newest uploaded picture), as the requester; someone it doesn't return keeps their
-        link. Nothing where the wiki's ability isn't loaded."""
+        else their newest upload), read as the campaign's owner so a player sees the cast's faces
+        too; an upload is handed out as this scene module's portrait route (_drawn_portrait).
+        Someone it doesn't return keeps their link. Nothing where the wiki's ability isn't loaded."""
         by_id = loaded_ability(self.model_registry, "rpg_core", "world_entities_by_id")
         if by_id is None or not person_ids:
             return {}
-        found = by_id(self.model_registry, str(self.requester.id), person_ids).get("world_entities") or []
-        return {str(one["id"]): one.get("picture") for one in found if one.get("kind") == "person" and one.get("picture")}
+        reader = str(self.requester.id) if campaign is None else str(campaign.user_id or campaign.created_by_user_id)
+        found = by_id(self.model_registry, reader, person_ids).get("world_entities") or []
+        gm = str(self.requester.id) in self._gms_of(campaign)
+        return {
+            str(one["id"]): self._drawn_portrait(str(one["id"]), one.get("picture"))
+            for one in found
+            if one.get("kind") == "person" and one.get("picture") and (gm or not one.get("gm_only"))
+        }
+
+    @staticmethod
+    def _drawn_portrait(person_id: str, picture: Optional[str]) -> Optional[str]:
+        """A portrait's address to draw from: an upload is served by the portrait route, which lets
+        the campaign's players load it (the asset's own route serves only those who can view its
+        record, and players can't view the GM's people); a link elsewhere is as it is."""
+        if picture and ASSET_PATH.fullmatch(picture):
+            return f"/v1/scene/portrait/{person_id}"
+        return picture
+
+    async def portrait_for(self, person_id: str) -> Response:
+        """A campaign person's uploaded portrait, for the campaign's GM and players: the upload the
+        wiki names as their picture, read as the system once membership is checked. A portrait by
+        link, none, or a GM-only person (to a player) has nothing here (404)."""
+        person = self._get(PersonManager, person_id)
+        campaign_id = None if person is None else getattr(person, "campaign_id", None)
+        campaign = None if campaign_id is None else self._get(CampaignManager, campaign_id)
+        if person is None or campaign is None or not self._is_member(campaign):
+            raise _not_found("PersonModel")
+        by_id = loaded_ability(self.model_registry, "rpg_core", "world_entities_by_id")
+        owner = str(campaign.user_id or campaign.created_by_user_id)
+        found = [] if by_id is None else by_id(self.model_registry, owner, [person_id]).get("world_entities") or []
+        entity = next((one for one in found if str(one.get("id")) == person_id), None)
+        gm = str(self.requester.id) in self._gms_of(campaign)
+        match = None if entity is None or (entity.get("gm_only") and not gm) else ASSET_PATH.fullmatch(entity.get("picture") or "")
+        if match is None:
+            raise _not_found("PersonModel")
+        from zephyrex.extensions.attachments.BLL_Attachments import AssetManager  # type: ignore[import-not-found]
+        from zephyrex.extensions.cloud.EXT_Cloud import EXT_Cloud  # type: ignore[import-not-found]
+
+        try:
+            asset = AssetManager(requester_id=env("SYSTEM_ID"), model_registry=self.model_registry).get(id=match.group(1))
+        except HTTPException:
+            raise _not_found("PersonModel") from None
+        content = await EXT_Cloud.download_file(asset.provider, asset.path)
+        return Response(
+            content=content,
+            media_type=asset.content_type,
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+        )
 
     def import_uvtt_for(self, scene_id: str, body: UvttRequest) -> UvttOut:
         """A Universal VTT map's walls, doors and lights onto a scene (rpg_scene.Uvtt), which takes
@@ -1463,7 +1511,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         scoped = scope_of(places, people, location_id, positions)
 
         def person(one: ScopedPerson) -> ScopePerson:
-            return ScopePerson(person_id=one.id, name=one.name, picture=one.picture)
+            return ScopePerson(person_id=one.id, name=one.name, picture=self._drawn_portrait(one.id, one.picture))
 
         def place(one: ScopedPlace) -> ScopePlace:
             return ScopePlace(id=one.id, name=one.name, kind=one.kind, picture=one.picture)
@@ -1940,6 +1988,18 @@ class SceneManager(AbstractBLLManager, RouterMixin):
     )
     async def import_uvtt_route(self, scene_id: str, body: UvttEnvelope) -> UvttOut:
         return self.import_uvtt_for(scene_id, body.import_uvtt)
+
+    @custom_route(
+        method="GET",
+        path="/portrait/{person_id}",
+        authentication_type="jwt",
+        response_class=Response,
+        openapi_tags=("Scenes",),
+        summary="A campaign person's uploaded portrait, for the campaign's GM and players",
+        expose_in=(ExposeIn.REST,),
+    )
+    async def portrait_route(self, person_id: str) -> Response:
+        return await self.portrait_for(person_id)
 
     @custom_route(
         method="GET",
