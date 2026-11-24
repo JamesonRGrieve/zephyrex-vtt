@@ -116,6 +116,9 @@ export interface Ruler {
   label: string;
 }
 
+/** The smallest a token is drawn on screen, in CSS pixels (its portrait and name still read). */
+export const MIN_DRAWN_RADIUS = 11;
+
 export function drawScene(
   context: CanvasRenderingContext2D,
   view: SceneViewData,
@@ -143,35 +146,11 @@ export function drawScene(
     cover(context, backdrop, left, top, sceneWidth * camera.zoom, sceneHeight * camera.zoom);
     context.globalAlpha = 1;
   }
-  if (view.name && !backdrop) {
-    // No map art: the place, named large across the scene's middle (operator, 2026-11-24: never a
-    // bare grid), and a line saying there's no map yet.
-    const middleX = left + (sceneWidth * camera.zoom) / 2;
-    const middleY = top + (sceneHeight * camera.zoom) / 2;
-    const big = Math.max(18, Math.min(48, (sceneWidth * camera.zoom) / 14));
-    context.fillStyle = palette.neutral;
-    context.globalAlpha = 0.5;
-    context.font = `700 ${Math.round(big)}px system-ui, sans-serif`;
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(view.name, middleX, middleY);
-    context.font = '500 13px system-ui, sans-serif';
-    context.fillText('No map of this place yet', middleX, middleY + big * 0.9);
-    context.globalAlpha = 1;
-  } else if (view.name) {
-    // Over art: the place's name, faint in the scene's corner.
-    context.fillStyle = palette.neutral;
-    context.globalAlpha = 0.6;
-    context.font = '600 14px system-ui, sans-serif';
-    context.textAlign = 'left';
-    context.textBaseline = 'top';
-    context.fillText(view.name, Math.max(left, 0) + 8, Math.max(top, 0) + 8);
-    context.globalAlpha = 1;
-  }
-
   // The grid, only where it's visible and only when cells are big enough to read.
   if (grid * camera.zoom >= 8) {
-    context.strokeStyle = palette.grid;
+    // Over map art the grid is a faint guide, not a second picture on top of it.
+    context.strokeStyle = backdrop ? palette.wall : palette.grid;
+    context.globalAlpha = backdrop ? 0.14 : 1;
     context.lineWidth = 1;
     context.beginPath();
     for (let x = 0; x <= sceneWidth; x += grid) {
@@ -187,10 +166,41 @@ export function drawScene(
       context.lineTo(Math.min(left + sceneWidth * camera.zoom, width), sy + 0.5);
     }
     context.stroke();
+    context.globalAlpha = 1;
+  }
+
+  if (view.name && !backdrop) {
+    // No map art: the place, named large across what's on screen (operator, 2026-11-24: never a
+    // bare grid), sized to fit the visible part of the scene, with a line saying there's no map yet.
+    const visibleLeft = Math.max(left, 0);
+    const visibleRight = Math.min(left + sceneWidth * camera.zoom, width);
+    const visibleTop = Math.max(top, 0);
+    const visibleBottom = Math.min(top + sceneHeight * camera.zoom, height);
+    if (visibleRight > visibleLeft && visibleBottom > visibleTop) {
+      const span = visibleRight - visibleLeft;
+      const middleX = (visibleLeft + visibleRight) / 2;
+      const middleY = visibleTop + (visibleBottom - visibleTop) * 0.3;
+      let big = Math.max(16, Math.min(40, span / 10));
+      context.font = `700 ${Math.round(big)}px system-ui, sans-serif`;
+      const wide = context.measureText(view.name).width;
+      if (wide > span * 0.9) big = Math.max(12, (big * span * 0.9) / wide);
+      context.fillStyle = palette.neutral;
+      context.globalAlpha = 0.55;
+      context.font = `700 ${Math.round(big)}px system-ui, sans-serif`;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(view.name, middleX, middleY);
+      context.font = '500 13px system-ui, sans-serif';
+      context.fillText('No map of this place yet', middleX, middleY + big * 0.9);
+      context.globalAlpha = 1;
+    }
   }
 
   for (const wall of view.walls) {
     const door = wall.door_type && wall.door_type !== 'none';
+    // Map art draws its own walls: over it only the doors show (they open and shut); a map with no
+    // art is its walls (operator, 2026-11-24: traced walls in black over the art buried it).
+    if (backdrop && !door) continue;
     context.strokeStyle = door ? palette.door : palette.wall;
     context.lineWidth = door ? 5 : 3;
     context.setLineDash(door && wall.door_state === 'open' ? [6, 6] : []);
@@ -204,12 +214,18 @@ export function drawScene(
   }
   context.setLineDash([]);
 
+  // Each name chip drawn so far, so the next steps aside rather than covering one (left, top, right, bottom).
+  const chips: [number, number, number, number][] = [];
+  const hits = (box: [number, number, number, number]): boolean =>
+    chips.some(([l, t, r, b]) => box[0] < r && box[2] > l && box[1] < b && box[3] > t);
   for (const one of view.tokens) {
     const at = drag && drag.id === one.id ? drag : one;
     const [sx, sy] = toScreen(camera, at.x, at.y);
     const w = one.width * grid * camera.zoom;
     const h = one.height * grid * camera.zoom;
-    const radius = Math.min(w, h) / 2 - 2;
+    // Never smaller on screen than a readable disc (operator, 2026-11-24: on a whole town the cast
+    // were 7 px dots with no faces or names); taps already reach 44 px around (MIN_TARGET).
+    const radius = Math.max(Math.min(w, h) / 2 - 2, MIN_DRAWN_RADIUS);
     context.globalAlpha = one.is_hidden ? 0.45 : 1;
     context.fillStyle = fill(one, palette);
     context.beginPath();
@@ -243,11 +259,14 @@ export function drawScene(
       context.font = '600 11px system-ui, sans-serif';
       const label = one.name.length > 18 ? `${one.name.slice(0, 17)}…` : one.name;
       const textWidth = context.measureText(label).width;
-      const chipY = sy + h + 2;
+      const chipX = sx + w / 2 - textWidth / 2 - 4;
+      let chipY = sy + h / 2 + radius + 2;
+      for (let tries = 0; tries < 3 && hits([chipX, chipY, chipX + textWidth + 8, chipY + 15]); tries += 1) chipY += 16;
+      chips.push([chipX, chipY, chipX + textWidth + 8, chipY + 15]);
       context.globalAlpha = one.is_hidden ? 0.45 : 0.85;
       context.fillStyle = palette.ground;
       context.beginPath();
-      context.roundRect?.(sx + w / 2 - textWidth / 2 - 4, chipY, textWidth + 8, 15, 4);
+      context.roundRect?.(chipX, chipY, textWidth + 8, 15, 4);
       context.fill();
       context.fillStyle = palette.wall;
       context.textAlign = 'center';
@@ -266,7 +285,7 @@ export function drawScene(
       context.font = '600 13px system-ui, sans-serif';
       const textWidth = context.measureText(label).width;
       const chipX = sx + w / 2 - textWidth / 2 - 8;
-      const chipY = sy - 28;
+      const chipY = sy + h / 2 - radius - 30;
       context.fillStyle = palette.wall;
       context.beginPath();
       context.roundRect?.(chipX, chipY, textWidth + 16, 22, 11);

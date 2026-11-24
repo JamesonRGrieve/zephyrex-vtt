@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * The map on a phone (the operator: "The map is also completely nonfunctional, at least on mobile"):
- * SceneCanvas in a 390 × 844 touch viewport opens fitted to its width, pans with one finger,
+ * SceneCanvas in a 390 × 844 touch viewport opens on the whole map fitted to its width, pans with one finger,
  * pinch-zooms, drags the player's own token from a 44 px target however small it's drawn, and
  * leaves the page scrolling outside it; with a mouse, a wheel over it zooms without scrolling the
  * page; the measure tool reads a finger's drag in the scene's units; the GM taps a door to open it.
@@ -65,12 +65,16 @@ async function onPage(page: Page, x: number, y: number): Promise<[number, number
   return [at.left + (x - view.x) * view.zoom, at.top + (y - view.y) * view.zoom];
 }
 
-test('opens fitted to its tokens, on a visible ground (a theme of bare HSL channels)', async ({ page }) => {
+test('opens on the whole map, in a box shaped like it, on a visible ground (a theme of bare HSL channels)', async ({
+  page,
+}) => {
   await open(page);
   const view = await camera(page);
-  // Brann (1000, 700) and the Innkeeper (300, 300), padded three cells: 0..1400 × 0..1100.
+  // The 2000 × 1500 scene, its width fitted to the canvas (the operator, 2026-11-24: a town opened
+  // zoomed on one token showed a few houses); the box is the scene's shape, so it shows whole.
   const box = (await page.locator('canvas').boundingBox())!;
-  expect(view.zoom).toBeCloseTo(Math.min(box.width / 1400, box.height / 1100), 3);
+  expect(view.zoom).toBeCloseTo(box.width / 2000, 3);
+  expect(box.height).toBeCloseTo((box.width * 1500) / 2000, 0);
   const ground = await page.evaluate(() => {
     const canvas = document.querySelector('canvas')!;
     const pixel = canvas

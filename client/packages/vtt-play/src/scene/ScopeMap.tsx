@@ -106,6 +106,7 @@ function GroupToken({
   x,
   y,
   party,
+  below = false,
   open,
   onToggle,
 }: {
@@ -114,6 +115,8 @@ function GroupToken({
   x: number;
   y: number;
   party: boolean;
+  /** Stacked under the group of the same place (the party where NPCs are too), not on it. */
+  below?: boolean;
   open: boolean;
   onToggle: () => void;
 }): ReactNode {
@@ -125,7 +128,11 @@ function GroupToken({
       onClick={onToggle}
       aria-expanded={open}
       className='absolute flex min-h-11 min-w-11 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 focus-visible:outline-2'
-      style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
+      // Kept inside the map's edges, so a group near one isn't cut off.
+      style={{
+        left: `clamp(3rem, ${x * 100}%, calc(100% - 3rem))`,
+        top: `clamp(2.5rem, calc(${y * 100}% + ${below ? '4.25rem' : '0rem'}), calc(100% - 2.5rem))`,
+      }}
     >
       <span
         aria-hidden
@@ -143,7 +150,7 @@ function GroupToken({
           />
         )}
       </span>
-      <span className='bg-card/90 text-foreground max-w-36 truncate rounded px-1.5 py-0.5 text-xs font-medium shadow'>
+      <span className='bg-card/90 text-foreground line-clamp-2 max-w-36 rounded px-1.5 py-0.5 text-center text-xs leading-tight font-medium shadow'>
         {label}
         <span className='text-muted-foreground'>, {people.length}</span>{' '}
         {/* The space is its own text node: a name drops a span's leading space. */}
@@ -159,6 +166,8 @@ export function ScopeMap({ campaignId, locationId = null, onOpenRecord, onOpenSc
   const [trail, setTrail] = useState<(string | null)[]>([locationId]);
   const [data, setData] = useState<Loaded>({ state: 'loading' });
   const [open, setOpen] = useState<string | null>(null);
+  // The map art's own shape, once it loads (16:10 until then, and for the placeholder).
+  const [aspect, setAspect] = useState('16 / 10');
   const at = trail[trail.length - 1] ?? null;
 
   const read = useCallback(async (): Promise<void> => {
@@ -196,11 +205,13 @@ export function ScopeMap({ campaignId, locationId = null, onOpenRecord, onOpenSc
 
   const go = (placeId: string): void => {
     setOpen(null);
+    setAspect('16 / 10');
     setData({ state: 'loading' });
     setTrail((before) => [...before, placeId]);
   };
   const back = (): void => {
     setOpen(null);
+    setAspect('16 / 10');
     setData({ state: 'loading' });
     setTrail((before) => before.slice(0, -1));
   };
@@ -228,7 +239,7 @@ export function ScopeMap({ campaignId, locationId = null, onOpenRecord, onOpenSc
   return (
     <section aria-label={`Map of ${scope.location.name}`} className='space-y-2'>
       <div className='flex flex-wrap items-center gap-2'>
-        <nav aria-label='Where' className='text-muted-foreground min-w-0 flex-1 truncate text-sm'>
+        <nav aria-label='Where' className='text-muted-foreground w-full text-sm'>
           {scope.path.map((one, index) => (
             <span key={one.id}>
               {index > 0 && <span aria-hidden> › </span>}
@@ -255,14 +266,19 @@ export function ScopeMap({ campaignId, locationId = null, onOpenRecord, onOpenSc
         )}
       </div>
 
-      <div className='bg-muted relative aspect-[16/10] w-full overflow-hidden rounded-lg border'>
+      {/* Shaped like the art, so a marker's place (fractions of the map) is the building's on it. */}
+      <div className='bg-muted relative w-full overflow-hidden rounded-lg border' style={{ aspectRatio: aspect }}>
         {scope.background.url ? (
           // eslint-disable-next-line @next/next/no-img-element -- scene art by link from any host (generated or the GM's), in an embeddable package: next/image can't load it
           <img
             referrerPolicy='no-referrer'
             src={scope.background.url}
             alt={`Map of ${scope.background.label}`}
-            className='absolute inset-0 size-full object-cover'
+            className='absolute inset-0 size-full'
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.currentTarget;
+              if (naturalWidth > 0 && naturalHeight > 0) setAspect(`${naturalWidth} / ${naturalHeight}`);
+            }}
           />
         ) : (
           // No map art yet: the place, named, never a bare grid.
@@ -284,18 +300,23 @@ export function ScopeMap({ campaignId, locationId = null, onOpenRecord, onOpenSc
             onToggle={() => toggle(`place:${one.location_id}`)}
           />
         ))}
-        {scope.parties.map((one) => (
-          <GroupToken
-            key={one.location_id}
-            label='The party'
-            people={one.people}
-            x={one.x}
-            y={one.y}
-            party
-            open={open === `party:${one.location_id}`}
-            onToggle={() => toggle(`party:${one.location_id}`)}
-          />
-        ))}
+        {scope.parties.map((one) => {
+          // Where NPCs are in the same place, the party stacks under their group, at its spot.
+          const shared = scope.markers.find((marker) => marker.location_id === one.location_id);
+          return (
+            <GroupToken
+              key={one.location_id}
+              label='The party'
+              people={one.people}
+              x={shared ? shared.x : one.x}
+              y={shared ? shared.y : one.y}
+              below={Boolean(shared)}
+              party
+              open={open === `party:${one.location_id}`}
+              onToggle={() => toggle(`party:${one.location_id}`)}
+            />
+          );
+        })}
       </div>
 
       {shown && (

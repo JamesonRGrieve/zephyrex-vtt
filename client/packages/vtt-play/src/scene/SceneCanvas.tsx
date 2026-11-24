@@ -10,27 +10,14 @@
  * - Long-press a token for its details (onTokenDetails).
  * - Keyboard: the canvas takes focus; Enter or Space selects the next token you may move, the arrow
  *   keys move the selected one a cell, Escape lets go. A polite live region says what happened.
- * - It opens fitted to its tokens (else the whole scene's width), and follows its box's size until
+ * - It opens on the whole map, fitted to the width of a box shaped like it, and follows its box's size until
  *   the player pans or zooms (a panel that opens later measures 0 at first).
  * - The measure tool (tool 'measure'): drag from one point to another for the distance in the
  *   scene's units, whole cells; the line stays until the next measure.
  * - The GM taps a door to open or close it (onDoor).
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import {
-  doorAt,
-  fitBox,
-  fitWidth,
-  measure,
-  MIN_TARGET,
-  panBy,
-  snap,
-  toScene,
-  tokenAt,
-  tokensBox,
-  zoomAt,
-  type Camera,
-} from './geometry';
+import { doorAt, fitWidth, measure, MIN_TARGET, panBy, snap, toScene, tokenAt, zoomAt, type Camera } from './geometry';
 import { drawScene, paletteOf, type Drag, type Ruler } from './render';
 import type { SceneViewData, ViewToken, ViewWall } from './schemas';
 
@@ -85,10 +72,9 @@ export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onD
     if (width < 2 || height < 2) return;
     const current = viewRef.current;
     const grid = current.grid_size;
-    const around = tokensBox(current.tokens, grid);
-    camera.current = around
-      ? fitBox(around, [width, height])
-      : fitWidth(current.width ?? 40 * grid, current.height ?? 30 * grid, [width, height]);
+    // The whole map, fitted to the width of a box shaped like it (the operator, 2026-11-24: a town
+    // opened on a few houses around one token).
+    camera.current = fitWidth(current.width ?? 40 * grid, current.height ?? 30 * grid, [width, height]);
   }, []);
 
   // A picture's arrival draws again through this, so the callback below needn't depend on itself.
@@ -344,7 +330,12 @@ export function SceneCanvas({ view, onMove, onTokenDetails, tool = 'select', onD
   };
 
   return (
-    <div ref={box} className='bg-muted relative h-[60svh] min-h-64 w-full overflow-hidden rounded-md'>
+    <div
+      ref={box}
+      className='bg-muted relative max-h-[70svh] min-h-64 w-full overflow-hidden rounded-md'
+      // Shaped like the map, so its width shows it whole with no empty band.
+      style={{ aspectRatio: `${view.width ?? 40 * view.grid_size} / ${view.height ?? 30 * view.grid_size}` }}
+    >
       <canvas
         ref={canvas}
         tabIndex={0}
