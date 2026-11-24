@@ -27,11 +27,16 @@ from pydantic import BaseModel as PlainModel
 from pydantic import Field
 from zephyrex.lib.Rooms import room_of
 from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager, PersonModel
+from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
+from zephyrex.extensions.rpg_scene.Scopes import Person as ScopedPerson
+from zephyrex.extensions.rpg_scene.Scopes import Place as ScopedPlace
+from zephyrex.extensions.rpg_scene.Scopes import party_spot, scope as scope_of
 from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, blocks_move, find_path, in_shape, perceive, shape_box
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
 from zephyrex.extensions.world_spatial.BLL_WorldSpatial import LocationManager, LocationModel  # type: ignore[import-not-found]
 from zephyrex.lib.CustomRoute import ExposeIn, custom_route
 from zephyrex.lib.Environment import env
+from zephyrex.logic.AbstractLogicManager.models import FieldComparison
 from zephyrex.logic.AbstractLogicManager import (
     AbstractBLLManager,
     ApplicationModel,
@@ -490,6 +495,34 @@ class SceneRegionModel(
         pass
 
 
+class ScopePlaceModel(
+    ApplicationModel.Optional,
+    UpdateMixinModel.Optional,
+    CampaignModel.Reference.Optional,
+    LocationModel.Reference.Optional,
+    metaclass=ModelMeta,
+):
+    """Where a place's marker sits on its parent's map at the scope above it (the town map's
+    Halloway house), as fractions of that map. The wiki's places have no coordinates; this is the
+    VTT's, pinned by the campaign's GM (place_on_scope)."""
+
+    Manager: ClassVar[Type["ScopePlaceManager"]] = None
+    x: Optional[float] = Field(None, description="Across its parent's map, 0 (left) to 1 (right)")
+    y: Optional[float] = Field(None, description="Down its parent's map, 0 (top) to 1 (bottom)")
+    table_comment: ClassVar[str] = "Where a place's marker sits on its parent's map, at the scope above it"
+
+    class Create(BaseModel, CampaignModel.Reference.ID, LocationModel.Reference.ID):
+        x: float = Field(..., ge=0, le=1)
+        y: float = Field(..., ge=0, le=1)
+
+    class Update(BaseModel):
+        x: Optional[float] = Field(None, ge=0, le=1)
+        y: Optional[float] = Field(None, ge=0, le=1)
+
+    class Search(ApplicationModel.Search, CampaignModel.Reference.ID.Search, LocationModel.Reference.ID.Search):
+        pass
+
+
 class MoveRequest(PlainModel):
     x: float
     y: float
@@ -628,6 +661,10 @@ class SceneRegionManager(AbstractBLLManager, RouterMixin):
     _model = SceneRegionModel
 
 
+class ScopePlaceManager(AbstractBLLManager, RouterMixin):
+    _model = ScopePlaceModel
+
+
 SceneTokenModel.Manager = SceneTokenManager
 SceneWallModel.Manager = SceneWallManager
 SceneLevelModel.Manager = SceneLevelManager
@@ -636,6 +673,7 @@ SceneLightModel.Manager = SceneLightManager
 SceneTileModel.Manager = SceneTileManager
 SceneNoteModel.Manager = SceneNoteManager
 SceneRegionModel.Manager = SceneRegionManager
+ScopePlaceModel.Manager = ScopePlaceManager
 
 ALL_MODELS: list[type] = [
     SceneModel,
@@ -647,6 +685,7 @@ ALL_MODELS: list[type] = [
     SceneTileModel,
     SceneNoteModel,
     SceneRegionModel,
+    ScopePlaceModel,
 ]
 
 
@@ -825,6 +864,76 @@ class CurrentOut(PlainModel):
 CopiedEnvelope.model_rebuild()
 
 
+class ScopeRequest(PlainModel):
+    campaign_id: str
+    location_id: Optional[str] = Field(None, description="The place to show; none is the current scene's, else the party's")
+
+
+class ScopeEnvelope(PlainModel):
+    scope: ScopeRequest
+
+
+class ScopePerson(PlainModel):
+    person_id: str
+    name: str
+    picture: Optional[str] = Field(None, description="Their portrait (the wiki's picture: a link, else their newest upload)")
+
+
+class ScopePlace(PlainModel):
+    id: str
+    name: str
+    kind: Optional[str] = Field(None, description="The wiki's location kind: region, city, building, room…")
+    picture: Optional[str] = Field(None, description="The place's illustration (a thumbnail; never its map)")
+
+
+class ScopeMarker(PlainModel):
+    location_id: str
+    name: str
+    kind: Optional[str]
+    picture: Optional[str]
+    x: float = Field(description="Across the scope's map, 0 to 1")
+    y: float = Field(description="Down the scope's map, 0 to 1")
+    placed: bool = Field(description="Pinned by the GM or from a region of the map; false is an even layout")
+    people: list[ScopePerson] = Field(description="The NPCs in it, however deep (the parlour's count for the house)")
+    count: int
+
+
+class ScopeParty(PlainModel):
+    location_id: str = Field(description="The place inside the scope they are in, or the scope's own")
+    x: float
+    y: float
+    people: list[ScopePerson]
+
+
+class ScopeBackground(PlainModel):
+    url: Optional[str] = Field(None, description="The map art: the scope's scene's picture; none draws a labelled placeholder")
+    scene_id: Optional[str] = Field(None, description="The campaign's scene of this place, to play on")
+    label: str = Field(description="The place's name, for the placeholder and the map's corner")
+
+
+class ScopeOut(PlainModel):
+    campaign_id: str
+    location: ScopePlace
+    scope: Optional[str] = Field(None, description="The place's kind: the level shown")
+    parent: Optional[ScopePlace] = Field(None, description="Scoping out shows this; none at the top")
+    path: list[ScopePlace] = Field(description="The top place down to this one")
+    background: ScopeBackground
+    markers: list[ScopeMarker] = Field(description="Each place inside it that NPCs are in, their group token")
+    parties: list[ScopeParty] = Field(default_factory=list, description="The party's group(s) where they are (a split party is several)")
+    here: list[ScopePerson] = Field(description="NPCs at this place itself, in no place inside it")
+
+
+class PlaceOnScopeRequest(PlainModel):
+    campaign_id: str
+    location_id: str = Field(description="The place whose marker moves (on its parent's map)")
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
+class PlaceOnScopeEnvelope(PlainModel):
+    place_on_scope: PlaceOnScopeRequest
+
+
 def _summary(scene: Any) -> SceneSummary:
     return SceneSummary(
         id=scene.id,
@@ -997,6 +1106,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             return requester in people[row.person_id]
 
         mine = {row.id for row in rows if plays(row)}
+        pictures.update(self._portraits(sorted({row.person_id for row in rows if row.person_id})))
         viewer = None
         if body.token_id is not None:
             viewer = next((row for row in rows if row.id == body.token_id), None)
@@ -1067,6 +1177,16 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             walls=shown,
             background_url=self._background_of(scene),
         )
+
+    def _portraits(self, person_ids: list[str]) -> dict[str, Optional[str]]:
+        """Each person's portrait as the wiki gives it (world_entities_by_id: their picture link,
+        else their newest uploaded picture), as the requester; someone it doesn't return keeps their
+        link. Nothing where the wiki's ability isn't loaded."""
+        by_id = loaded_ability(self.model_registry, "rpg_core", "world_entities_by_id")
+        if by_id is None or not person_ids:
+            return {}
+        found = by_id(self.model_registry, str(self.requester.id), person_ids).get("world_entities") or []
+        return {str(one["id"]): one.get("picture") for one in found if one.get("kind") == "person" and one.get("picture")}
 
     def _summarize(self, scene: Any) -> SceneSummary:
         """A scene's summary with what its map draws under the grid (_background_of)."""
@@ -1157,6 +1277,149 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         made = self.default_scene_for(campaign)
         return None if made is None else self._summarize(made)
 
+    def _world(self, campaign: Any, gm: bool) -> tuple[dict[str, ScopedPlace], list[ScopedPerson]]:
+        """The campaign's places (its setting's canon too: a scenario's house can sit in a canon
+        town) and its people, through the wiki's world_entities. Read as the campaign's GM: the
+        caller is a member (checked), and a player can't read the GM's campaign row the wiki checks
+        first; a GM-only record is then left out for anyone but the GM."""
+        campaign_id = campaign.id
+        reader = str(self.requester.id) if gm else str(campaign.user_id or campaign.created_by_user_id)
+        world_entities = loaded_ability(self.model_registry, "rpg_core", "world_entities")
+        if world_entities is None:
+            raise HTTPException(status_code=503, detail={"message": "The wiki's world_entities isn't loaded"})
+        found: list[dict[str, Any]] = []
+        after: Optional[str] = None
+        while True:
+            page = world_entities(
+                self.model_registry, reader, campaign_id, kinds=["location", "person"], after=after, limit=100, include_setting=True
+            )
+            found.extend(page.get("world_entities") or [])
+            after = page.get("next")
+            if not after:
+                break
+        shown = [one for one in found if not one.get("deleted") and (gm or not one.get("gm_only"))]
+        kinds = {person.id: getattr(person, "kind", None) for person in _live(self._trusted(PersonManager), campaign_id=campaign_id)}
+        place_ids = sorted({one["id"] for one in shown if one.get("kind") == "location"})
+        locations = self._trusted(LocationManager)
+        # A place's kind (city, building, room) isn't in world_entities: one read for them all.
+        place_kinds = (
+            {str(row.id): getattr(row, "kind", None) for row in locations.list(filters=[FieldComparison(locations.Model, "id", "in", place_ids)]) or []}
+            if place_ids
+            else {}
+        )
+        places = {
+            one["id"]: ScopedPlace(one["id"], one.get("name") or "", place_kinds.get(one["id"]), one.get("parent_id"), one.get("picture"))
+            for one in shown
+            if one.get("kind") == "location"
+        }
+        people = [
+            ScopedPerson(one["id"], one.get("name") or "", one.get("location_id"), kinds.get(one["id"]) == "pc", one.get("picture"))
+            for one in shown
+            if one.get("kind") == "person" and not one.get("canon")
+        ]
+        return places, people
+
+    def scope_for(self, body: ScopeRequest) -> ScopeOut:
+        """A place at its scope, for the campaign's GM and players (operator, 2026-11-24: a
+        scope-out mode, "the town instead of the house, with a group token for each group of notable
+        NPCs if multiple occupy the same building"). Its markers are the places directly inside it
+        that NPCs are in, however deep, each a group; the party is its own group where it is. With no
+        place named: the current scene's, else the party's. See rpg_scene.Scopes."""
+        campaign = self._get(CampaignManager, body.campaign_id)
+        if campaign is None or not self._is_member(campaign):
+            raise _not_found("CampaignModel")
+        gm = str(self.requester.id) in self._gms_of(campaign)
+        places, people = self._world(campaign, gm)
+        scenes = sorted(
+            _live(self._trusted(SceneManager), campaign_id=campaign.id),
+            key=lambda one: (not one.is_active, one.created_at.timestamp() if one.created_at else 0),
+        )
+        location_id = body.location_id
+        if location_id is None:
+            location_id = next((one.location_id for one in scenes if one.is_active and getattr(one, "location_id", None)), None)
+        if location_id is None:
+            location_id = next((one.location_id for one in people if one.is_pc and one.location_id), None)
+        if location_id is None or location_id not in places:
+            raise HTTPException(status_code=422, detail={"message": "No place to show: name one of the campaign's places"})
+        scene = next((one for one in scenes if getattr(one, "location_id", None) == location_id), None)
+        positions: dict[str, tuple[float, float]] = {}
+        if scene is not None and scene.width and scene.height:
+            for region in _live(self._trusted(SceneRegionManager), scene_id=scene.id):
+                boxes = [box for box in (shape_box(shape) for shape in region.shapes or []) if box]
+                if getattr(region, "location_id", None) and boxes:
+                    left, top, right, bottom = boxes[0]
+                    positions[region.location_id] = ((left + right) / 2 / float(scene.width), (top + bottom) / 2 / float(scene.height))
+        gms = self._gms_of(campaign)
+        for pinned in _live(self._trusted(ScopePlaceManager), campaign_id=campaign.id):
+            # Only the GM's pins count: the table is open to REST like the rest, but the map is theirs.
+            if str(getattr(pinned, "created_by_user_id", "")) in gms and pinned.x is not None and pinned.y is not None:
+                positions[pinned.location_id] = (float(pinned.x), float(pinned.y))
+        scoped = scope_of(places, people, location_id, positions)
+
+        def person(one: ScopedPerson) -> ScopePerson:
+            return ScopePerson(person_id=one.id, name=one.name, picture=one.picture)
+
+        def place(one: ScopedPlace) -> ScopePlace:
+            return ScopePlace(id=one.id, name=one.name, kind=one.kind, picture=one.picture)
+
+        markers = [
+            ScopeMarker(
+                location_id=group.place.id,
+                name=group.place.name,
+                kind=group.place.kind,
+                picture=group.place.picture,
+                x=group.x,
+                y=group.y,
+                placed=group.placed,
+                people=[person(one) for one in group.npcs],
+                count=len(group.npcs),
+            )
+            for group in scoped.groups
+            if group.npcs
+        ]
+        parties = [
+            ScopeParty(location_id=group.place.id, x=party_spot(group)[0], y=party_spot(group)[1], people=[person(one) for one in group.party])
+            for group in scoped.groups
+            if group.party
+        ]
+        if scoped.here_party:
+            parties.append(ScopeParty(location_id=location_id, x=0.5, y=0.5, people=[person(one) for one in scoped.here_party]))
+        return ScopeOut(
+            campaign_id=campaign.id,
+            location=place(scoped.place),
+            scope=scoped.place.kind,
+            parent=None if scoped.parent is None else place(scoped.parent),
+            path=[place(one) for one in scoped.path],
+            background=ScopeBackground(
+                url=None if scene is None else self._background_of(scene),
+                scene_id=None if scene is None else scene.id,
+                label=scoped.place.name,
+            ),
+            markers=markers,
+            parties=parties,
+            here=[person(one) for one in scoped.here_npcs],
+        )
+
+    def place_on_scope_for(self, body: PlaceOnScopeRequest) -> ScopeOut:
+        """Pin a place's marker on its parent's map (the GM drags the Halloway house to where it
+        stands on the town map); returns the parent's scope. The campaign's GM only."""
+        campaign = self._get(CampaignManager, body.campaign_id)
+        if campaign is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("CampaignModel")
+        places, _ = self._world(campaign, True)
+        place = places.get(body.location_id)
+        if place is None or not place.parent_id or place.parent_id not in places:
+            raise HTTPException(status_code=422, detail={"message": "That place has no parent map to sit on"})
+        mine = ScopePlaceManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+        held = [one for one in _live(mine, campaign_id=campaign.id, location_id=place.id)]
+        if held:
+            mine.update(id=held[0].id, x=body.x, y=body.y)
+            for extra in held[1:]:
+                mine.delete(id=extra.id)
+        else:
+            mine.create(campaign_id=campaign.id, location_id=place.id, x=body.x, y=body.y)
+        return self.scope_for(ScopeRequest(campaign_id=campaign.id, location_id=place.parent_id))
+
     def default_scene_for(self, campaign: Any) -> Any | None:
         """A plain grid scene for a campaign with none, made as its GM and made current: at the
         players' characters' wiki location (named after it, as its map), with a token for each
@@ -1184,7 +1447,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         taken: set[tuple[int, int]] = set()
         tokens = as_gm(SceneTokenManager)
         for person in present:
-            x, y = self._free_cell(scene, self._arrival_point(scene), taken)
+            x, y = self._free_cell(scene, self._arrival_point(scene), taken, gap=1)
             taken.add((int(x // grid), int(y // grid)))
             tokens.create(
                 name=person.name or "Character",
@@ -1315,8 +1578,16 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 )
         return location
 
-    def _free_cell(self, scene: Any, point: tuple[float, float], taken: set[tuple[int, int]]) -> tuple[float, float]:
-        """The top-left of the free cell nearest a point, inside the scene, spiralling outward."""
+    def _free_cell(self, scene: Any, point: tuple[float, float], taken: set[tuple[int, int]], gap: int = 0) -> tuple[float, float]:
+        """The top-left of the free cell nearest a point, inside the scene, spiralling outward. With
+        ``gap``, a cell is free only with that many empty cells between it and anyone else, so a crowd
+        arriving together spreads out rather than packing into a block (operator, 2026-11-24)."""
+
+        def free(at: tuple[int, int]) -> bool:
+            if gap <= 0:
+                return at not in taken
+            return not any(max(abs(at[0] - one[0]), abs(at[1] - one[1])) <= gap for one in taken)
+
         grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
         columns = max(1, int(float(scene.width or 40 * grid) // grid))
         rows = max(1, int(float(scene.height or 30 * grid) // grid))
@@ -1328,9 +1599,10 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                     if max(abs(dx), abs(dy)) != ring:
                         continue
                     at = (cx + dx, cy + dy)
-                    if 0 <= at[0] < columns and 0 <= at[1] < rows and at not in taken:
+                    if 0 <= at[0] < columns and 0 <= at[1] < rows and free(at):
                         return (at[0] * grid, at[1] * grid)
-        return (cx * grid, cy * grid)
+        # No spaced cell left: the nearest free one at all.
+        return self._free_cell(scene, point, taken) if gap > 0 else (cx * grid, cy * grid)
 
     def pilot_for(
         self,
@@ -1386,7 +1658,9 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             if token.person_id != person_id
         }
         if here is None:
-            spot = self._free_cell(scene, point, others)
+            # A point asked for (beside someone, where the GM tapped) is kept close; an arrival at
+            # a place or an entry keeps a cell between people, so a crowd spreads out.
+            spot = self._free_cell(scene, point, others, gap=0 if x is not None and y is not None else 1)
             # Made as the requester (the campaign's GM, checked above), not the system: a token the
             # system owns is one the GM's own list and edits can't see.
             mine = SceneTokenManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
@@ -1439,7 +1713,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             (int(float(one.x or 0) // grid), int(float(one.y or 0) // grid))
             for one in _live(self._trusted(SceneTokenManager), scene_id=there.id)
         }
-        x, y = self._free_cell(there, self._arrival_point(there), taken)
+        x, y = self._free_cell(there, self._arrival_point(there), taken, gap=1)
         self._trusted(SceneTokenManager).update_trusted(id=token.id, scene_id=there.id, scene_level_id=None, x=x, y=y)
         return PilotOut(person_id="", token_id=token.id, scene_id=there.id, x=x, y=y)
 
@@ -1504,6 +1778,32 @@ class SceneManager(AbstractBLLManager, RouterMixin):
     )
     async def activate_route(self, scene_id: str, body: ActivateEnvelope) -> SceneSummary:
         return self.activate_scene_for(scene_id)
+
+    @custom_route(
+        method="POST",
+        path="/scope",
+        input_model=ScopeEnvelope,
+        output_model=ScopeOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="A place at its scope: the places inside it that people are in, as group markers, and the party",
+    )
+    async def scope_route(self, body: ScopeEnvelope) -> ScopeOut:
+        return self.scope_for(body.scope)
+
+    @custom_route(
+        method="POST",
+        path="/place_on_scope",
+        input_model=PlaceOnScopeEnvelope,
+        output_model=ScopeOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="Pin a place's marker on its parent's map (the campaign's GM); returns the parent's scope",
+    )
+    async def place_on_scope_route(self, body: PlaceOnScopeEnvelope) -> ScopeOut:
+        return self.place_on_scope_for(body.place_on_scope)
 
     @custom_route(
         method="POST",

@@ -2,10 +2,10 @@
 """rpg_scene extension: scenes, tokens and walls, and what a token perceives, as a route
 (BLL_RPGScene) and as the ``scene_snapshot`` ability the AI GM calls (A23)."""
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Optional
 
 from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
-from zephyrex.extensions.rpg_scene.BLL_RPGScene import SceneManager, SnapshotRequest
+from zephyrex.extensions.rpg_scene.BLL_RPGScene import PlaceOnScopeRequest, SceneManager, ScopeRequest, SnapshotRequest
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
 
@@ -48,6 +48,27 @@ class RPGSceneExtension(AbstractStaticExtension):
         first, with their distance in the scene's units) and the doors. Hidden tokens and what walls
         cut off are never included."""
         return cls.scenes(requester_id).snapshot_for(scene_id, SnapshotRequest(token_id=token_id)).model_dump()
+
+    @classmethod
+    @ability("scene_scope")
+    async def scene_scope(cls, requester_id: str, campaign_id: str, location_id: Optional[str] = None) -> dict[str, Any]:
+        """The map at a place's scope (a building, its town, the region): {campaign_id, location,
+        scope (its kind), parent (scope out to it; none at the top), path (top down), background
+        {url, scene_id, label}, markers [{location_id, name, kind, picture, x, y (0 to 1 across
+        and down the map), placed, people [{person_id, name, picture}], count}] (each place inside
+        it that NPCs are in, however deep, as one group), parties [{location_id, x, y, people}]
+        (the player characters, their own group where they are), here [NPCs at the place itself]}.
+        No location: the current scene's place, else the party's. The campaign's GM and players;
+        GM-only records are the GM's alone."""
+        return cls.scenes(requester_id).scope_for(ScopeRequest(campaign_id=campaign_id, location_id=location_id)).model_dump()
+
+    @classmethod
+    @ability("place_on_scope")
+    async def place_on_scope(cls, requester_id: str, campaign_id: str, location_id: str, x: float, y: float) -> dict[str, Any]:
+        """Pin a place's marker on its parent's map (x and y 0 to 1 across and down it); returns the
+        parent's scope, as scene_scope. The campaign's GM only."""
+        body = PlaceOnScopeRequest(campaign_id=campaign_id, location_id=location_id, x=x, y=y)
+        return cls.scenes(requester_id).place_on_scope_for(body).model_dump()
 
     @classmethod
     @ability("scene_tokens")

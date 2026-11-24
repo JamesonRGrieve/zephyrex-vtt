@@ -19,6 +19,7 @@ export { useTableSeats, type SeatsState } from './seats/useTableSeats';
 export type { Person, Seat, Table } from './seats/schemas';
 export { SceneView, type SceneViewProps } from './scene/SceneView';
 export { MapControls, type MapControlsProps } from './scene/MapControls';
+export { ScopeMap, type ScopeData, type ScopeMapProps } from './scene/ScopeMap';
 export { useSceneView, type ViewState } from './scene/useSceneView';
 export type { SceneViewData, ViewToken } from './scene/schemas';
 export { CharacterSheet, type CharacterSheetProps } from './sheet/CharacterSheet';

@@ -143,8 +143,23 @@ export function drawScene(
     cover(context, backdrop, left, top, sceneWidth * camera.zoom, sceneHeight * camera.zoom);
     context.globalAlpha = 1;
   }
-  // The place's name, faint in the scene's corner: a map with no art still says where it is.
-  if (view.name) {
+  if (view.name && !backdrop) {
+    // No map art: the place, named large across the scene's middle (operator, 2026-11-24: never a
+    // bare grid), and a line saying there's no map yet.
+    const middleX = left + (sceneWidth * camera.zoom) / 2;
+    const middleY = top + (sceneHeight * camera.zoom) / 2;
+    const big = Math.max(18, Math.min(48, (sceneWidth * camera.zoom) / 14));
+    context.fillStyle = palette.neutral;
+    context.globalAlpha = 0.5;
+    context.font = `700 ${Math.round(big)}px system-ui, sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(view.name, middleX, middleY);
+    context.font = '500 13px system-ui, sans-serif';
+    context.fillText('No map of this place yet', middleX, middleY + big * 0.9);
+    context.globalAlpha = 1;
+  } else if (view.name) {
+    // Over art: the place's name, faint in the scene's corner.
     context.fillStyle = palette.neutral;
     context.globalAlpha = 0.6;
     context.font = '600 14px system-ui, sans-serif';
@@ -222,6 +237,22 @@ export function drawScene(
       context.textAlign = 'center';
       context.textBaseline = 'middle';
       context.fillText(initials(one.name), sx + w / 2, sy + h / 2);
+    }
+    if (one.id !== selected && radius >= 8 && one.name) {
+      // Every token's name under it (operator, 2026-11-24), on a faint chip so it reads over art.
+      context.font = '600 11px system-ui, sans-serif';
+      const label = one.name.length > 18 ? `${one.name.slice(0, 17)}…` : one.name;
+      const textWidth = context.measureText(label).width;
+      const chipY = sy + h + 2;
+      context.globalAlpha = one.is_hidden ? 0.45 : 0.85;
+      context.fillStyle = palette.ground;
+      context.beginPath();
+      context.roundRect?.(sx + w / 2 - textWidth / 2 - 4, chipY, textWidth + 8, 15, 4);
+      context.fill();
+      context.fillStyle = palette.wall;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(label, sx + w / 2, chipY + 8);
     }
     context.globalAlpha = 1;
     if (one.id === selected) {
