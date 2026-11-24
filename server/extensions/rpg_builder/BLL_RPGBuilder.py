@@ -550,25 +550,33 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         return catalog
 
     def build_pregen_for(self, body: PregenRequest) -> PregenOut:
-        """A setting pregen's starting sheet by the SRD's creation rules (rpg_builder.Pregen): what
-        its own line and the rules settle is written, every open choice is reported, nothing is
-        guessed. The pregen's owner only; refused when it has a sheet, unless replace."""
+        """A pregen's starting sheet by the SRD's creation rules (rpg_builder.Pregen): what its own
+        line and the rules settle is written, every open choice is reported, nothing is guessed. A
+        setting's pregen (no campaign) for its owner, under its setting's system; a campaign's
+        character (a scenario's pregen) for the campaign's GM, under the campaign's system. Refused
+        when it has a sheet, unless replace."""
         from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
 
         persons = self._trusted(PersonManager)
         person = next(iter(self._live(persons, id=body.person_id)), None)
         requester = str(self.requester.id)
-        if person is None or requester not in {
-            str(owner) for owner in (getattr(person, "user_id", None), getattr(person, "created_by_user_id", None)) if owner
-        }:
+        campaign = None
+        if person is not None and getattr(person, "campaign_id", None) is not None:
+            campaign = next(iter(self._live(self._trusted(CampaignManager), id=person.campaign_id)), None)
+            allowed = set() if campaign is None else {
+                str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner
+            }
+        else:
+            allowed = set() if person is None else {
+                str(owner) for owner in (getattr(person, "user_id", None), getattr(person, "created_by_user_id", None)) if owner
+            }
+        if person is None or requester not in allowed:
             raise HTTPException(status_code=404, detail={"message": "Request searched PersonModel and could not find the required record."})
-        if getattr(person, "campaign_id", None) is not None:
-            raise _refuse("build_pregen is for a setting's pregen; a campaign's characters use the builder's steps")
-        system_id = self._dice().system_id_of(person)
+        system_id = self._dice().system_id_of(campaign if campaign is not None else person)
         system = None if system_id is None else self._trusted(GameSystemManager).get(id=system_id)
         pack = None if system is None or not system.slug else load_pack(system.slug)
         if pack is None:
-            raise _refuse("This pregen's setting has no game system with a rules pack")
+            raise _refuse("This pregen's campaign or setting has no game system with a rules pack")
         catalog = self._catalog(str(system.id))
         # Its line is in its description (genealogy's), or its entry (the wiki's Plate value, as JSON text).
         text = " ".join(str(getattr(person, name, None) or "") for name in ("description", "summary", "entry"))

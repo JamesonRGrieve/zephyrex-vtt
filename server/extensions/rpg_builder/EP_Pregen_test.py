@@ -143,3 +143,21 @@ def test_only_the_pregens_owner_builds_it(server: TestClient, world: dict[str, A
     stranger = create_user(server)
     response = _build(server, stranger, world["current"]["id"], dry_run=True)
     assert response.status_code == 404 and "could not find" in response.text
+
+
+def test_a_scenarios_pregen_is_built_by_the_campaigns_gm_under_its_system(server: TestClient, world: dict[str, Any]) -> None:
+    """A scenario's pregen is a character of the scenario's campaign: its GM builds it, under the
+    campaign's own system; anyone else is told it isn't there."""
+    owner = world["owner"]
+    registry = world["registry"]
+    fifth = next(one for one in GameSystemManager(requester_id=env("ROOT_ID"), model_registry=registry).list(slug="srd-5e"))
+    scenario = _create(server, owner, "campaign", name="Through the Old Woods", user_id=owner.id, game_system_id=fifth.id)
+    rowan = _create(
+        server, owner, "person", name="Rowan Hale", kind="pc", campaign_id=scenario["id"],
+        description="Level 1 Human Fighter, Acolyte background (SRD 5.2.1). A woodcutter's son.",
+    )
+    got = _build(server, owner, rowan["id"], dry_run=True).json()["pregen"]
+    assert got["built"] and (got["class_name"], got["species"]) == ("Fighter", "Human")
+    stranger = create_user(server)
+    refused = _build(server, stranger, rowan["id"], dry_run=True)
+    assert refused.status_code == 404 and "could not find" in refused.text

@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Builds every setting pregen's starting sheet (rpg_builder's build_pregen), server-side. A dry run
-unless --write.
+"""Builds pregens' starting sheets (rpg_builder's build_pregen), server-side. A dry run unless --write.
 
     python tools/pregen-backfill/backfill.py --owner <the pregens' owner> [--setting <setting id>] \
-        [--app module:factory] [--write] [--replace]
+        [--campaign <campaign id>] [--app module:factory] [--write] [--replace]
 
-A setting pregen is a pc with no campaign. Each is built from its own line ("Level 1 Dragonborn
-Cleric, Acolyte background (SRD 5.2.1)") and the srd5e module, which must be installed for its
+By default every setting pregen of the owner (a pc with no campaign); with --campaign, that
+campaign's player characters (a scenario's pregens), the owner being its GM. Each is built from its
+own line ("Level 1 Dragonborn Cleric, Acolyte background (SRD 5.2.1)") and the srd5e module, which must be installed for its
 system first (tools/foundry-bridge/install.py). The dry run prints, per pregen, what would be built
 and every choice left open; nothing is guessed. A pregen whose setting has no system with a rules
 pack is listed as skipped with the reason. Run with the app's environment, never through a route;
@@ -30,6 +30,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--owner", required=True, help="The pregens' owner (who imported them)")
     parser.add_argument("--setting", help="Only this setting's pregens")
+    parser.add_argument("--campaign", help="This campaign's player characters (a scenario's pregens) instead")
     parser.add_argument("--app", default="vtt_app:create", help="The app factory to boot, module:function")
     parser.add_argument("--write", action="store_true", help="Write the sheets (default: a dry run)")
     parser.add_argument("--replace", action="store_true", help="Rebuild pregens that already have a sheet")
@@ -48,12 +49,16 @@ def main() -> int:
         registry = app.state.model_registry
         persons = PersonManager(requester_id=args.owner, model_registry=registry)
         builder = BuilderManager(requester_id=args.owner, model_registry=registry)
-        filters = {"setting_id": args.setting} if args.setting else {}
-        pregens = [
-            person
-            for person in persons.list(filters=[persons.DB.deleted_at.is_(None)], **filters)
-            if person.campaign_id is None and getattr(person, "setting_id", None) and getattr(person, "kind", None) == "pc"
-        ]
+        live = [persons.DB.deleted_at.is_(None)]
+        if args.campaign:
+            pregens = [person for person in persons.list(filters=live, campaign_id=args.campaign) if getattr(person, "kind", None) == "pc"]
+        else:
+            filters = {"setting_id": args.setting} if args.setting else {}
+            pregens = [
+                person
+                for person in persons.list(filters=live, **filters)
+                if person.campaign_id is None and getattr(person, "setting_id", None) and getattr(person, "kind", None) == "pc"
+            ]
         for person in sorted(pregens, key=lambda one: one.name or ""):
             body = PregenRequest(person_id=person.id, replace=args.replace, dry_run=not args.write)
             try:

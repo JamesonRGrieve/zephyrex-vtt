@@ -89,13 +89,14 @@ class RPGBuilderExtension(AbstractStaticExtension):
     @classmethod
     @ability("build_pregen")
     async def build_pregen(cls, requester_id: str, person_id: str, replace: bool = False, dry_run: bool = False) -> dict[str, Any]:
-        """Give a setting pregen (a pc with no campaign) its starting sheet by the SRD's creation rules,
+        """Give a pregen its starting sheet by the SRD's creation rules (a setting's pc with no campaign,
+        for its owner; or a campaign's character, a scenario's pregen, for the campaign's GM),
         from its own line ("Level 1 Dragonborn Cleric, Acolyte background (SRD 5.2.1)") and the srd5e
         module: its class, background and species, the standard array as the SRD places it for the
         class, the skills and features granted outright. Every choice the rules leave open and its data
         doesn't settle is a gap, reported and not guessed. Returns {pregen: {built, written, abilities,
         saves, skills, features, hp, gaps: [{what, detail}], ...}}. ``dry_run`` writes nothing; a sheet
-        already there is refused unless ``replace``. The pregen's owner only."""
+        already there is refused unless ``replace``."""
         body = PregenRequest(person_id=person_id, replace=replace, dry_run=dry_run)
         return {"pregen": cls.builder(requester_id).build_pregen_for(body).model_dump()}
 
