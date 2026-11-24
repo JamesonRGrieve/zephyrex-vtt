@@ -4,7 +4,7 @@
 
 from typing import Any, ClassVar, Optional
 
-from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
+from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability, backend_selector, loaded_ability
 from zephyrex.extensions.rpg_scene.BLL_RPGScene import PlaceOnScopeRequest, SceneManager, ScopeRequest, SnapshotRequest, UvttRequest
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
@@ -35,6 +35,51 @@ class RPGSceneExtension(AbstractStaticExtension):
             ),
         ]
     )
+
+    @classmethod
+    def on_start(cls) -> None:
+        """A playthrough started from a scenario gets the scenario's scenes and tokens: the copy registered with
+        the wiki's register_instantiate_hook (BLL_RPGScene.register_copy)."""
+        from zephyrex.extensions.rpg_scene.BLL_RPGScene import register_copy
+        from zephyrex.lib.Logging import logger
+        from zephyrex.pydantic2.registry import ModelRegistry
+
+        try:
+            registry = ModelRegistry.attached()
+            if registry is not None and not register_copy(registry):
+                logger.warning("rpg_scene: the wiki offers no instantiate hook; scenes and tokens aren't copied on start")
+        except Exception as error:  # the copy is extra: the app boots without it
+            logger.warning(f"rpg_scene: no copy on instantiate: {error}")
+
+    @classmethod
+    @backend_selector
+    async def backend_for(cls, ability_name: str, arguments: dict[str, Any]) -> Optional[str]:
+        """Which backend serves this call (the operator's framework selector, sf 72f51160): the
+        campaign's, as the wiki says (by campaign_id, a scene's campaign or a person's), for a campaign kept in an external tabletop; None (this
+        extension's own) for a native campaign, an unknown one, or a wiki with no campaign_backend.
+        Only keyword arguments reach a selector, so a positional campaign stays native."""
+        from zephyrex.lib.Environment import env
+        from zephyrex.pydantic2.registry import ModelRegistry
+
+        # An fvtt: id is always Foundry's (the wiki's rule): no lookup.
+        if any(str(arguments.get(key) or "").startswith("fvtt:") for key in ("campaign_id", "scene_id", "encounter_id", "person_id")):
+            return "foundry"
+        registry = ModelRegistry.attached()
+        ask = None if registry is None else loaded_ability(registry, "rpg_core", "campaign_backend")
+        if ask is None:
+            return None
+        campaign_id = arguments.get("campaign_id")
+        if not campaign_id and arguments.get("scene_id"):
+            scene = SceneManager(requester_id=str(env("ROOT_ID")), model_registry=registry)._get(SceneManager, str(arguments["scene_id"]))
+            campaign_id = None if scene is None else scene.campaign_id
+        person_id = arguments.get("person_id")
+        if not campaign_id and not person_id:
+            return None
+        answer = ask(registry, str(env("SYSTEM_ID")), campaign_id=campaign_id, person_id=person_id)
+        if hasattr(answer, "__await__"):
+            answer = await answer
+        backend = (answer or {}).get("backend")
+        return None if backend in (None, "", "native") else str(backend)
 
     @classmethod
     def scenes(cls, requester_id: str) -> SceneManager:

@@ -57,7 +57,10 @@ def test_a_token_move_is_heard_in_its_scene_room_and_says_nothing_of_where(serve
     mine = [one for one in heard if one["record"]["id"] == token["id"]]
     assert [one["op"] for one in mine] == ["created", "updated"]
     assert all(one["room"] == {"type": "scene", "id": scene["id"]} for one in mine)
-    assert not any(key in str(change) for change in mine for key in ("400", "250", "Assassin")), "no record data"
+    # No record data: a change names the record and when, never its fields (a substring check on the
+    # text flaked whenever a random id or a microsecond timestamp held "400" or "250").
+    assert all(set(one) == {"id", "room", "record", "op", "etag", "changed_at"} for one in mine), "no record data"
+    assert all(one["record"] == {"type": "scene_token", "id": token["id"]} for one in mine), "no record data"
 
     assert _changes(server, stranger, room).status_code == 404, "only those who may see the scene may listen"
 

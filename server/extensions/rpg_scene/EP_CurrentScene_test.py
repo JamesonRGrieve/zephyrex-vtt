@@ -75,22 +75,42 @@ def test_a_scenarios_scenes_copy_into_its_playthrough(server: TestClient) -> Non
     author, player, other = create_user(server), create_user(server), create_user(server)
     scenario = _create(server, author, "campaign", name="Scenario", user_id=author.id)
     vell = _create(server, author, "person", name="Vell", kind="npc", campaign_id=scenario["id"])
-    deck = _create(server, author, "scene", name="Deck", campaign_id=scenario["id"], width=1000, height=600)
+    town = _create(server, author, "location", name="Saltmere", kind="city", campaign_id=scenario["id"])
+    house = _create(server, author, "location", name="Halloway house", kind="building", parent_id=town["id"], campaign_id=scenario["id"])
+    deck = _create(
+        server, author, "scene", name="Deck", campaign_id=scenario["id"], location_id=town["id"], width=1000, height=600,
+        background_url="/v1/asset/a1/content",
+    )
     _create(server, author, "scene_wall", scene_id=deck["id"], points=[[500, 0], [500, 400]])
+    _create(server, author, "scene_light", scene_id=deck["id"], x=300, y=200, dim=30, bright=15)
+    _create(
+        server, author, "scene_region", scene_id=deck["id"], location_id=house["id"], name="Halloway house",
+        shapes=[{"type": "rectangle", "x": 100, "y": 100, "width": 200, "height": 100}],
+    )
+    _create(server, author, "scope_place", campaign_id=scenario["id"], location_id=house["id"], x=0.4, y=0.3)
     _create(server, author, "scene_token", name="Vell", scene_id=deck["id"], person_id=vell["id"], x=100, y=100)
     asyncio.run(RPGSceneExtension.activate_scene(str(author.id), deck["id"]))
 
     playthrough = _create(server, author, "campaign", name="Playthrough", user_id=author.id)
     copy_of_vell = _create(server, author, "person", name="Vell", kind="npc", campaign_id=playthrough["id"])
-    copied = asyncio.run(
-        RPGSceneExtension.copy_scenes(str(author.id), scenario["id"], playthrough["id"], {vell["id"]: copy_of_vell["id"]})
-    )
+    copy_of_town = _create(server, author, "location", name="Saltmere", kind="city", campaign_id=playthrough["id"])
+    copy_of_house = _create(server, author, "location", name="Halloway house", kind="building", parent_id=copy_of_town["id"], campaign_id=playthrough["id"])
+    id_map = {vell["id"]: copy_of_vell["id"], town["id"]: copy_of_town["id"], house["id"]: copy_of_house["id"]}
+    copied = asyncio.run(RPGSceneExtension.copy_scenes(str(author.id), scenario["id"], playthrough["id"], id_map))
     assert [one["name"] for one in copied] == ["Deck"] and copied[0]["campaign_id"] == playthrough["id"]
     assert _current(server, author, playthrough["id"])["id"] == copied[0]["id"]
     tokens = asyncio.run(RPGSceneExtension.scene_tokens(str(author.id), copied[0]["id"]))
     assert [one["entity_id"] for one in tokens] == [copy_of_vell["id"]]
     walls = server.get("/v1/scene_wall", params={"scene_id": copied[0]["id"]}, headers=_headers(author)).json()["scene_walls"]
     assert [wall["points"] for wall in walls] == [[[500, 0], [500, 400]]]
+    # What an imported map carries: its art link, lights, regions on the copied places, the GM's pins.
+    assert copied[0]["background_url"] == "/v1/asset/a1/content" and copied[0]["location_id"] == copy_of_town["id"]
+    lights = server.get("/v1/scene_light", params={"scene_id": copied[0]["id"]}, headers=_headers(author)).json()["scene_lights"]
+    assert [(one["x"], one["dim"]) for one in lights if one["scene_id"] == copied[0]["id"]] == [(300.0, 30.0)]
+    regions = server.get("/v1/scene_region", params={"scene_id": copied[0]["id"]}, headers=_headers(author)).json()["scene_regions"]
+    assert [one["location_id"] for one in regions if one["scene_id"] == copied[0]["id"]] == [copy_of_house["id"]]
+    pins = server.get("/v1/scope_place", params={"campaign_id": playthrough["id"]}, headers=_headers(author)).json()["scope_places"]
+    assert [(one["location_id"], one["x"], one["y"]) for one in pins if one["campaign_id"] == playthrough["id"]] == [(copy_of_house["id"], 0.4, 0.3)]
 
     with pytest.raises(HTTPException) as refused:
         asyncio.run(RPGSceneExtension.copy_scenes(str(other.id), scenario["id"], playthrough["id"], {}))

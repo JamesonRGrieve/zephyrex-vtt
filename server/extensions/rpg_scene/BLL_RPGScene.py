@@ -1566,8 +1566,9 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         return self._trusted(SceneManager).update_trusted(id=scene.id, is_active=True)
 
     def copy_scenes_for(self, from_campaign_id: str, to_campaign_id: str, id_map: dict[str, str]) -> list[SceneSummary]:
-        """Copy a campaign's scenes, with everything on them, into another campaign: a scenario's maps
-        into a playthrough started from it. ``id_map`` maps the source's wiki ids (persons, locations)
+        """Copy a campaign's scenes, with everything on them (art link, walls and doors, lights,
+        regions, tokens), and its GM's marker pins into another campaign: a scenario's maps into a
+        playthrough started from it. ``id_map`` maps the source's wiki ids (persons, locations)
         to the copies' (the wiki's instantiate); ids not in it are kept. The source scene that was
         current is current in the copy (else the first). For the target campaign's GM, who can read
         the source campaign."""
@@ -1584,7 +1585,9 @@ class SceneManager(AbstractBLLManager, RouterMixin):
 
         def copy(manager: type[Any], row: Any, **overrides: Any) -> Any:
             creatable = set(manager._model.Create.model_fields)
-            fields = {key: value for key, value in row.model_dump().items() if key in creatable and key not in skip}
+            # A column left null is the Create's default, not a null it may refuse (a region's
+            # behaviours stored as null failed the whole copy).
+            fields = {key: value for key, value in row.model_dump().items() if key in creatable and key not in skip and value is not None}
             for key in ("person_id", "location_id", "scene_level_id", "scene_feature_id"):
                 if fields.get(key) is not None:
                     fields[key] = mapped.get(fields[key], fields[key])
@@ -1605,6 +1608,12 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 for row in _live(self._trusted(part), scene_id=source.id):
                     copy(part, row, scene_id=scene.id)
             copied.append((source, scene))
+        # The GM's marker pins on the scope maps (scope_places), onto the copied places. Only the
+        # source GM's count there (scope_for), so only theirs come across.
+        source_gms = self._gms_of(self._get(CampaignManager, from_campaign_id))
+        for pin in _live(self._trusted(ScopePlaceManager), campaign_id=from_campaign_id):
+            if str(getattr(pin, "created_by_user_id", "")) in source_gms and pin.x is not None and pin.y is not None:
+                copy(ScopePlaceManager, pin, campaign_id=to_campaign_id)
         if not copied:
             return []
         current = next((scene for source, scene in copied if source.is_active), copied[0][1])
@@ -2058,9 +2067,22 @@ def _copy_on_instantiate(model_registry: Any, requester_id: str, source_id: str,
     SceneManager(requester_id=requester_id, model_registry=model_registry).copy_scenes_for(source_id, made_id, id_map)
 
 
-try:
-    from zephyrex.extensions.rpg_core.BLL_RPGCore import AFTER_INSTANTIATE  # type: ignore[import-not-found,attr-defined]
-except ImportError:
-    AFTER_INSTANTIATE = None
-if AFTER_INSTANTIATE is not None and _copy_on_instantiate not in AFTER_INSTANTIATE:
-    AFTER_INSTANTIATE.append(_copy_on_instantiate)
+def register_copy(model_registry: Any) -> bool:
+    """The copy above registered with the wiki through its published ability
+    (register_instantiate_hook, wiki b289c56), so any backend offering it serves; an older wiki
+    without it still takes the copy on its AFTER_INSTANTIATE list. Registering twice is a no-op.
+    False when neither is there."""
+    from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
+    from zephyrex.lib.Environment import env
+
+    register = loaded_ability(model_registry, "rpg_core", "register_instantiate_hook")
+    if register is not None:
+        register(model_registry, str(env("ROOT_ID")), _copy_on_instantiate)
+        return True
+    try:
+        from zephyrex.extensions.rpg_core.BLL_RPGCore import AFTER_INSTANTIATE  # type: ignore[import-not-found,attr-defined]
+    except ImportError:
+        return False
+    if _copy_on_instantiate not in AFTER_INSTANTIATE:
+        AFTER_INSTANTIATE.append(_copy_on_instantiate)
+    return True

@@ -429,9 +429,22 @@ def _copy_on_instantiate(model_registry: Any, requester_id: str, source_id: str,
             rows_out.create(person_id=copy_person, **fields)
 
 
-try:
-    from zephyrex.extensions.rpg_core.BLL_RPGCore import AFTER_INSTANTIATE  # type: ignore[import-not-found,attr-defined]
-except ImportError:
-    AFTER_INSTANTIATE = None
-if AFTER_INSTANTIATE is not None and _copy_on_instantiate not in AFTER_INSTANTIATE:
-    AFTER_INSTANTIATE.append(_copy_on_instantiate)
+def register_copy(model_registry: Any) -> bool:
+    """The copy above registered with the wiki through its published ability
+    (register_instantiate_hook, wiki b289c56), so any backend offering it serves; an older wiki
+    without it still takes the copy on its AFTER_INSTANTIATE list. Registering twice is a no-op.
+    False when neither is there."""
+    from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
+    from zephyrex.lib.Environment import env
+
+    register = loaded_ability(model_registry, "rpg_core", "register_instantiate_hook")
+    if register is not None:
+        register(model_registry, str(env("ROOT_ID")), _copy_on_instantiate)
+        return True
+    try:
+        from zephyrex.extensions.rpg_core.BLL_RPGCore import AFTER_INSTANTIATE  # type: ignore[import-not-found,attr-defined]
+    except ImportError:
+        return False
+    if _copy_on_instantiate not in AFTER_INSTANTIATE:
+        AFTER_INSTANTIATE.append(_copy_on_instantiate)
+    return True

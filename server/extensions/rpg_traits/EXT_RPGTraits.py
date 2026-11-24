@@ -44,6 +44,21 @@ class RPGTraitsExtension(AbstractStaticExtension):
     )
 
     @classmethod
+    def on_start(cls) -> None:
+        """A playthrough started from a scenario gets the scenario's traits and sheets: the copy registered with
+        the wiki's register_instantiate_hook (BLL_RPGTraits.register_copy)."""
+        from zephyrex.extensions.rpg_traits.BLL_RPGTraits import register_copy
+        from zephyrex.lib.Logging import logger
+        from zephyrex.pydantic2.registry import ModelRegistry
+
+        try:
+            registry = ModelRegistry.attached()
+            if registry is not None and not register_copy(registry):
+                logger.warning("rpg_traits: the wiki offers no instantiate hook; traits and sheets aren't copied on start")
+        except Exception as error:  # the copy is extra: the app boots without it
+            logger.warning(f"rpg_traits: no copy on instantiate: {error}")
+
+    @classmethod
     @ability("check_requirements")
     async def check_requirements(cls, requester_id: str, campaign_id: str, hook_id: str) -> dict[str, Any]:
         """A plot hook's state for the campaign's party: resolved, available or blocked, with the

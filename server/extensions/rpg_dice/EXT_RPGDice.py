@@ -4,7 +4,7 @@ calls (the AI GM's ``roll`` and ``check``, A21): mechanics come from here, never
 
 from typing import Any, ClassVar, Literal, Optional
 
-from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability
+from zephyrex.extensions.AbstractExtensionProvider import AbstractStaticExtension, ability, backend_selector, loaded_ability
 from zephyrex.extensions.rpg_dice.BLL_RPGDice import InitiativeRequest, SheetRequest, TestOptionsRequest, TestRequest, CheckRequest, DiceManager
 from zephyrex.lib.Dependencies import Dependencies, EXT_Dependency
 
@@ -47,6 +47,33 @@ class RPGDiceExtension(AbstractStaticExtension):
             ),
         ]
     )
+
+    @classmethod
+    @backend_selector
+    async def backend_for(cls, ability_name: str, arguments: dict[str, Any]) -> Optional[str]:
+        """Which backend serves this call (the operator's framework selector, sf 72f51160): the
+        campaign's, as the wiki says (by campaign_id or a person's), for a campaign kept in an external tabletop; None (this
+        extension's own) for a native campaign, an unknown one, or a wiki with no campaign_backend.
+        Only keyword arguments reach a selector, so a positional campaign stays native."""
+        from zephyrex.lib.Environment import env
+        from zephyrex.pydantic2.registry import ModelRegistry
+
+        # An fvtt: id is always Foundry's (the wiki's rule): no lookup.
+        if any(str(arguments.get(key) or "").startswith("fvtt:") for key in ("campaign_id", "scene_id", "encounter_id", "person_id")):
+            return "foundry"
+        registry = ModelRegistry.attached()
+        ask = None if registry is None else loaded_ability(registry, "rpg_core", "campaign_backend")
+        if ask is None:
+            return None
+        campaign_id = arguments.get("campaign_id")
+        person_id = arguments.get("person_id")
+        if not campaign_id and not person_id:
+            return None
+        answer = ask(registry, str(env("SYSTEM_ID")), campaign_id=campaign_id, person_id=person_id)
+        if hasattr(answer, "__await__"):
+            answer = await answer
+        backend = (answer or {}).get("backend")
+        return None if backend in (None, "", "native") else str(backend)
 
     @classmethod
     def dice(cls, requester_id: str) -> DiceManager:
