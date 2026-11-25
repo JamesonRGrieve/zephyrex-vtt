@@ -13,8 +13,9 @@ and every choice left open; nothing is guessed. A pregen whose setting has no sy
 pack is listed as skipped with the reason. Run with the app's environment, never through a route;
 --app boots a composing app (rpg-ai) from the current directory, as foundry-bridge/install.py does.
 
---system builds the instance's own pregens (open content: a scenario, or a setting pregen, written
-by SYSTEM; operator, 2026-11-25), as SYSTEM, so every account reads the sheets. A sheet an account
+--system builds the instance's own pregens (open content: a scenario, or a setting pregen, the shared
+copy TEMPLATE owns, or SYSTEM from before; operator, 2026-11-25), as SYSTEM, the sheets kept as
+TEMPLATE's, so every account reads and copies them. A sheet an account
 wrote on such a pregen before is taken over in place (reported as "adopted") rather than rebuilt,
 unless --replace.
 """

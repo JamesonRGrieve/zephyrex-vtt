@@ -199,7 +199,7 @@ def test_open_content_is_the_instances_and_takes_over_its_installers_own_copy(ap
     assert (shared.created, shared.removed) == (0, 0)
     seen = client.get("/v1/trait", params={"slug": "open-feat-0"}, headers=_headers(other)).json()["traits"]
     assert [one["id"] for one in seen] == [feat[0]["id"]], "the same trait, now every account's"
-    assert seen[0]["created_by_user_id"] == str(env("SYSTEM_ID"))
+    assert seen[0]["created_by_user_id"] == str(env("TEMPLATE_ID")), "the shared copy is TEMPLATE's"
     listed = client.get("/v1/content_module", params={"slug": "openline"}, headers=_headers(other)).json()["content_modules"]
     assert [one["id"] for one in listed] == [shared.module_id]
     records = ModuleRecordManager(requester_id=str(other.id), model_registry=registry).list(content_module_id=shared.module_id)

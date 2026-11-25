@@ -689,8 +689,10 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
                 str(owner) for owner in (getattr(person, "user_id", None), getattr(person, "created_by_user_id", None)) if owner
             }
         system_id_user = str(env("SYSTEM_ID"))
+        # The shared copy's owner (the operator, 2026-11-25): TEMPLATE, SYSTEM writing and rebuilding.
+        template = str(env("TEMPLATE_ID"))
         owner_of = campaign if campaign is not None else person
-        system_level = owner_of is not None and str(getattr(owner_of, "created_by_user_id", None) or "") == system_id_user
+        system_level = owner_of is not None and str(getattr(owner_of, "created_by_user_id", None) or "") in {system_id_user, template}
         if system_level:
             allowed.add(system_id_user)
         if person is None or requester not in allowed:
@@ -727,9 +729,9 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         existing = self._live(rows, person_id=person.id)
         adopted = 0
         if system_level and existing and not body.replace:
-            theirs = [row.id for row in existing if str(getattr(row, "created_by_user_id", None) or "") != system_id_user]
+            theirs = [row.id for row in existing if str(getattr(row, "created_by_user_id", None) or "") != template]
             if theirs and not body.dry_run:
-                _reown(rows, theirs, system_id_user)
+                _reown(rows, theirs, template)
             adopted = len(theirs)
             return self._pregen_out(person, pack, line, result, feature_ids, existing, False, 0, system_level, adopted)
         if existing and not body.replace and not body.dry_run:
@@ -761,8 +763,9 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             # sheet; a system-level pregen's as SYSTEM, which every account reads.
             writer = system_id_user if system_level else str(self.requester.id)
             mine = PersonTraitManager(requester_id=writer, model_registry=self.model_registry)
-            for row in wanted:
-                mine.create(person_id=person.id, **row)
+            made = [mine.create(person_id=person.id, **row).id for row in wanted]
+            if system_level and made:
+                _reown(rows, [str(one) for one in made], template)
             written = len(wanted)
         return self._pregen_out(person, pack, line, result, feature_ids, existing, result.buildable, written, system_level, adopted)
 

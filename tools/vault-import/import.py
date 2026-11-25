@@ -78,7 +78,7 @@ def main() -> int:
 
         listed = as_owner(ContentModuleManager).list(line=args.line)
         installed = [one for one in listed if str(one.created_by_user_id) == str(args.owner)] + [
-            one for one in listed if str(one.created_by_user_id) == str(env("SYSTEM_ID"))
+            one for one in listed if str(one.created_by_user_id) in {str(env("TEMPLATE_ID")), str(env("SYSTEM_ID"))}
         ]
         if not installed:
             print(f"the {args.line} module isn't installed for {args.owner} or the instance; run tools/foundry-bridge first")

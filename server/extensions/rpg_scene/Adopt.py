@@ -47,7 +47,8 @@ def adopt_scenes(model_registry: Any, setting_id: str, scenario_ids: list[str], 
     from zephyrex.extensions.rpg_scene import BLL_RPGScene as scene_bll
     from zephyrex.lib.Environment import env
 
-    system = str(env("SYSTEM_ID"))
+    # The shared copy is TEMPLATE's (the operator, 2026-11-25): every account reads and copies it.
+    system = str(env("TEMPLATE_ID"))
     targets = {str(one) for one in scenario_ids}
     mapped = {str(key): str(value) for key, value in (id_map or {}).items()}
     sources = sorted(targets | {key for key, value in mapped.items() if value in targets})

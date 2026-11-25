@@ -1021,7 +1021,12 @@ def _campaign_gms(campaign: Any) -> set[str]:
     """A campaign's GM: its owner, or its creator for a campaign made without one."""
     if campaign is None:
         return set()
-    return {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}
+    owners = {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}
+    # The instance's shared content (TEMPLATE's, or SYSTEM's from before that ruling) is tended by
+    # the server: SYSTEM builds and rebuilds its maps (map_location, import_uvtt).
+    if owners & {str(env("TEMPLATE_ID")), str(env("SYSTEM_ID"))}:
+        owners.add(str(env("SYSTEM_ID")))
+    return owners
 
 
 def _controllers(model_registry: Any, person: Any) -> set[str]:
@@ -1392,11 +1397,44 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         if art and shape:
             asset_id = await self._stored_map(art, shape[0], body.image_name or f"{location.name or 'map'}", location.id)
             self._trusted(SceneManager).update(id=scene.id, background_url=f"/v1/asset/{asset_id}/content")
+        if str(getattr(campaign, "created_by_user_id", None) or "") == str(env("TEMPLATE_ID")):
+            self._keep_shared(scene.id, asset_id)
         scene = self._get(SceneManager, scene.id) or scene
         return LocationMapOut(
             scene_id=scene.id, floor=body.floor, created=created, name=scene.name or "", width=int(scene.width or 0), height=int(scene.height or 0),
             grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE), background_url=self._drawn_background(scene), asset_id=asset_id, **counts,
         )
+
+    def _keep_shared(self, scene_id: str, asset_id: Optional[str]) -> None:
+        """A shared scenario's map (TEMPLATE's) kept as TEMPLATE's: the scene, everything on it and its
+        art, written by SYSTEM, re-owned in place, so every account reads and copies them and only
+        ROOT or SYSTEM changes them (the operator, 2026-11-25)."""
+        from zephyrex.extensions.attachments.BLL_Attachments import AssetManager, AttachmentManager  # type: ignore[import-not-found]
+
+        template = str(env("TEMPLATE_ID"))
+        session = self.model_registry.DB.session()
+        try:
+            def own(manager: type[Any], **where: Any) -> None:
+                table = manager(requester_id=env("ROOT_ID"), model_registry=self.model_registry).DB.__table__
+                condition = None
+                for name, value in where.items():
+                    clause = table.c[name].in_(value) if isinstance(value, list) else table.c[name] == value
+                    condition = clause if condition is None else condition & clause
+                session.execute(table.update().where(condition).values(created_by_user_id=template))
+
+            own(SceneManager, id=scene_id)
+            for part in (SceneLevelManager, SceneFeatureManager, SceneWallManager, SceneLightManager,
+                         SceneTileManager, SceneNoteManager, SceneRegionManager, SceneTokenManager):
+                own(part, scene_id=scene_id)
+            if asset_id:
+                own(AssetManager, id=asset_id)
+                own(AttachmentManager, asset_id=asset_id)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     async def _stored_map(self, art: bytes, content_type: str, name: str, location_id: str) -> str:
         """The picture as the GM's asset, attached to the place as its map: the one already attached

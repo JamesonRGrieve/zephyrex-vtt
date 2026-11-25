@@ -4,8 +4,9 @@ tools/foundry-bridge/srd5e.py, or a private instance's own) as a module, one of 
 2026-11-25: "The public domain stuff is instance wide" / "Private stuff is personal"):
 - private (the default): one account's own, written as that owner, never as the framework's SYSTEM
   user, so on a hosted instance only that account sees it (the operator's own books);
-- instance-wide: public-domain or open-licence content (the SRD, CC-BY), installed once and written
-  as SYSTEM, whose rows every account reads and only the server changes. The bundle asks for it
+- instance-wide: public-domain or open-licence content (the SRD, CC-BY), installed once: written by
+  SYSTEM and kept as TEMPLATE's (the operator, 2026-11-25: one shared copy for every user, updates
+  touching only it), whose rows every account reads and copies and only ROOT or SYSTEM changes. The bundle asks for it
   ("visibility": "instance", which srd5e.py writes), or the install does (instance_wide=True).
 Either way a campaign plays only with the modules its GM enables (CampaignModule), and campaigns
 stay their accounts' own.
@@ -166,10 +167,18 @@ def _installs(model_registry: Any, slug: str) -> list[tuple[str, str]]:
         session.close()
 
 
+def shared_owners() -> set[str]:
+    """Who owns the instance's shared content: TEMPLATE (the operator, 2026-11-25: one shared copy of
+    the SRD, readable and copyable by every account, changed only by ROOT or SYSTEM), and SYSTEM for
+    what was installed before that ruling."""
+    return {str(env("TEMPLATE_ID")), str(env("SYSTEM_ID"))}
+
+
 def _adopt(model_registry: Any, module_id: str) -> None:
-    """Makes one account's own module the instance's: it, its records and the traits made from them
-    are re-owned by SYSTEM in place (the same ids, so person traits and campaign links stand)."""
-    system_id = str(env("SYSTEM_ID"))
+    """Makes a module the instance's shared copy: it, its records and the traits made from them are
+    re-owned by TEMPLATE in place (the same ids, so person traits and campaign links stand). SYSTEM
+    writes and rebuilds them; TEMPLATE's rows every account reads, and only ROOT or SYSTEM changes."""
+    system_id = str(env("TEMPLATE_ID"))
     manager = ContentModuleManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
     records = ModuleRecordManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
     traits = TraitManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
@@ -227,7 +236,8 @@ def install(
     slug = str(bundle.get("slug") or line)
     modules = as_writer(ContentModuleManager)
     every = _installs(model_registry, slug)
-    found = [modules.get(id=module_id) for module_id, by in every if by == writer]
+    owners = shared_owners() if shared else {writer}
+    found = [modules.get(id=module_id) for module_id, by in every if by in owners]
     adopted_from = None
     if shared and not found:
         own = [module_id for module_id, by in every if by == str(owner_id)]
@@ -303,4 +313,7 @@ def install(
         records.delete(id=record.id)
         summary.removed += 1
     summary.traits = sum(summary.kinds.values())
+    if shared:
+        # Written as SYSTEM, kept as TEMPLATE's: the one shared copy every account reads.
+        _adopt(model_registry, module.id)
     return summary

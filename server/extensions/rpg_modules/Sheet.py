@@ -90,7 +90,7 @@ def import_sheet(
     # The account's own module of the line, else the instance's (open content, installed for all).
     listed = as_owner(ContentModuleManager).list(line=line)
     modules = [one for one in listed if str(one.created_by_user_id) == str(owner_id)] + [
-        one for one in listed if str(one.created_by_user_id) == str(env("SYSTEM_ID"))
+        one for one in listed if str(one.created_by_user_id) in {str(env("TEMPLATE_ID")), str(env("SYSTEM_ID"))}
     ]
     if not modules:
         raise ValueError(f"the {line} module isn't installed for this account or the instance; install it first")

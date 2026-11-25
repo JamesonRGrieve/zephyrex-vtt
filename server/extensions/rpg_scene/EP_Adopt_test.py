@@ -67,7 +67,7 @@ def _copy(server: TestClient, user: Any, setting: dict[str, Any], *, extra_scene
 
 def test_a_setting_made_system_level_takes_its_scenes_and_sheets_and_merges_a_duplicates(server: TestClient) -> None:
     registry = server.app.state.model_registry  # type: ignore[attr-defined]
-    system = str(env("SYSTEM_ID"))
+    system = str(env("TEMPLATE_ID"))  # the shared copy is TEMPLATE's (operator, 2026-11-25)
     first, second = create_user(server), create_user(server)
     setting = _create(server, first, "setting", name="The Salt Coast", slug="the-salt-coast-adopt")
     other = _create(server, second, "setting", name="The Salt Coast", slug="the-salt-coast-adopt-2")

@@ -256,13 +256,13 @@ def test_an_out_of_the_box_scenarios_pregen_sheet_is_the_instances(server: TestC
     assert adopted.adopted == 15 and adopted.written == 0
     after = rows.list(filters=live, person_id=brann["id"])
     assert {row.id for row in after} == before, "the same rows, taken over in place"
-    assert {str(row.created_by_user_id) for row in after} == {str(env("SYSTEM_ID"))}
+    assert {str(row.created_by_user_id) for row in after} == {str(env("TEMPLATE_ID"))}
     seen = server.get("/v1/person_trait", params={"person_id": brann["id"], "limit": 50}, headers=_headers(reader))
     assert seen.status_code == 200 and len(seen.json()["person_traits"]) == 15, seen.text
 
     rebuilt = system.build_pregen_for(PregenRequest(person_id=brann["id"], replace=True))
     assert rebuilt.written == 15 and rebuilt.adopted == 0
-    assert {str(row.created_by_user_id) for row in rows.list(filters=live, person_id=brann["id"])} == {str(env("SYSTEM_ID"))}
+    assert {str(row.created_by_user_id) for row in rows.list(filters=live, person_id=brann["id"])} == {str(env("TEMPLATE_ID"))}
     # An account's own scenario still builds as that account, and a stranger still can't.
     assert _build(server, reader, brann["id"], dry_run=True).status_code == 404
 
