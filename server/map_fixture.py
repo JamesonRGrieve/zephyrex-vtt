@@ -21,15 +21,30 @@ Every size and box is in PLACES / SCENES, which the client's render harness read
 
 from __future__ import annotations
 
+import base64
+import struct
+import zlib
 from typing import Any
 
 from fastapi.testclient import TestClient
 
 SCENES: dict[str, dict[str, Any]] = {
-    "Saltmere": {"place": "Saltmere", "width": 4096, "height": 2867, "grid_size": 68},
-    "Halloway house, ground floor": {"place": "Halloway house", "width": 2200, "height": 1700, "grid_size": 100},
-    "Halloway cellar": {"place": "The cellar", "width": 1200, "height": 900, "grid_size": 100},
+    "Saltmere": {"place": "Saltmere", "width": 4096, "height": 2867, "grid_size": 68, "art": (196, 168, 112)},
+    "Halloway house, ground floor": {"place": "Halloway house", "width": 2200, "height": 1700, "grid_size": 100, "art": (122, 82, 52)},
+    "Halloway cellar": {"place": "The cellar", "width": 1200, "height": 900, "grid_size": 100, "art": (64, 70, 84)},
 }
+
+
+def art(colour: tuple[int, int, int]) -> str:
+    """A scene's stand-in map art: a flat picture of one colour, as a data: URL (a real export's art
+    is the operator's; the render test reads this colour back to prove the art is drawn)."""
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+
+    raw = b"".join(b"\x00" + bytes(colour) * 8 for _ in range(8))
+    data = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 8, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+    return "data:image/png;base64," + base64.b64encode(data).decode()
 # Regions: (scene, place) → (x, y, width, height) in scene pixels.
 REGIONS: dict[tuple[str, str], tuple[int, int, int, int]] = {
     ("Saltmere", "Halloway house"): (1224, 952, 408, 340),
@@ -92,7 +107,7 @@ def seed(server: TestClient, author: Any, *, system_id: str | None = None, name:
     for scene, shape in SCENES.items():
         scenes[scene] = _create(
             server, author, "scene", name=scene, campaign_id=scenario["id"], location_id=places[shape["place"]]["id"],
-            width=shape["width"], height=shape["height"], grid_size=shape["grid_size"],
+            width=shape["width"], height=shape["height"], grid_size=shape["grid_size"], background_url=art(shape["art"]),
         )
     for (scene, place), (x, y, width, height) in REGIONS.items():
         _create(

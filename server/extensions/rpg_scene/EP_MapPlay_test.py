@@ -7,7 +7,10 @@ scene, departures by remove_person_from_scene. After every step the current scen
 where on it are asserted, as a player's map pane would show them."""
 
 import asyncio
+import json
+import os
 import time
+from pathlib import Path
 from collections.abc import Iterator
 from typing import Any
 
@@ -65,6 +68,14 @@ class Table:
         assert found is not None, "no current scene"
         return dict(found)
 
+    def squares_apart(self, scene_id: str | None = None) -> None:
+        """No two people on one square of the scene (the map review: three stood on one)."""
+        scene = scene_id or self.current()
+        grid = float((scene if isinstance(scene, dict) else self.current())["grid_size"])
+        here = self.tokens(scene["id"] if isinstance(scene, dict) else scene)
+        cells = [(int(x // grid), int(y // grid)) for x, y in here.values()]
+        assert len(set(cells)) == len(cells), here
+
     def tokens(self, scene_id: str | None = None) -> dict[str, tuple[float, float]]:
         """Who stands where on a scene (the current one by default): name → the token's top-left."""
         from zephyrex.extensions.rpg_scene.BLL_RPGScene import SceneTokenManager
@@ -88,6 +99,24 @@ class Table:
 
     def leave(self, name: str) -> None:
         asyncio.run(RPGSceneExtension.remove_person_from_scene(str(self.gm.id), self.current()["id"], self.person(name)["id"]))
+
+
+def _export(table: "Table", step: str) -> None:
+    """The step's map as the GM's pane is sent it (POST /v1/scene/{id}/view), for the browser render
+    test (vtt-play e2e map-play.spec.ts): written when MAP_PLAY_OUT names a directory."""
+    out = os.environ.get("MAP_PLAY_OUT")
+    if not out:
+        return
+    shown = table.current()
+    view = table.server.post(f"/v1/scene/{shown['id']}/view", json={"view": {}}, headers=_headers(table.gm))
+    assert view.status_code == 200, view.text
+    names = {one["id"]: one["name"] for one in table._list("person", "persons")}
+    found = view.json()["view"]
+    shape = map_fixture.SCENES[shown["name"]]
+    Path(out).mkdir(parents=True, exist_ok=True)
+    Path(out, f"{step}.json").write_text(
+        json.dumps({"step": step, "scene": shown["name"], "art": list(shape["art"]), "people": {str(one.get("person_id")): names.get(one.get("person_id")) for one in found["tokens"]}, "view": found}, indent=1)
+    )
 
 
 def _inside(point: tuple[float, float], box: tuple[int, int, int, int], grid: int) -> bool:
@@ -116,6 +145,8 @@ def test_1_play_opens_where_the_party_is_with_everyone_present_on_the_map(table:
     for name in ("Brann", "Sefa"):
         assert _inside(here[name], parlour, 100), (name, here[name])
     assert len(set(here.values())) == len(here), "no two on one square"
+    table.squares_apart()
+    _export(table, "1-arrive")
 
 
 def test_2_the_party_walks_to_the_market_and_the_map_follows_them(table: Table) -> None:
@@ -129,6 +160,8 @@ def test_2_the_party_walks_to_the_market_and_the_map_follows_them(table: Table) 
     assert _inside(here["Brann"], market, 68) and _inside(here["Sefa"], market, 68), here
     assert table.person("Brann")["location_id"] == table.place("The market")["id"]
     assert set(table.tokens(table.scene_named("Halloway house, ground floor"))) == {"Mara Halloway", "Old Hesk"}, "one token per person"
+    table.squares_apart()
+    _export(table, "2-market")
 
 
 def test_2b_a_turn_where_no_one_moves_never_changes_the_map(table: Table) -> None:
@@ -158,6 +191,8 @@ def test_3_into_a_building_with_no_map_of_its_own_stays_on_the_town(table: Table
     watch = map_fixture.region_of("Saltmere", "Watch house")
     assert _inside(here["Brann"], watch, 68) and _inside(here["Sefa"], watch, 68), here
     assert table.person("Sefa")["location_id"] == table.place("Watch house")["id"]
+    table.squares_apart()
+    _export(table, "3-watch-house")
 
 
 def test_4_an_arrival_stands_beside_the_one_it_joins(table: Table) -> None:
@@ -167,6 +202,8 @@ def test_4_an_arrival_stands_beside_the_one_it_joins(table: Table) -> None:
     (bx, by), (ox, oy) = here["Brann"], here["Captain Ord"]
     assert max(abs(bx - ox), abs(by - oy)) <= 68 * 2, (here["Brann"], here["Captain Ord"])
     assert placed["scene_id"] == table.current()["id"]
+    table.squares_apart()
+    _export(table, "4-arrival")
 
 
 def test_5_down_to_the_cellar_the_map_is_the_cellar_and_the_fight_is_there(table: Table) -> None:
@@ -179,11 +216,15 @@ def test_5_down_to_the_cellar_the_map_is_the_cellar_and_the_fight_is_there(table
     fight = asyncio.run(RPGCombatExtension.start_encounter(str(table.gm.id), table.campaign_id, scene_id=shown["id"]))
     names = sorted(one.get("name") or "" for one in fight["combatants"])
     assert names == ["Brann", "Cellar thug", "Sefa"], names
+    table.squares_apart()
+    _export(table, "5-cellar-fight")
 
 
 def test_6_a_departure_takes_the_token_off_and_a_road_off_every_map(table: Table) -> None:
     table.leave("Cellar thug")
     assert "Cellar thug" not in table.tokens()
+    table.squares_apart()
+    _export(table, "6-departure")
     table.pilot("Mara Halloway", "The coast road")
     for scene in ("Saltmere", "Halloway house, ground floor", "Halloway cellar"):
         assert "Mara Halloway" not in table.tokens(table.scene_named(scene)), scene

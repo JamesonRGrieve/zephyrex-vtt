@@ -2059,11 +2059,21 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             # Made as the requester (the campaign's GM, checked above), not the system: a token the
             # system owns is one the GM's own list and edits can't see.
             mine = SceneTokenManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
-            token = mine.create(name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person_id, x=spot[0], y=spot[1])
+            token = mine.create(
+                name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person_id, x=spot[0], y=spot[1],
+                # A player character is the party's (drawn friendly), as the start's placement draws them.
+                disposition="friendly" if getattr(person, "kind", None) == "pc" else "neutral",
+            )
             location = self.sync_location(token, scene)
             self._follow_party(campaign_id, scene.id)
             return PilotOut(person_id=person_id, token_id=token.id, scene_id=scene.id, x=spot[0], y=spot[1], removed=removed, location_id=location)
         start = (float(here.x or 0) + grid / 2, float(here.y or 0) + grid / 2)
+        # Walk to a free square: never onto someone (the map review, 2026-11-25: the party and the
+        # watch captain stood on one square). A place keeps a square between arrivals; a point asked
+        # for takes the nearest free square to it.
+        if (int(point[0] // grid), int(point[1] // grid)) != (int(float(here.x or 0) // grid), int(float(here.y or 0) // grid)):
+            free = self._free_cell(scene, point, others, gap=0 if x is not None and y is not None else 1)
+            point = (free[0] + grid / 2, free[1] + grid / 2)
         bounds = (float(scene.width or 40 * grid), float(scene.height or 30 * grid))
         walls = [_wall(row) for row in self._trusted(SceneWallManager).list(scene_id=scene.id)]
         path = find_path(start, point, grid, bounds, walls)
