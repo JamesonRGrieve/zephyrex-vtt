@@ -209,3 +209,59 @@ def test_the_slider_rebuilds_a_scenarios_pregens_to_its_new_level(server: TestCl
     assert commit(owner, level=25).status_code == 422
     assert commit(create_user(server), level=3).status_code == 404
     assert rowan["id"] == got["results"][0]["person_id"]
+
+
+def _make_the_instances(registry: Any, manager: Any, row_id: str) -> None:
+    """The wiki's adoption of an out-of-the-box scenario (its own job): the row re-owned by SYSTEM."""
+    rows = manager(requester_id=env("ROOT_ID"), model_registry=registry)
+    session = rows.db
+    try:
+        session.query(rows.DB).filter(rows.DB.id == row_id).update({"created_by_user_id": env("SYSTEM_ID"), "user_id": env("SYSTEM_ID")} if hasattr(rows.DB, "user_id") else {"created_by_user_id": env("SYSTEM_ID")})
+        session.commit()
+    finally:
+        session.close()
+
+
+def test_an_out_of_the_box_scenarios_pregen_sheet_is_the_instances(server: TestClient, world: dict[str, Any]) -> None:
+    """Operator, 2026-11-25: "The out of the box scenarios, pregens, everything with the SRD should
+    also be system level down to campaigns which are user level". A sheet built before (an account's
+    own) is taken over in place once its scenario is the instance's; every account then reads it,
+    and a rebuild by the server writes it as SYSTEM."""
+    from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
+    from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import BuilderManager, PregenRequest
+    from zephyrex.extensions.rpg_dice.BLL_RPGDice import CampaignManager
+
+    owner, reader = world["owner"], create_user(server)
+    registry = world["registry"]
+    fifth = next(one for one in GameSystemManager(requester_id=env("ROOT_ID"), model_registry=registry).list(slug="srd-5e"))
+    scenario = _create(server, owner, "campaign", name="The Missing Merchant", user_id=owner.id, game_system_id=fifth.id)
+    brann = _create(
+        server, owner, "person", name="Brann", kind="pc", campaign_id=scenario["id"],
+        description="Level 1 Human Fighter, Acolyte background (SRD 5.2.1).",
+    )
+    built = _build(server, owner, brann["id"])
+    assert built.status_code == 200 and not built.json()["pregen"]["system_level"], built.text
+    rows = PersonTraitManager(requester_id=env("ROOT_ID"), model_registry=registry)
+    live = [rows.DB.deleted_at.is_(None)]
+    before = {row.id for row in rows.list(filters=live, person_id=brann["id"])}
+    assert len(before) == 15
+
+    _make_the_instances(registry, CampaignManager, scenario["id"])
+    _make_the_instances(registry, PersonManager, brann["id"])
+    system = BuilderManager(requester_id=str(env("SYSTEM_ID")), model_registry=registry)
+    looked = system.build_pregen_for(PregenRequest(person_id=brann["id"], dry_run=True))
+    assert looked.system_level and looked.adopted == 15 and looked.written == 0
+    assert all(str(row.created_by_user_id) == str(owner.id) for row in rows.list(filters=live, person_id=brann["id"])), "a dry run writes nothing"
+    adopted = system.build_pregen_for(PregenRequest(person_id=brann["id"]))
+    assert adopted.adopted == 15 and adopted.written == 0
+    after = rows.list(filters=live, person_id=brann["id"])
+    assert {row.id for row in after} == before, "the same rows, taken over in place"
+    assert {str(row.created_by_user_id) for row in after} == {str(env("SYSTEM_ID"))}
+    seen = server.get("/v1/person_trait", params={"person_id": brann["id"], "limit": 50}, headers=_headers(reader))
+    assert seen.status_code == 200 and len(seen.json()["person_traits"]) == 15, seen.text
+
+    rebuilt = system.build_pregen_for(PregenRequest(person_id=brann["id"], replace=True))
+    assert rebuilt.written == 15 and rebuilt.adopted == 0
+    assert {str(row.created_by_user_id) for row in rows.list(filters=live, person_id=brann["id"])} == {str(env("SYSTEM_ID"))}
+    # An account's own scenario still builds as that account, and a stranger still can't.
+    assert _build(server, reader, brann["id"], dry_run=True).status_code == 404

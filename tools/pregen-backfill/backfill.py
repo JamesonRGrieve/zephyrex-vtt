@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Builds pregens' starting sheets (rpg_builder's build_pregen), server-side. A dry run unless --write.
 
-    python tools/pregen-backfill/backfill.py --owner <the pregens' owner> [--setting <setting id>] \
+    python tools/pregen-backfill/backfill.py (--owner <the pregens' owner> | --system) [--setting <setting id>] \
         [--campaign <campaign id>] [--level <n>] [--app module:factory] [--write] [--replace]
 
 By default every setting pregen of the owner (a pc with no campaign); with --campaign, that
@@ -12,6 +12,11 @@ system first (tools/foundry-bridge/install.py). The dry run prints, per pregen, 
 and every choice left open; nothing is guessed. A pregen whose setting has no system with a rules
 pack is listed as skipped with the reason. Run with the app's environment, never through a route;
 --app boots a composing app (rpg-ai) from the current directory, as foundry-bridge/install.py does.
+
+--system builds the instance's own pregens (open content: a scenario, or a setting pregen, written
+by SYSTEM; operator, 2026-11-25), as SYSTEM, so every account reads the sheets. A sheet an account
+wrote on such a pregen before is taken over in place (reported as "adopted") rather than rebuilt,
+unless --replace.
 """
 
 from __future__ import annotations
@@ -29,7 +34,9 @@ sys.path.insert(0, str(SERVER))
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--owner", required=True, help="The pregens' owner (who imported them)")
+    who = parser.add_mutually_exclusive_group(required=True)
+    who.add_argument("--owner", help="The pregens' owner (who imported them)")
+    who.add_argument("--system", action="store_true", help="The instance's own (system-level) pregens, built as SYSTEM")
     parser.add_argument("--setting", help="Only this setting's pregens")
     parser.add_argument("--campaign", help="This campaign's player characters (a scenario's pregens) instead")
     parser.add_argument("--level", type=int, help="Build to this level (default: the campaign's starting level, else 1)")
@@ -51,9 +58,12 @@ def main() -> int:
         from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
         from zephyrex.extensions.rpg_builder.BLL_RPGBuilder import BuilderManager, PregenRequest
 
+        from zephyrex.lib.Environment import env
+
         registry = app.state.model_registry
-        persons = PersonManager(requester_id=args.owner, model_registry=registry)
-        builder = BuilderManager(requester_id=args.owner, model_registry=registry)
+        requester = str(env("SYSTEM_ID")) if args.system else args.owner
+        persons = PersonManager(requester_id=requester, model_registry=registry)
+        builder = BuilderManager(requester_id=requester, model_registry=registry)
         live = [persons.DB.deleted_at.is_(None)]
         if args.campaign:
             pregens = [person for person in persons.list(filters=live, campaign_id=args.campaign) if getattr(person, "kind", None) == "pc"]
@@ -80,6 +90,7 @@ def main() -> int:
                 "pregens": len(pregens),
                 "buildable": len(built),
                 "written": sum(one["written"] for one in results),
+                "adopted": sum(one.get("adopted", 0) for one in results),
                 "open_choices_by_kind": dict(gaps),
                 "results": results,
                 "skipped": skipped,

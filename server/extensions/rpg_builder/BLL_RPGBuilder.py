@@ -275,6 +275,8 @@ class PregenOut(PlainModel):
     has_sheet: bool = Field(description="Whether the pregen had sheet rows before this call")
     built: bool = Field(description="Whether a sheet was (or, in a dry run, would be) written")
     written: int = 0
+    system_level: bool = Field(False, description="Whether the pregen is the instance's (open content: its scenario or itself written by SYSTEM), so its sheet is too")
+    adopted: int = Field(0, description="Sheet rows an account had written on a system-level pregen, taken over by SYSTEM in place")
     abilities: dict[str, int] = Field(default_factory=dict, description="The standard array as the SRD places it for the class")
     saves: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list, description="Skills granted outright (proficient)")
@@ -300,6 +302,21 @@ class PregensResultEnvelope(PlainModel):
 
 def _refuse(message: str) -> HTTPException:
     return HTTPException(status_code=422, detail={"message": message})
+
+
+def _reown(rows: Any, row_ids: list[str], owner_id: str) -> None:
+    """Sheet rows taken over by another writer in place (their ids kept): a system-level pregen's
+    sheet an account wrote before the ruling becomes SYSTEM's."""
+    session = rows.db
+    try:
+        Row = rows.DB
+        session.query(Row).filter(Row.id.in_(row_ids)).update({"created_by_user_id": owner_id}, synchronize_session=False)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 class BuilderManager(AbstractBLLManager[Any], RouterMixin):
@@ -644,7 +661,14 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         line and the rules settle is written, every open choice is reported, nothing is guessed. A
         setting's pregen (no campaign) for its owner, under its setting's system; a campaign's
         character (a scenario's pregen) for the campaign's GM, under the campaign's system. Refused
-        when it has a sheet, unless replace."""
+        when it has a sheet, unless replace.
+
+        A system-level pregen (operator, 2026-11-25: "The out of the box scenarios, pregens,
+        everything with the SRD should also be system level down to campaigns which are user
+        level"): its scenario, or the pregen itself, is SYSTEM's. Its sheet is built by the server
+        (requester SYSTEM, tools/pregen-backfill --system) and written as SYSTEM, so every account
+        reads it; a sheet an account wrote on it earlier is taken over in place (adopted, same row
+        ids) rather than refused. A playthrough copies it at start as the player's own."""
         from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
 
         persons = self._trusted(PersonManager)
@@ -660,6 +684,11 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             allowed = set() if person is None else {
                 str(owner) for owner in (getattr(person, "user_id", None), getattr(person, "created_by_user_id", None)) if owner
             }
+        system_id_user = str(env("SYSTEM_ID"))
+        owner_of = campaign if campaign is not None else person
+        system_level = owner_of is not None and str(getattr(owner_of, "created_by_user_id", None) or "") == system_id_user
+        if system_level:
+            allowed.add(system_id_user)
         if person is None or requester not in allowed:
             raise HTTPException(status_code=404, detail={"message": "Request searched PersonModel and could not find the required record."})
         system_id = self._dice().system_id_of(campaign if campaign is not None else person)
@@ -692,6 +721,13 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         }
         rows = self._trusted(PersonTraitManager)
         existing = self._live(rows, person_id=person.id)
+        adopted = 0
+        if system_level and existing and not body.replace:
+            theirs = [row.id for row in existing if str(getattr(row, "created_by_user_id", None) or "") != system_id_user]
+            if theirs and not body.dry_run:
+                _reown(rows, theirs, system_id_user)
+            adopted = len(theirs)
+            return self._pregen_out(person, pack, line, result, feature_ids, existing, False, 0, system_level, adopted)
         if existing and not body.replace and not body.dry_run:
             raise _refuse(f"{person.name or 'This pregen'} already has a sheet; pass replace to overwrite it")
 
@@ -717,11 +753,20 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         if result.buildable and not body.dry_run:
             for row in existing:
                 rows.delete(id=row.id)
-            # Made as the requester (the pregen's owner, checked above), so their own list sees the sheet.
-            mine = PersonTraitManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
+            # Made as the requester (the pregen's owner, checked above), so their own list sees the
+            # sheet; a system-level pregen's as SYSTEM, which every account reads.
+            writer = system_id_user if system_level else str(self.requester.id)
+            mine = PersonTraitManager(requester_id=writer, model_registry=self.model_registry)
             for row in wanted:
                 mine.create(person_id=person.id, **row)
             written = len(wanted)
+        return self._pregen_out(person, pack, line, result, feature_ids, existing, result.buildable, written, system_level, adopted)
+
+    @staticmethod
+    def _pregen_out(
+        person: Any, pack: dict[str, Any], line: Any, result: Any, feature_ids: list[tuple[str, str]],
+        existing: list[Any], built: bool, written: int, system_level: bool, adopted: int,
+    ) -> PregenOut:
         return PregenOut(
             person_id=person.id,
             name=person.name,
@@ -732,8 +777,10 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             species=line.species if line else None,
             edition=line.edition if line else None,
             has_sheet=bool(existing),
-            built=result.buildable,
+            built=built,
             written=written,
+            system_level=system_level,
+            adopted=adopted,
             abilities=result.abilities,
             saves=result.saves,
             skills=result.skills,
