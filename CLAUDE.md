@@ -34,6 +34,8 @@ deploy/     frameworks.env (the five framework pins), fetch-frameworks.sh, compi
 deploy/fetch-frameworks.sh <root>     # lay out a build workspace: this repo + the frameworks at their pins
 deploy/compile-frameworks.sh <root>   # compile the framework packages the client installs
 deploy/compile-wiki.sh <root>         # after the client's install: build the wiki's client package into it
+deploy/map-gate.sh <root> <out>       # the map gate: server play script + browser render; required for any change to
+                                      # rpg_scene, vtt-play/src/scene, server/map_fixture.py or vtt-play/e2e (operator, 2026-11-25)
 cd <root>/zephyrex-vtt/server && uv sync && uv run pytest
 cd <root>/zephyrex-vtt/client && pnpm install --frozen-lockfile && pnpm typecheck
 ```
