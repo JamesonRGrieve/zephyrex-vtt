@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
 import {
+  discAt,
   doorAt,
   fit,
   fitCover,
@@ -11,6 +12,7 @@ import {
   MIN_ZOOM,
   panBy,
   snap,
+  spreadDiscs,
   toScene,
   toScreen,
   tokenAt,
@@ -116,5 +118,42 @@ describe('the measure tool and doors', () => {
     const camera = fitCover(2000, 1500, [400, 800]);
     expect(camera.zoom).toBeCloseTo(800 / 1500, 6);
     expect(toScreen(camera, 1000, 750)).toEqual([200, 400]);
+  });
+});
+
+describe('spreadDiscs', () => {
+  it('leaves discs that already clear each other where they are', () => {
+    const discs = [
+      { id: 'a', cx: 0, cy: 0, r: 10 },
+      { id: 'b', cx: 50, cy: 0, r: 10 },
+    ];
+    expect(spreadDiscs(discs)).toEqual(discs);
+  });
+
+  it('fans out a cluster drawn on top of each other until none overlap, near where they stood', () => {
+    // A whole town on a phone: three people two squares apart are 14 px apart, their discs 22 px wide.
+    const discs = [
+      { id: 'brann', cx: 100, cy: 100, r: 11 },
+      { id: 'sefa', cx: 114, cy: 86, r: 11 },
+      { id: 'ord', cx: 100, cy: 100, r: 11 },
+    ];
+    const spread = spreadDiscs(discs);
+    for (const [index, a] of spread.entries()) {
+      for (const b of spread.slice(index + 1))
+        expect(Math.hypot(a.cx - b.cx, a.cy - b.cy)).toBeGreaterThanOrEqual(a.r + b.r);
+      const from = discs[index]!;
+      expect(Math.hypot(a.cx - from.cx, a.cy - from.cy)).toBeLessThan(33);
+    }
+    expect(spreadDiscs(discs)).toEqual(spread);
+  });
+
+  it('a tap finds the disc where it is drawn, with a 44 px reach', () => {
+    const spread = [
+      { id: 'a', cx: 100, cy: 100, r: 11 },
+      { id: 'b', cx: 130, cy: 100, r: 11 },
+    ];
+    expect(discAt(spread, 131, 104)?.id).toBe('b');
+    expect(discAt(spread, 100, 120, 44)?.id).toBe('a');
+    expect(discAt(spread, 300, 300, 44)).toBeNull();
   });
 });

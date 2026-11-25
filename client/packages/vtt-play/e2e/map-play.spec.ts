@@ -114,12 +114,40 @@ for (const size of SIZES) {
         const grid = step.view.grid_size;
         const squares = step.view.tokens.map((one) => `${Math.floor(one.x / grid)},${Math.floor(one.y / grid)}`);
         expect(new Set(squares).size, `squares ${squares.join(' ')}`).toBe(squares.length);
-        // Each token on its square: something other than the art at its centre.
+        // Every disc as drawn (spread from its square where it would cover a neighbour, as on a phone
+        // over a whole town): none overlaps another, each is drawn (not the art at its centre) and
+        // stays beside its own square.
+        const discs = ((await page.locator('canvas').getAttribute('data-discs')) ?? '')
+          .split(' ')
+          .filter(Boolean)
+          .map((one) => {
+            const [id, rest] = one.split(':');
+            const [cx, cy, r] = rest!.split(',').map(Number);
+            return { id: id!, cx: cx!, cy: cy!, r: r! };
+          });
+        expect(discs.map((one) => one.id).sort()).toEqual(step.view.tokens.map((one) => one.id).sort());
+        for (const [index, a] of discs.entries()) {
+          for (const b of discs.slice(index + 1)) {
+            expect(Math.hypot(a.cx - b.cx, a.cy - b.cy), `${a.id} and ${b.id} overlap`).toBeGreaterThanOrEqual(
+              a.r + b.r - 0.5,
+            );
+          }
+        }
+        const [zoom, camX, camY] = ((await page.locator('canvas').getAttribute('data-camera')) ?? '').split(',').map(Number);
         for (const token of step.view.tokens) {
-          const x = token.x + ((token.width ?? 1) * grid) / 2;
-          const y = token.y + ((token.height ?? 1) * grid) / 2;
-          const drawn = await pixelAt(page, x, y);
-          expect(near(drawn, step.art, 24), `${token.name ?? token.id} drawn at ${x},${y}`).toBe(false);
+          const disc = discs.find((one) => one.id === token.id)!;
+          const sceneX = disc.cx / zoom! + camX!;
+          const sceneY = disc.cy / zoom! + camY!;
+          const drawn = await pixelAt(page, sceneX, sceneY);
+          expect(near(drawn, step.art, 24), `${token.name ?? token.id} drawn at its disc`).toBe(false);
+          const square = [
+            (token.x + ((token.width ?? 1) * grid) / 2 - camX!) * zoom!,
+            (token.y + ((token.height ?? 1) * grid) / 2 - camY!) * zoom!,
+          ];
+          expect(
+            Math.hypot(disc.cx - square[0]!, disc.cy - square[1]!),
+            `${token.name ?? token.id} near its square`,
+          ).toBeLessThanOrEqual(disc.r * 3);
         }
         if (SHOTS) await page.screenshot({ path: join(SHOTS, `${size.label}-${step.step}.png`) });
       });

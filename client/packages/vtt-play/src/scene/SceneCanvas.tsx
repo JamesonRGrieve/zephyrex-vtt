@@ -18,6 +18,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import {
+  discAt,
   doorAt,
   fitCover,
   fitWidth,
@@ -29,6 +30,7 @@ import {
   tokenAt,
   zoomAt,
   type Camera,
+  type Disc,
 } from './geometry';
 import { drawScene, paletteOf, type Drag, type Ruler } from './render';
 import type { SceneViewData, ViewToken, ViewWall } from './schemas';
@@ -84,6 +86,8 @@ export function SceneCanvas({
   const [said, setSaid] = useState('');
   const touched = useRef(false);
   const ruler = useRef<Ruler | null>(null);
+  // The discs as last drawn (spread apart where they'd overlap): a tap finds the one it lands on.
+  const drawn = useRef<Disc[]>([]);
   const measuring = useRef(false);
   const toolRef = useRef(tool);
   const fillRef = useRef(fill);
@@ -114,7 +118,7 @@ export function SceneCanvas({
     if (element.width !== Math.round(width * ratio)) element.width = Math.round(width * ratio);
     if (element.height !== Math.round(height * ratio)) element.height = Math.round(height * ratio);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    drawScene(
+    drawn.current = drawScene(
       context,
       viewRef.current,
       camera.current,
@@ -129,6 +133,9 @@ export function SceneCanvas({
     // The camera and selection, for tests and tools.
     element.dataset.camera = `${camera.current.zoom.toFixed(4)},${camera.current.x.toFixed(1)},${camera.current.y.toFixed(1)}`;
     element.dataset.selected = selectedRef.current ?? '';
+    element.dataset.discs = drawn.current
+      .map((one) => `${one.id}:${one.cx.toFixed(1)},${one.cy.toFixed(1)},${one.r.toFixed(1)}`)
+      .join(' ');
   }, []);
 
   useEffect(() => {
@@ -228,7 +235,12 @@ export function SceneCanvas({
       draw();
       return;
     }
-    const hit = tokenAt(viewRef.current.tokens, x, y, viewRef.current.grid_size, MIN_TARGET / camera.current.zoom);
+    // The disc drawn under the finger first (spread from its square at a far-out zoom), else the
+    // token whose square it is.
+    const onDisc = discAt(drawn.current, sx, sy);
+    const hit =
+      (onDisc && viewRef.current.tokens.find((one) => one.id === onDisc.id)) ||
+      tokenAt(viewRef.current.tokens, x, y, viewRef.current.grid_size, MIN_TARGET / camera.current.zoom);
     press.current = { sx, sy, hit, moved: false, long: false };
     if (hit && onTokenDetails) {
       longTimer.current = setTimeout(() => {

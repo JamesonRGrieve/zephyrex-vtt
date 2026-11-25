@@ -5,7 +5,7 @@
  * (the view arrived, the camera moved, a token is being dragged), never in a loop, so a settled
  * scene costs no frames. Colours come from the theme tokens, so it follows light and dark.
  */
-import { toScreen, type Camera } from './geometry';
+import { spreadDiscs, toScreen, type Camera, type Disc } from './geometry';
 import type { SceneViewData, ViewToken } from './schemas';
 
 export interface Palette {
@@ -129,7 +129,7 @@ export function drawScene(
   selected: string | null = null,
   redraw?: () => void,
   ruler: Ruler | null = null,
-): void {
+): Disc[] {
   const [width, height] = size;
   const grid = view.grid_size;
   context.clearRect(0, 0, width, height);
@@ -218,26 +218,53 @@ export function drawScene(
   const chips: [number, number, number, number][] = [];
   const hits = (box: [number, number, number, number]): boolean =>
     chips.some(([l, t, r, b]) => box[0] < r && box[2] > l && box[1] < b && box[3] > t);
-  // Every token's disc on screen, so a name chip covers no one else's face.
-  const discs = view.tokens.map((one) => {
+  // Every token's disc on screen, so a name chip covers no one else's face; spread apart where
+  // they'd overlap (a far-out zoom: a whole town on a phone), each drawn where it ends up.
+  const exact = view.tokens.map((one) => {
     const at = drag && drag.id === one.id ? drag : one;
     const [x, y] = toScreen(camera, at.x, at.y);
     const w = one.width * grid * camera.zoom;
     const h = one.height * grid * camera.zoom;
     return { id: one.id, cx: x + w / 2, cy: y + h / 2, r: Math.max(Math.min(w, h) / 2 - 2, MIN_DRAWN_RADIUS) };
   });
+  const discs = spreadDiscs(exact);
+  const drawnAt = new Map(discs.map((disc) => [disc.id, disc]));
+  const exactAt = new Map(exact.map((disc) => [disc.id, disc]));
   const coversDisc = (box: [number, number, number, number], id: string): boolean =>
     discs.some(
       (d) => d.id !== id && box[0] < d.cx + d.r && box[2] > d.cx - d.r && box[1] < d.cy + d.r && box[3] > d.cy - d.r,
     );
   for (const one of view.tokens) {
     const at = drag && drag.id === one.id ? drag : one;
-    const [sx, sy] = toScreen(camera, at.x, at.y);
+    let [sx, sy] = toScreen(camera, at.x, at.y);
     const w = one.width * grid * camera.zoom;
     const h = one.height * grid * camera.zoom;
     // Never smaller on screen than a readable disc (operator, 2026-11-24: on a whole town the cast
     // were 7 px dots with no faces or names); taps already reach 44 px around (MIN_TARGET).
     const radius = Math.max(Math.min(w, h) / 2 - 2, MIN_DRAWN_RADIUS);
+    // Where the disc is drawn: spread from its square when it would cover a neighbour, with a fine
+    // line back to the square it stands on so the board stays exact.
+    const disc = drawnAt.get(one.id);
+    const truth = exactAt.get(one.id);
+    const dx = disc && truth ? disc.cx - truth.cx : 0;
+    const dy = disc && truth ? disc.cy - truth.cy : 0;
+    sx += dx;
+    sy += dy;
+    if (truth && Math.hypot(dx, dy) > 2) {
+      context.save();
+      context.globalAlpha = 0.8;
+      context.strokeStyle = fill(one, palette);
+      context.lineWidth = 1.5;
+      context.beginPath();
+      context.moveTo(truth.cx, truth.cy);
+      context.lineTo(sx + w / 2, sy + h / 2);
+      context.stroke();
+      context.beginPath();
+      context.arc(truth.cx, truth.cy, 2.5, 0, Math.PI * 2);
+      context.fillStyle = fill(one, palette);
+      context.fill();
+      context.restore();
+    }
     context.globalAlpha = one.is_hidden ? 0.45 : 1;
     context.fillStyle = fill(one, palette);
     context.beginPath();
@@ -350,4 +377,5 @@ export function drawScene(
     context.fillStyle = palette.ground;
     context.fillText(text, bx + 14, by - 10);
   }
+  return discs;
 }

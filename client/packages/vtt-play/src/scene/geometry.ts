@@ -90,6 +90,63 @@ export function tokensBox<T extends Box>(
 /** The smallest tap target, in screen pixels (WCAG 2.5.5's 44 px). */
 export const MIN_TARGET = 44;
 
+/** A token's disc as drawn on screen: its centre and radius in canvas pixels. */
+export interface Disc {
+  id: string;
+  cx: number;
+  cy: number;
+  r: number;
+}
+
+/** Discs pushed apart until no two overlap (with `gap` px between): at a far-out zoom (a whole
+ * town on a phone, about 7 px a square) people two squares apart drew as one blot (the map
+ * review, 2026-11-25). Pairs are separated along the line between them, a few rounds, so a cluster
+ * fans out around where it stands; two on one point part sideways by their order. Pure: the scene
+ * positions are untouched, only where the discs are drawn. */
+export function spreadDiscs(discs: readonly Disc[], gap = 2, rounds = 32): Disc[] {
+  const out = discs.map((one) => ({ ...one }));
+  for (let round = 0; round < rounds; round += 1) {
+    let moved = false;
+    for (let i = 0; i < out.length; i += 1) {
+      for (let j = i + 1; j < out.length; j += 1) {
+        const a = out[i]!;
+        const b = out[j]!;
+        let dx = b.cx - a.cx;
+        let dy = b.cy - a.cy;
+        let distance = Math.hypot(dx, dy);
+        const need = a.r + b.r + gap;
+        if (distance >= need) continue;
+        if (distance < 0.01) {
+          // On one point: part along a fixed angle by their order, so the drawing is stable.
+          const angle = j * 2.399963;
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        const push = (need - distance) / 2;
+        a.cx -= (dx / distance) * push;
+        a.cy -= (dy / distance) * push;
+        b.cx += (dx / distance) * push;
+        b.cy += (dy / distance) * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return out;
+}
+
+/** The topmost drawn disc under a screen point (the last drawn wins), each reachable from at least
+ * `minTarget` px across; null when none. */
+export function discAt(discs: readonly Disc[], sx: number, sy: number, minTarget = 0): Disc | null {
+  for (let index = discs.length - 1; index >= 0; index -= 1) {
+    const disc = discs[index]!;
+    const reach = Math.max(disc.r, minTarget / 2);
+    if (Math.hypot(sx - disc.cx, sy - disc.cy) <= reach) return disc;
+  }
+  return null;
+}
+
 /** A token's top-left snapped so it sits on the grid. */
 export function snap(x: number, y: number, grid: number): [number, number] {
   return [Math.round(x / grid) * grid, Math.round(y / grid) * grid];
