@@ -1427,7 +1427,9 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             if scene.is_active:
                 return self._summarize(scene)
         if scenes:
-            return self._summarize(self._trusted(SceneManager).update_trusted(id=scenes[0].id, is_active=True))
+            # None active: where the party is, else the first.
+            first = self._party_scene(campaign.id, scenes) or scenes[0]
+            return self._summarize(self._trusted(SceneManager).update_trusted(id=first.id, is_active=True))
         made = self.default_scene_for(campaign)
         return None if made is None else self._summarize(made)
 
@@ -1675,7 +1677,43 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             if other.is_active and other.id != current.id:
                 scenes.update_trusted(id=other.id, is_active=False)
         scenes.update_trusted(id=current.id, is_active=True)
+        self._place_who_is_present(to_campaign_id, gm)
         return [self._summarize(self._get(SceneManager, scene.id) or scene) for _, scene in copied]
+
+    def _place_who_is_present(self, campaign_id: str, gm: str) -> int:
+        """Everyone of the campaign standing somewhere a map shows (the operator, 2026-11-25: "tokens
+        placed for who's present") gets a token there when they have none on any of its maps: the
+        picked pregens (a scenario has no tokens for its party), and anyone else the scenario left
+        off. At their place's region centre or the scene's entry, spread a cell apart; made as the
+        GM, as pilot_token makes them. How many were placed."""
+        scenes = _live(self._trusted(SceneManager), campaign_id=campaign_id)
+        tokens = self._trusted(SceneTokenManager)
+        held = {token.person_id for scene in scenes for token in _live(tokens, scene_id=scene.id) if token.person_id}
+        mine = SceneTokenManager(requester_id=gm, model_registry=self.model_registry)
+        taken: dict[str, set[tuple[int, int]]] = {}
+        placed = 0
+        people = sorted(
+            (one for one in _live(self._trusted(PersonManager), campaign_id=campaign_id) if getattr(one, "location_id", None) and one.id not in held),
+            key=lambda one: (getattr(one, "kind", None) != "pc", str(one.name or ""), str(one.id)),
+        )
+        for person in people:
+            found = self._place_of(campaign_id, person.location_id)
+            if found is None:
+                continue
+            scene, point = found
+            grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+            if scene.id not in taken:
+                taken[scene.id] = {
+                    (int(float(token.x or 0) // grid), int(float(token.y or 0) // grid)) for token in _live(tokens, scene_id=scene.id)
+                }
+            x, y = self._free_cell(scene, point, taken[scene.id], gap=1)
+            taken[scene.id].add((int(x // grid), int(y // grid)))
+            mine.create(
+                name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person.id, x=x, y=y,
+                disposition="friendly" if getattr(person, "kind", None) == "pc" else "neutral",
+            )
+            placed += 1
+        return placed
 
     def _party_scene(self, campaign_id: str, scenes: list[Any]) -> Any | None:
         """Of ``scenes``, the one where the campaign's party starts: bound to the place its player
@@ -1801,6 +1839,34 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         # No spaced cell left: the nearest free one at all.
         return self._free_cell(scene, point, taken) if gap > 0 else (cx * grid, cy * grid)
 
+    def _follow_party(self, campaign_id: str, scene_id: str) -> bool:
+        """The map follows the party (the operator, 2026-11-25: Halloway House showed the whole town;
+        "random location banners" were the current scene flipping): once every player character on
+        any of the campaign's maps stands on ``scene_id``, it becomes the current scene. One of two
+        walking off leaves the map with the rest; nothing changes on a turn no one moved. True when
+        it switched."""
+        scenes = {scene.id: scene for scene in _live(self._trusted(SceneManager), campaign_id=campaign_id)}
+        target = scenes.get(scene_id)
+        if target is None or target.is_active:
+            return False
+        party = {one.id for one in _live(self._trusted(PersonManager), campaign_id=campaign_id) if getattr(one, "kind", None) == "pc"}
+        if not party:
+            return False
+        tokens = self._trusted(SceneTokenManager)
+        on_maps = {
+            token.person_id: token.scene_id
+            for one in scenes
+            for token in _live(tokens, scene_id=one)
+            if token.person_id in party
+        }
+        if not on_maps or any(where != scene_id for where in on_maps.values()):
+            return False
+        for other in scenes.values():
+            if other.is_active and other.id != scene_id:
+                self._trusted(SceneManager).update_trusted(id=other.id, is_active=False)
+        self._trusted(SceneManager).update_trusted(id=scene_id, is_active=True)
+        return True
+
     def pilot_for(
         self,
         person_id: str,
@@ -1863,6 +1929,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             mine = SceneTokenManager(requester_id=str(self.requester.id), model_registry=self.model_registry)
             token = mine.create(name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person_id, x=spot[0], y=spot[1])
             location = self.sync_location(token, scene)
+            self._follow_party(campaign_id, scene.id)
             return PilotOut(person_id=person_id, token_id=token.id, scene_id=scene.id, x=spot[0], y=spot[1], removed=removed, location_id=location)
         start = (float(here.x or 0) + grid / 2, float(here.y or 0) + grid / 2)
         bounds = (float(scene.width or 40 * grid), float(scene.height or 30 * grid))
@@ -1878,6 +1945,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         target = (stop[0] - grid / 2, stop[1] - grid / 2)
         moved = tokens.update(id=here.id, x=target[0], y=target[1])
         location = self.sync_location(moved, scene)
+        self._follow_party(campaign_id, scene.id)
         return PilotOut(
             person_id=person_id,
             token_id=here.id,
