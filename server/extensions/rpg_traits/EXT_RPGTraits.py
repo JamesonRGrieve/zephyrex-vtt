@@ -57,6 +57,15 @@ class RPGTraitsExtension(AbstractStaticExtension):
                 logger.warning("rpg_traits: the wiki offers no instantiate hook; traits and sheets aren't copied on start")
         except Exception as error:  # the copy is extra: the app boots without it
             logger.warning(f"rpg_traits: no copy on instantiate: {error}")
+        try:
+            # A setting made system level (the wiki's system_adopt, ed56c11+) takes its traits and sheets too.
+            from zephyrex.extensions.rpg_traits.Adopt import register_adopt
+
+            registry = ModelRegistry.attached()
+            if registry is not None and not register_adopt(registry):
+                logger.info("rpg_traits: the wiki offers no adopt hook; system_adopt leaves its traits and sheets as they are")
+        except Exception as error:  # the adoption is extra: the app boots without it
+            logger.warning(f"rpg_traits: no adopt hook: {error}")
 
     @classmethod
     @ability("check_requirements")

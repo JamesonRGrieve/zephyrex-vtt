@@ -50,6 +50,15 @@ class RPGSceneExtension(AbstractStaticExtension):
                 logger.warning("rpg_scene: the wiki offers no instantiate hook; scenes and tokens aren't copied on start")
         except Exception as error:  # the copy is extra: the app boots without it
             logger.warning(f"rpg_scene: no copy on instantiate: {error}")
+        try:
+            # A setting made system level (the wiki's system_adopt, ed56c11+) takes its scenes and tokens too.
+            from zephyrex.extensions.rpg_scene.Adopt import register_adopt
+
+            registry = ModelRegistry.attached()
+            if registry is not None and not register_adopt(registry):
+                logger.info("rpg_scene: the wiki offers no adopt hook; system_adopt leaves its scenes and tokens as they are")
+        except Exception as error:  # the adoption is extra: the app boots without it
+            logger.warning(f"rpg_scene: no adopt hook: {error}")
 
     @classmethod
     @backend_selector
