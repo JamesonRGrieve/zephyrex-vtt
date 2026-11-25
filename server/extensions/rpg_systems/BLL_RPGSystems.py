@@ -107,14 +107,21 @@ class RPG_CampaignSystemModel(BaseModel):
     starting_level: Optional[int] = Field(
         None, description="The level its characters start at (a scenario's pregens are built to it); none is the pack's first"
     )
+    starting_level_max: Optional[int] = Field(
+        None,
+        description="The highest starting level it offers (a one-shot playable at 1 to 4); none is the pack's highest",
+    )
 
     class Create(BaseModel):
         game_system_id: Optional[str] = None
         starting_level: Optional[int] = Field(None, ge=1, le=MAX_STARTING_LEVEL)
+        # A scenario's cap is a field a campaign takes on create, so a start carries it to the playthrough.
+        starting_level_max: Optional[int] = Field(None, ge=1, le=MAX_STARTING_LEVEL)
 
     class Update(BaseModel):
         game_system_id: Optional[str] = None
         starting_level: Optional[int] = Field(None, ge=1, le=MAX_STARTING_LEVEL)
+        starting_level_max: Optional[int] = Field(None, ge=1, le=MAX_STARTING_LEVEL)
 
     class Search(BaseModel):
         game_system_id: Optional[StringSearchModel] = None

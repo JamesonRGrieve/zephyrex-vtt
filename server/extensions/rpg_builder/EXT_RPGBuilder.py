@@ -119,8 +119,10 @@ class RPGBuilderExtension(AbstractStaticExtension):
     @ability("starting_levels")
     async def starting_levels(cls, requester_id: str, campaign_id: str) -> dict[str, Any]:
         """The levels a campaign's characters can start at, for a slider: {campaign_id, system,
-        max_level, starting_level}. max_level is the pack's (20 for srd-5e; 1 with no pack). Set the
-        level through the campaign's ``starting_level``. The campaign's GM only."""
+        max_level, starting_level_max, starting_level}. max_level is the pack's (20 for srd-5e; 1 with
+        no pack); starting_level_max is the campaign's own cap within it (``starting_level_max``, a
+        one-shot's 4), else max_level, and starting_level stays within it. Set the level through the
+        campaign's ``starting_level``. The campaign's GM only."""
         return cls.builder(requester_id).levels_for(LevelsRequest(campaign_id=campaign_id)).model_dump()
 
     @classmethod

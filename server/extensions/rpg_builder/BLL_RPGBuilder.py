@@ -242,7 +242,8 @@ class LevelsOut(PlainModel):
     campaign_id: str
     system: Optional[str] = Field(None, description="The campaign's game system; none when it has no rules pack")
     max_level: int = Field(description="The highest level its characters can be built to (the pack's; 1 without one)")
-    starting_level: int = Field(description="The level its characters start at (the campaign's, else 1)")
+    starting_level_max: int = Field(description="The highest level it offers to start at: its own cap within the pack's, else max_level")
+    starting_level: int = Field(description="The level its characters start at (the campaign's, else 1), within the cap")
 
 
 class LevelsResultEnvelope(PlainModel):
@@ -620,11 +621,14 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         except HTTPException:
             pack = None
         top = int(((pack or {}).get("leveling") or {}).get("max_level") or 1)
+        # A campaign's own cap (a one-shot's 1 to 4: the operator, 2026-11-25), never past the pack's.
+        cap = min(top, int(getattr(campaign, "starting_level_max", None) or top))
         return LevelsOut(
             campaign_id=campaign.id,
             system=None if pack is None else pack["system"],
             max_level=top,
-            starting_level=int(getattr(campaign, "starting_level", None) or 1),
+            starting_level_max=cap,
+            starting_level=min(cap, int(getattr(campaign, "starting_level", None) or 1)),
         )
 
     def campaign_pregens_for(self, body: PregensRequest) -> PregensOut:
@@ -636,8 +640,8 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
 
         levels = self.levels_for(LevelsRequest(campaign_id=body.campaign_id))
         if body.level is not None:
-            if body.level > levels.max_level:
-                raise _refuse(f"This campaign's characters go up to level {levels.max_level}")
+            if body.level > levels.starting_level_max:
+                raise _refuse(f"This campaign's characters start at level {levels.starting_level_max} at most")
             self._trusted(CampaignManager).update_trusted(id=body.campaign_id, starting_level=body.level)
         level = body.level if body.level is not None else levels.starting_level
         results: list[PregenOut] = []

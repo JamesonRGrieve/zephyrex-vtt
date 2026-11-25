@@ -170,7 +170,7 @@ def test_a_scenario_builds_its_pregens_to_its_starting_level(server: TestClient,
     antler = _create(server, owner, "campaign", name="The Split Antler", user_id=owner.id, game_system_id=fifth.id, starting_level=10)
     levels = server.post("/v1/builder/levels", json={"levels": {"campaign_id": antler["id"]}}, headers=_headers(owner))
     assert levels.status_code == 200, levels.text
-    assert levels.json()["levels"] == {"campaign_id": antler["id"], "system": "srd-5e", "max_level": 20, "starting_level": 10}
+    assert levels.json()["levels"] == {"campaign_id": antler["id"], "system": "srd-5e", "max_level": 20, "starting_level_max": 20, "starting_level": 10}
     dingus = _create(
         server, owner, "person", name="Dingus McQuingus the Eighteenth", kind="pc", campaign_id=antler["id"],
         description="Level 1 Unknown Fighter, Acolyte background (SRD 5.2.1). His race is canonically unknown.",
@@ -265,3 +265,51 @@ def test_an_out_of_the_box_scenarios_pregen_sheet_is_the_instances(server: TestC
     assert {str(row.created_by_user_id) for row in rows.list(filters=live, person_id=brann["id"])} == {str(env("SYSTEM_ID"))}
     # An account's own scenario still builds as that account, and a stranger still can't.
     assert _build(server, reader, brann["id"], dry_run=True).status_code == 404
+
+
+def test_a_one_shot_offers_its_own_starting_levels_and_a_start_keeps_them(server: TestClient, world: dict[str, Any]) -> None:
+    """The operator, 2026-11-25: a one-shot's starting level is "supposed to be selectable 1-4, not
+    constant 4": starting_level_max caps the slider within the pack's 20, and a start carries it."""
+    import time
+
+    owner = world["owner"]
+    registry = world["registry"]
+    fifth = next(one for one in GameSystemManager(requester_id=env("ROOT_ID"), model_registry=registry).list(slug="srd-5e"))
+    shot = _create(
+        server, owner, "campaign", name="The Drowned Bell", user_id=owner.id, game_system_id=fifth.id,
+        is_scenario=True, starting_level=4, starting_level_max=4,
+    )
+    _create(server, owner, "person", name="Rowan Hale", kind="pc", campaign_id=shot["id"], description="Level 1 Human Fighter, Acolyte background (SRD 5.2.1).")
+
+    def levels(campaign_id: str) -> dict[str, Any]:
+        got = server.post("/v1/builder/levels", json={"levels": {"campaign_id": campaign_id}}, headers=_headers(owner))
+        assert got.status_code == 200, got.text
+        return dict(got.json()["levels"])
+
+    assert levels(shot["id"]) == {"campaign_id": shot["id"], "system": "srd-5e", "max_level": 20, "starting_level_max": 4, "starting_level": 4}
+
+    def commit(level: int) -> Any:
+        return server.post("/v1/builder/pregens", json={"pregens": {"campaign_id": shot["id"], "level": level}}, headers=_headers(owner))
+
+    refused = commit(5)
+    assert refused.status_code == 422 and "level 4 at most" in refused.text
+    lowered = commit(2)
+    assert lowered.status_code == 200 and lowered.json()["pregens"]["results"][0]["level"] == 2
+    assert levels(shot["id"])["starting_level"] == 2
+
+    # A campaign with no cap of its own offers the pack's whole range.
+    open_one = _create(server, owner, "campaign", name="Open table", user_id=owner.id, game_system_id=fifth.id)
+    assert levels(open_one["id"])["starting_level_max"] == 20
+
+    # A start carries the scenario's cap and chosen level to the playthrough.
+    accepted = server.post(f"/v1/campaign/{shot['id']}/instantiate", json={"instantiate": {}}, headers=_headers(owner))
+    assert accepted.status_code == 202, accepted.text
+    start = accepted.json()["start"]
+    deadline = time.monotonic() + 90
+    while start["state"] == "running":
+        assert time.monotonic() < deadline, start
+        time.sleep(0.5)
+        start = server.get(f"/v1/campaign_start/{start['id']}", headers=_headers(owner)).json()["campaign_start"]
+    assert start["state"] == "done", start.get("error") or start
+    played = levels(str(start["campaign_id"]))
+    assert (played["starting_level_max"], played["starting_level"]) == (4, 2)
