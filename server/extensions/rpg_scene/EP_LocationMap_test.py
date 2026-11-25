@@ -130,6 +130,14 @@ def test_a_places_map_becomes_its_scene_and_a_start_opens_on_it(server: TestClie
     assert plain["created"] and (plain["width"], plain["height"], plain["grid_size"]) == (300, 200, 50.0)
     assert plain["walls"] == 0 and plain["background_url"]
 
+    # The Lantern's upper floor (Wiki asked: a `map:` list, ground first): its own scene, floor 1,
+    # named for it; again it is the same scene. The place still opens on its floor 0.
+    upstairs = map_of(gm, lantern["id"], image_base64=base64.b64encode(png(160, 120)).decode(), floor=1)
+    assert upstairs["created"] and upstairs["floor"] == 1 and upstairs["scene_id"] != made["scene_id"]
+    assert upstairs["name"] == "The Leaning Lantern (level 1)"
+    assert map_of(gm, lantern["id"], image_base64=base64.b64encode(png(160, 120)).decode(), floor=1)["scene_id"] == upstairs["scene_id"]
+    assert map_of(gm, lantern["id"], uvtt=LANTERN)["scene_id"] == made["scene_id"], "floor 0 is untouched by floor 1"
+
     with pytest.raises(HTTPException) as refused:
         map_of(player, lantern["id"], uvtt=LANTERN)
     assert refused.value.status_code == 404
@@ -151,6 +159,7 @@ def test_a_places_map_becomes_its_scene_and_a_start_opens_on_it(server: TestClie
     playthrough = str(start["campaign_id"])
     shown = asyncio.run(RPGSceneExtension.current_scene(str(gm.id), playthrough))
     assert shown is not None and shown["name"] == "The Leaning Lantern" and shown["campaign_id"] == playthrough
+    assert shown["floor"] == 0, "the ground floor, not the upstairs"
     art = server.get(f"/v1/scene/{shown['id']}/background", headers=_headers(gm))
     assert art.status_code == 200 and art.content == LANTERN_ART
     from zephyrex.extensions.rpg_scene.BLL_RPGScene import SceneTokenManager, SceneWallManager

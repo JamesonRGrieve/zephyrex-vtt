@@ -97,6 +97,7 @@ class SceneModel(
     entry_y: Optional[float] = Field(None, description="Where arrivals appear, pixels; none = the scene's centre")
     is_active: Optional[bool] = Field(False, description="The campaign's current scene (one per campaign; activate)")
     background_url: Optional[str] = Field(None, description="The scene's map picture by link (battlemap art, set or generated)")
+    floor: Optional[int] = Field(0, description="Which floor of its place this map is: 0 (or none) the one it opens on, then 1, 2…")
     table_comment: ClassVar[str] = "A playable area in a campaign: the battlemap a table plays on"
 
     class Create(BaseModel, CampaignModel.Reference.ID.Optional, LocationModel.Reference.ID.Optional):
@@ -116,6 +117,7 @@ class SceneModel(
         entry_x: Optional[float] = None
         entry_y: Optional[float] = None
         background_url: Optional[str] = Field(None, max_length=2000)
+        floor: int = Field(0, ge=0, le=99)
 
     class Update(BaseModel):
         location_id: Optional[str] = None
@@ -135,6 +137,7 @@ class SceneModel(
         entry_x: Optional[float] = None
         entry_y: Optional[float] = None
         background_url: Optional[str] = Field(None, max_length=2000)
+        floor: Optional[int] = Field(None, ge=0, le=99)
 
     class Search(ApplicationModel.Search, CampaignModel.Reference.ID.Search, LocationModel.Reference.ID.Search):
         is_active: Optional[bool] = None
@@ -864,6 +867,7 @@ class SceneSummary(PlainModel):
     height: Optional[int]
     grid_size: float
     background_url: Optional[str] = Field(None, description="What the map draws under its grid: the scene's own picture, else its place's")
+    floor: int = Field(0, description="Which floor of its place this map is (0, the one it opens on)")
 
 
 
@@ -958,8 +962,9 @@ class LocationMapRequest(PlainModel):
     uvtt: Optional[dict[str, Any]] = Field(None, description="A Universal VTT map's JSON (.uvtt / .dd2vtt): its walls, doors, lights, size, grid and embedded art")
     image_base64: Optional[str] = Field(None, description="The map picture (PNG, JPEG, WebP or GIF) as base64 or a data: URL; else a UVTT's own")
     image_name: Optional[str] = Field(None, max_length=200, description="The picture's file name, as the vault has it")
-    name: Optional[str] = Field(None, max_length=200, description="The scene's name; none is the place's")
+    name: Optional[str] = Field(None, max_length=200, description="The scene's name; none is the place's (\"<place> (level N)\" for a floor above 0)")
     grid_size: Optional[float] = Field(None, gt=0, description="Pixels a square for a plain picture; none is 100 (a UVTT says its own)")
+    floor: int = Field(0, ge=0, le=99, description="Which floor of the place: 0 the one it opens on, then 1, 2… (each its own scene)")
 
 
 class LocationMapEnvelope(PlainModel):
@@ -968,6 +973,7 @@ class LocationMapEnvelope(PlainModel):
 
 class LocationMapOut(PlainModel):
     scene_id: str
+    floor: int = 0
     created: bool = Field(description="Whether the place's scene was made now (else the one it had was updated)")
     name: str
     width: int
@@ -1001,6 +1007,7 @@ def _summary(scene: Any) -> SceneSummary:
         width=scene.width,
         height=scene.height,
         grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE),
+        floor=int(getattr(scene, "floor", None) or 0),
     )
 
 
@@ -1357,15 +1364,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             raise HTTPException(status_code=422, detail={"message": f"Not a map picture this reads: {error}"}) from error
         gm = str(self.requester.id)
         scenes = sorted(
-            (one for one in _live(self._trusted(SceneManager), campaign_id=campaign.id) if getattr(one, "location_id", None) == location.id),
+            (
+                one for one in _live(self._trusted(SceneManager), campaign_id=campaign.id)
+                if getattr(one, "location_id", None) == location.id and int(getattr(one, "floor", None) or 0) == body.floor
+            ),
             key=lambda one: one.created_at.timestamp() if one.created_at else 0,
         )
         created = not scenes
         if created:
             width, height = (shape[1], shape[2]) if shape else (2000, 1500)
+            place = location.name or "Map"
             scene = SceneManager(requester_id=gm, model_registry=self.model_registry).create(
-                name=body.name or location.name or "Map", campaign_id=campaign.id, location_id=location.id,
-                width=width, height=height, grid_size=body.grid_size or DEFAULT_GRID_SIZE,
+                name=body.name or (place if body.floor == 0 else f"{place} (level {body.floor})"), campaign_id=campaign.id, location_id=location.id,
+                width=width, height=height, grid_size=body.grid_size or DEFAULT_GRID_SIZE, floor=body.floor,
             )
         else:
             scene = scenes[0]
@@ -1383,7 +1394,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             self._trusted(SceneManager).update(id=scene.id, background_url=f"/v1/asset/{asset_id}/content")
         scene = self._get(SceneManager, scene.id) or scene
         return LocationMapOut(
-            scene_id=scene.id, created=created, name=scene.name or "", width=int(scene.width or 0), height=int(scene.height or 0),
+            scene_id=scene.id, floor=body.floor, created=created, name=scene.name or "", width=int(scene.width or 0), height=int(scene.height or 0),
             grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE), background_url=self._drawn_background(scene), asset_id=asset_id, **counts,
         )
 
@@ -1832,7 +1843,8 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         scene bound to the place itself before any other. The first player character by name
         decides; None when no player character is anywhere a scene shows."""
         bound: dict[str, list[Any]] = {}
-        for scene in scenes:
+        # A place opens on its floor 0 (its ground floor), whatever order its floors were made in.
+        for scene in sorted(scenes, key=lambda one: int(getattr(one, "floor", None) or 0)):
             if getattr(scene, "location_id", None):
                 bound.setdefault(scene.location_id, []).append(scene)
         if not bound:
@@ -1868,7 +1880,8 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         """The scene and point a wiki location is on: a region of a campaign scene whose location it
         is (its centre), else a campaign scene whose location it is (its entry), else the same for the
         location's parents, nearest first. None when no map shows it."""
-        scenes = list(self._trusted(SceneManager).list(campaign_id=campaign_id))
+        # A place's floor 0 first: an arrival at a place stands on the floor it opens on.
+        scenes = sorted(self._trusted(SceneManager).list(campaign_id=campaign_id), key=lambda one: int(getattr(one, "floor", None) or 0))
         by_id = {scene.id: scene for scene in scenes}
         regions = self._trusted(SceneRegionManager)
         locations = self._trusted(LocationManager)
