@@ -114,6 +114,30 @@ class RPGSceneExtension(AbstractStaticExtension):
         return cls.scenes(requester_id).import_uvtt_for(scene_id, UvttRequest(uvtt=uvtt, replace=replace)).model_dump()
 
     @classmethod
+    @ability("map_location")
+    async def map_location(
+        cls,
+        requester_id: str,
+        location_id: str,
+        uvtt: Optional[dict[str, Any]] = None,
+        image_base64: Optional[str] = None,
+        image_name: Optional[str] = None,
+        name: Optional[str] = None,
+        grid_size: Optional[float] = None,
+    ) -> dict[str, Any]:
+        """A place's map made into its scene (the vault's map beside a location note: a picture, a
+        .dd2vtt/.uvtt, or both): the campaign's (a scenario's) scene bound to that place, made if it
+        has none, takes the UVTT's walls, doors, lights, size and grid and the picture (given, else
+        the UVTT's embedded art) as its background, uploaded and attached to the place as its map.
+        Returns {scene_id, created, name, width, height, grid_size, background_url, asset_id,
+        walls, doors, lights}. Again with the same file it updates the same scene; a start copies it.
+        The campaign's GM only (wiki's vault_import as the importer)."""
+        from zephyrex.extensions.rpg_scene.BLL_RPGScene import LocationMapRequest
+
+        body = LocationMapRequest(location_id=location_id, uvtt=uvtt, image_base64=image_base64, image_name=image_name, name=name, grid_size=grid_size)
+        return (await cls.scenes(requester_id).map_location_for(body)).model_dump()
+
+    @classmethod
     @ability("scene_scope")
     async def scene_scope(cls, requester_id: str, campaign_id: str, location_id: Optional[str] = None) -> dict[str, Any]:
         """The map at a place's scope (a building, its town, the region): {campaign_id, location,

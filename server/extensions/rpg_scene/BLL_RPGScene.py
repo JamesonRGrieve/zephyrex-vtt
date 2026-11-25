@@ -33,6 +33,7 @@ from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
 from zephyrex.extensions.rpg_scene.Scopes import Person as ScopedPerson
 from zephyrex.extensions.rpg_scene.Scopes import Place as ScopedPlace
 from zephyrex.extensions.rpg_scene.Scopes import party_spot, scope as scope_of
+from zephyrex.extensions.rpg_scene.Maps import MapError, decoded, picture, uvtt_picture, wall_cells
 from zephyrex.extensions.rpg_scene.Uvtt import UvttError, read as read_uvtt
 from zephyrex.extensions.rpg_scene.Vision import FULL_CIRCLE, Scene, Token, Wall, blocks_move, find_path, in_shape, perceive, shape_box
 from zephyrex.extensions.rpg_core.BLL_RPGCore import CampaignManager, CampaignModel  # type: ignore[import-not-found]
@@ -952,6 +953,33 @@ class UvttEnvelope(PlainModel):
     import_uvtt: UvttRequest
 
 
+class LocationMapRequest(PlainModel):
+    location_id: str = Field(description="The place (of a campaign or scenario) whose map this is")
+    uvtt: Optional[dict[str, Any]] = Field(None, description="A Universal VTT map's JSON (.uvtt / .dd2vtt): its walls, doors, lights, size, grid and embedded art")
+    image_base64: Optional[str] = Field(None, description="The map picture (PNG, JPEG, WebP or GIF) as base64 or a data: URL; else a UVTT's own")
+    image_name: Optional[str] = Field(None, max_length=200, description="The picture's file name, as the vault has it")
+    name: Optional[str] = Field(None, max_length=200, description="The scene's name; none is the place's")
+    grid_size: Optional[float] = Field(None, gt=0, description="Pixels a square for a plain picture; none is 100 (a UVTT says its own)")
+
+
+class LocationMapEnvelope(PlainModel):
+    map_location: LocationMapRequest
+
+
+class LocationMapOut(PlainModel):
+    scene_id: str
+    created: bool = Field(description="Whether the place's scene was made now (else the one it had was updated)")
+    name: str
+    width: int
+    height: int
+    grid_size: float
+    background_url: Optional[str] = Field(None, description="The art the scene draws (an uploaded asset)")
+    asset_id: Optional[str] = None
+    walls: int = 0
+    doors: int = 0
+    lights: int = 0
+
+
 class UvttOut(PlainModel):
     scene_id: str
     level: Optional[str] = Field(None, description="The file's level name, e.g. Ground floor")
@@ -1306,6 +1334,89 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             lights=len(found.lights),
             removed=removed,
         )
+
+    async def map_location_for(self, body: LocationMapRequest) -> LocationMapOut:
+        """A place's map made into its scene (the operator, 2026-11-25: a vault's location maps never
+        became scenes): the campaign's (a scenario's) scene bound to the place, made if it has none,
+        takes a Universal VTT file's walls, doors, lights, size and grid, and the map picture (the
+        one given, else the UVTT's own) as its background: uploaded as the GM's asset and attached
+        to the place as its map. A plain picture takes its own size, at ``grid_size`` (100) a square.
+        Again with the same file it updates the same scene; the same picture is uploaded once. A
+        start copies the scene (copy_scenes), so a playthrough opens on it. The campaign's GM only."""
+        location = self._get(LocationManager, body.location_id)
+        campaign_id = None if location is None else getattr(location, "campaign_id", None)
+        campaign = None if campaign_id is None else self._get(CampaignManager, campaign_id)
+        if location is None or campaign is None or str(self.requester.id) not in self._gms_of(campaign):
+            raise _not_found("LocationModel")
+        if body.uvtt is None and not body.image_base64:
+            raise HTTPException(status_code=422, detail={"message": "Give a Universal VTT file, a picture, or both"})
+        try:
+            art = decoded(body.image_base64) if body.image_base64 else (uvtt_picture(body.uvtt) if body.uvtt is not None else None)
+            shape = picture(art) if art else None
+        except MapError as error:
+            raise HTTPException(status_code=422, detail={"message": f"Not a map picture this reads: {error}"}) from error
+        gm = str(self.requester.id)
+        scenes = sorted(
+            (one for one in _live(self._trusted(SceneManager), campaign_id=campaign.id) if getattr(one, "location_id", None) == location.id),
+            key=lambda one: one.created_at.timestamp() if one.created_at else 0,
+        )
+        created = not scenes
+        if created:
+            width, height = (shape[1], shape[2]) if shape else (2000, 1500)
+            scene = SceneManager(requester_id=gm, model_registry=self.model_registry).create(
+                name=body.name or location.name or "Map", campaign_id=campaign.id, location_id=location.id,
+                width=width, height=height, grid_size=body.grid_size or DEFAULT_GRID_SIZE,
+            )
+        else:
+            scene = scenes[0]
+            if body.name and body.name != scene.name:
+                scene = self._trusted(SceneManager).update(id=scene.id, name=body.name)
+        counts = {"walls": 0, "doors": 0, "lights": 0}
+        if body.uvtt is not None:
+            imported = self.import_uvtt_for(scene.id, UvttRequest(uvtt=body.uvtt, replace=True))
+            counts = {"walls": imported.walls, "doors": imported.doors, "lights": imported.lights}
+        elif shape is not None:
+            self._trusted(SceneManager).update(id=scene.id, width=shape[1], height=shape[2], grid_size=body.grid_size or scene.grid_size or DEFAULT_GRID_SIZE)
+        asset_id = None
+        if art and shape:
+            asset_id = await self._stored_map(art, shape[0], body.image_name or f"{location.name or 'map'}", location.id)
+            self._trusted(SceneManager).update(id=scene.id, background_url=f"/v1/asset/{asset_id}/content")
+        scene = self._get(SceneManager, scene.id) or scene
+        return LocationMapOut(
+            scene_id=scene.id, created=created, name=scene.name or "", width=int(scene.width or 0), height=int(scene.height or 0),
+            grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE), background_url=self._drawn_background(scene), asset_id=asset_id, **counts,
+        )
+
+    async def _stored_map(self, art: bytes, content_type: str, name: str, location_id: str) -> str:
+        """The picture as the GM's asset, attached to the place as its map: the one already attached
+        with the same bytes (sha256) when there is one, so importing again uploads nothing."""
+        import hashlib
+        import uuid
+
+        from zephyrex.extensions.attachments.BLL_Attachments import AssetManager, AttachmentManager  # type: ignore[import-not-found]
+        from zephyrex.extensions.cloud.EXT_Cloud import EXT_Cloud  # type: ignore[import-not-found]
+
+        gm = str(self.requester.id)
+        digest = hashlib.sha256(art).hexdigest()
+        assets = AssetManager(requester_id=gm, model_registry=self.model_registry)
+        links = AttachmentManager(requester_id=gm, model_registry=self.model_registry)
+        for link in self._trusted(AttachmentManager).list(target_entity_type="location", target_entity_id=location_id):
+            if getattr(link, "role", None) != "map" or getattr(link, "deleted_at", None):
+                continue
+            try:
+                held = self._trusted(AssetManager).get(id=link.asset_id)
+            except HTTPException:
+                continue
+            if held.sha256 == digest:
+                return str(held.id)
+        path = f"attachments/{gm}/{uuid.uuid4().hex}"
+        stored = await EXT_Cloud.upload_file(path=path, content=art)
+        asset = assets.create(
+            name=name[:200], content_type=content_type, size=len(art), sha256=digest,
+            provider=str(stored["provider"]), path=str(stored.get("path", path)),
+        )
+        links.create(asset_id=asset.id, target_entity_type="location", target_entity_id=location_id, role="map")
+        return str(asset.id)
 
     def _summarize(self, scene: Any) -> SceneSummary:
         """A scene's summary with what its map draws under the grid (_background_of)."""
@@ -1813,19 +1924,27 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 )
         return location
 
-    def _free_cell(self, scene: Any, point: tuple[float, float], taken: set[tuple[int, int]], gap: int = 0) -> tuple[float, float]:
-        """The top-left of the free cell nearest a point, inside the scene, spiralling outward. With
-        ``gap``, a cell is free only with that many empty cells between it and anyone else, so a crowd
-        arriving together spreads out rather than packing into a block (operator, 2026-11-24)."""
+    def _free_cell(
+        self, scene: Any, point: tuple[float, float], taken: set[tuple[int, int]], gap: int = 0,
+        blocked: Optional[set[tuple[int, int]]] = None,
+    ) -> tuple[float, float]:
+        """The top-left of the free cell nearest a point, inside the scene, spiralling outward, never
+        on a square a wall or door crosses (an imported map's). With ``gap``, a cell is free only with
+        that many empty cells between it and anyone else, so a crowd arriving together spreads out
+        rather than packing into a block (operator, 2026-11-24)."""
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        columns = max(1, int(float(scene.width or 40 * grid) // grid))
+        rows = max(1, int(float(scene.height or 30 * grid) // grid))
+        if blocked is None:
+            blocked = wall_cells((row.points or [] for row in _live(self._trusted(SceneWallManager), scene_id=scene.id)), grid, columns, rows)
 
         def free(at: tuple[int, int]) -> bool:
+            if at in blocked:
+                return False
             if gap <= 0:
                 return at not in taken
             return not any(max(abs(at[0] - one[0]), abs(at[1] - one[1])) <= gap for one in taken)
 
-        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
-        columns = max(1, int(float(scene.width or 40 * grid) // grid))
-        rows = max(1, int(float(scene.height or 30 * grid) // grid))
         cx = min(columns - 1, max(0, int(point[0] // grid)))
         cy = min(rows - 1, max(0, int(point[1] // grid)))
         for ring in range(max(columns, rows)):
@@ -1837,7 +1956,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                     if 0 <= at[0] < columns and 0 <= at[1] < rows and free(at):
                         return (at[0] * grid, at[1] * grid)
         # No spaced cell left: the nearest free one at all.
-        return self._free_cell(scene, point, taken) if gap > 0 else (cx * grid, cy * grid)
+        return self._free_cell(scene, point, taken, blocked=blocked) if gap > 0 else (cx * grid, cy * grid)
 
     def _follow_party(self, campaign_id: str, scene_id: str) -> bool:
         """The map follows the party (the operator, 2026-11-25: Halloway House showed the whole town;
@@ -2056,6 +2175,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
     )
     async def import_uvtt_route(self, scene_id: str, body: UvttEnvelope) -> UvttOut:
         return self.import_uvtt_for(scene_id, body.import_uvtt)
+
+    @custom_route(
+        method="POST",
+        path="/map_location",
+        input_model=LocationMapEnvelope,
+        output_model=LocationMapOut,
+        authentication_type="jwt",
+        expose_in=(ExposeIn.REST,),
+        openapi_tags=("Scenes",),
+        summary="A place's map (a UVTT file, a picture or both) made into its scene (the campaign's GM)",
+    )
+    async def map_location_route(self, body: LocationMapEnvelope) -> LocationMapOut:
+        return await self.map_location_for(body.map_location)
 
     @custom_route(
         method="GET",
