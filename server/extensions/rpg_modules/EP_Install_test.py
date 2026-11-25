@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Installing a bridge bundle as a private module, against a real server, with a synthetic bundle
+"""Installing a bridge bundle as a private module (and open content as the instance's), against a real server, with a synthetic bundle
 (the real content is private): the module and its traits are the installing account's alone, every
 document gets a record with its data, and a re-install is incremental (unchanged left alone, changed
 updated in place, dropped removed). 130 documents, so a default page size couldn't hide any."""
@@ -11,7 +11,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from zephyrex.extensions.rpg_modules.BLL_RPGModules import ModuleRecordManager
-from zephyrex.extensions.rpg_modules.Install import install, trait_kind
+from zephyrex.extensions.rpg_modules.Install import install, instance_wide_bundle, trait_kind
+from zephyrex.lib.Environment import env
 from zephyrex.testing.factories import create_user
 
 from vtt_app import create
@@ -165,3 +166,75 @@ def test_an_origin_steps_record_keeps_the_systems_normalized_reading() -> None:
     origin = {"step": "homeland", "grants": {"skills": ["Swimming"]}}
     assert _data({"system": {"step": "homeland"}, "origin": origin}) == {"step": "homeland", "_origin": origin}
     assert _data({"system": {"tier": 1}}) == {"tier": 1}
+
+
+def _open_bundle(**extra: Any) -> dict[str, Any]:
+    """Open content (as srd5e.py writes it): a few documents of their own names, so no other test's
+    traits answer for them."""
+    documents = [_document(index, id=f"OPEN{index:06d}", name=f"Open Feat {index}", hash=f"o{index}") for index in range(3)]
+    return {
+        "line": "openline", "system": "percentile-test", "name": "Open line", "slug": "openline", "kinds": KINDS,
+        "packs": [], "documents": documents, "problems": [], **extra,
+    }
+
+
+def test_open_content_is_the_instances_and_takes_over_its_installers_own_copy(app: Any) -> None:
+    """Operator, 2026-11-25: "The public domain stuff is instance wide" / "Private stuff is personal".
+    A bundle saying "visibility": "instance" installs for every account; installed by an account that
+    already had it as its own (installed before the ruling), it takes that module over in place."""
+    client = TestClient(app)
+    owner, other = create_user(client), create_user(client)
+    registry = app.state.model_registry
+    assert instance_wide_bundle(_open_bundle(visibility="instance")) and not instance_wide_bundle(_open_bundle())
+
+    before = install(registry, str(owner.id), _open_bundle())
+    assert not before.instance_wide
+    feat = client.get("/v1/trait", params={"slug": "open-feat-0"}, headers=_headers(owner)).json()["traits"]
+    assert len(feat) == 1 and feat[0]["created_by_user_id"] == str(owner.id)
+    assert client.get("/v1/trait", params={"slug": "open-feat-0"}, headers=_headers(other)).json()["traits"] == []
+
+    shared = install(registry, str(owner.id), _open_bundle(visibility="instance"), rules={"characteristics": []})
+    assert shared.instance_wide and shared.adopted_from == str(owner.id)
+    assert shared.module_id == before.module_id, "the same module, so campaigns that enabled it keep it"
+    assert (shared.created, shared.removed) == (0, 0)
+    seen = client.get("/v1/trait", params={"slug": "open-feat-0"}, headers=_headers(other)).json()["traits"]
+    assert [one["id"] for one in seen] == [feat[0]["id"]], "the same trait, now every account's"
+    assert seen[0]["created_by_user_id"] == str(env("SYSTEM_ID"))
+    listed = client.get("/v1/content_module", params={"slug": "openline"}, headers=_headers(other)).json()["content_modules"]
+    assert [one["id"] for one in listed] == [shared.module_id]
+    records = ModuleRecordManager(requester_id=str(other.id), model_registry=registry).list(content_module_id=shared.module_id)
+    assert len(records) == 3
+
+    # Every account reads it; none changes it.
+    current = client.get(f"/v1/trait/{feat[0]['id']}", headers=_headers(other))
+    changed = client.put(
+        f"/v1/trait/{feat[0]['id']}",
+        json={"trait": {"name": "Mine now"}},
+        headers={**_headers(other), "If-Match": current.headers.get("ETag", "*")},
+    )
+    assert changed.status_code in (403, 404), changed.text
+
+    # Another account installing it again finds the instance's: one module, nothing taken over.
+    again = install(registry, str(other.id), _open_bundle(visibility="instance"))
+    assert again.module_id == shared.module_id and again.adopted_from is None and again.unchanged == 3
+    # And any GM plays with it on their own campaign.
+    campaign = client.post("/v1/campaign", json={"campaign": {"name": "Open table", "user_id": str(other.id)}}, headers=_headers(other))
+    assert campaign.status_code == 201, campaign.text
+    enabled = client.post(
+        "/v1/campaign_module",
+        json={"campaign_module": {"campaign_id": campaign.json()["campaign"]["id"], "content_module_id": shared.module_id}},
+        headers=_headers(other),
+    )
+    assert enabled.status_code == 201, enabled.text
+
+
+def test_an_explicit_flag_overrides_the_bundle(app: Any) -> None:
+    client = TestClient(app)
+    owner = create_user(client)
+    registry = app.state.model_registry
+    bundle = {**_open_bundle(), "slug": "flagline", "line": "flagline"}
+    bundle["documents"] = [dict(one, name=one["name"].replace("Open", "Flag")) for one in bundle["documents"]]
+    summary = install(registry, str(owner.id), bundle, instance_wide=True)
+    assert summary.instance_wide and summary.adopted_from is None
+    trait = client.get("/v1/trait", params={"slug": "flag-feat-1"}, headers=_headers(create_user(client))).json()["traits"]
+    assert len(trait) == 1

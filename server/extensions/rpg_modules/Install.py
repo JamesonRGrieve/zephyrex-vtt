@@ -1,18 +1,28 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Installs a bridge's bundle (a source system's documents, read by a bridge such as
-tools/foundry-bridge/srd5e.py, or a private instance's own) as a private module of one account.
+tools/foundry-bridge/srd5e.py, or a private instance's own) as a module, one of two kinds (operator,
+2026-11-25: "The public domain stuff is instance wide" / "Private stuff is personal"):
+- private (the default): one account's own, written as that owner, never as the framework's SYSTEM
+  user, so on a hosted instance only that account sees it (the operator's own books);
+- instance-wide: public-domain or open-licence content (the SRD, CC-BY), installed once and written
+  as SYSTEM, whose rows every account reads and only the server changes. The bundle asks for it
+  ("visibility": "instance", which srd5e.py writes), or the install does (instance_wide=True).
+Either way a campaign plays only with the modules its GM enables (CampaignModule), and campaigns
+stay their accounts' own.
 
 The bundle names its game system, the module's name and slug, and which documents are traits (its
-"kinds"). The documents that are traits in vtt become the owner's traits of that game system, and every document (trait or not yet) gets a ModuleRecord with
+"kinds"). The documents that are traits in vtt become the module's traits of that game system, and every document (trait or not yet) gets a ModuleRecord with
 its materialized data, so later phases (roll tables, the wiki's items and NPC templates, modifiers)
 read them from there. A re-install is incremental:
 - an unchanged document (same content hash) is left as it is;
 - a changed one is updated in place;
 - one the source no longer has is removed, with its trait.
 
-Everything is written as the owner, never as the framework's SYSTEM user: on a hosted instance
-only that account sees the module. Installs run server-side (tools/foundry-bridge/install.py), never
-as a route: the content is on the server's disk, and a route would let any account copy it.
+An instance-wide install of a slug the installing account already has as its own takes that module
+over in place (adopt): it, its records and its traits become the instance's under the same ids, so
+the characters and campaigns built on them keep working. Installs run server-side
+(tools/foundry-bridge/install.py), never as a route: the content is on the server's disk, and a
+route would let any account copy it.
 """
 
 from __future__ import annotations
@@ -51,6 +61,9 @@ class Summary:
     removed: int = 0
     traits: int = 0
     kinds: dict[str, int] = field(default_factory=dict)
+    instance_wide: bool = False
+    # The installing account, when an instance-wide install took over its own module of the slug.
+    adopted_from: Optional[str] = None
 
 
 # What the bridge's rules step lists that has no Foundry document: (rules key, document class, trait kind).
@@ -135,11 +148,63 @@ def _data(document: Mapping[str, Any]) -> Any:
     return {**system, "_origin": origin}
 
 
+def _installs(model_registry: Any, slug: str) -> list[tuple[str, str]]:
+    """Every live install of a slug, the instance's and each account's own, oldest first: (module id,
+    who wrote it). Read from the table itself: a ROOT read would also list soft-deleted rows."""
+    manager = ContentModuleManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
+    session = manager.db
+    try:
+        Module = manager.DB
+        rows = (
+            session.query(Module.id, Module.created_by_user_id)
+            .filter(Module.slug == slug, Module.deleted_at.is_(None))
+            .order_by(Module.created_at)
+            .all()
+        )
+        return [(str(module_id), str(owner)) for module_id, owner in rows]
+    finally:
+        session.close()
+
+
+def _adopt(model_registry: Any, module_id: str) -> None:
+    """Makes one account's own module the instance's: it, its records and the traits made from them
+    are re-owned by SYSTEM in place (the same ids, so person traits and campaign links stand)."""
+    system_id = str(env("SYSTEM_ID"))
+    manager = ContentModuleManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
+    records = ModuleRecordManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
+    traits = TraitManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
+    session = manager.db
+    try:
+        Module, Record, Trait = manager.DB, records.DB, traits.DB
+        trait_ids = [
+            row.entity_id
+            for row in session.query(Record).filter(Record.content_module_id == module_id, Record.entity_type == "trait")
+            if row.entity_id
+        ]
+        session.query(Module).filter(Module.id == module_id).update({"created_by_user_id": system_id}, synchronize_session=False)
+        session.query(Record).filter(Record.content_module_id == module_id).update({"created_by_user_id": system_id}, synchronize_session=False)
+        for start in range(0, len(trait_ids), 500):
+            chunk = trait_ids[start : start + 500]
+            session.query(Trait).filter(Trait.id.in_(chunk)).update({"created_by_user_id": system_id}, synchronize_session=False)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def instance_wide_bundle(bundle: Mapping[str, Any]) -> bool:
+    """Whether a bundle asks to be installed for the whole instance (open content)."""
+    return str(bundle.get("visibility") or "private") == "instance"
+
+
 def install(
     model_registry: Any,
     owner_id: str,
     bundle: Mapping[str, Any],
     *,
+    instance_wide: Optional[bool] = None,
     system_ref: Optional[str] = None,
     content_ref: Optional[str] = None,
     rules: Optional[dict[str, Any]] = None,
@@ -149,16 +214,27 @@ def install(
     if not system_slug:
         raise ValueError(f"the bundle for line {line!r} names no game system (its 'system' slug)")
 
-    def as_owner(manager: type[Any]) -> Any:
-        return manager(requester_id=owner_id, model_registry=model_registry)
+    shared = instance_wide_bundle(bundle) if instance_wide is None else instance_wide
+    writer = str(env("SYSTEM_ID")) if shared else str(owner_id)
+
+    def as_writer(manager: type[Any]) -> Any:
+        return manager(requester_id=writer, model_registry=model_registry)
 
     catalog = GameSystemManager(requester_id=env("ROOT_ID"), model_registry=model_registry)
     systems = catalog.list(slug=system_slug)
     system_id = systems[0].id if systems else None
 
     slug = str(bundle.get("slug") or line)
-    modules = as_owner(ContentModuleManager)
-    found = [one for one in modules.list(slug=slug) if str(one.created_by_user_id) == str(owner_id)]
+    modules = as_writer(ContentModuleManager)
+    every = _installs(model_registry, slug)
+    found = [modules.get(id=module_id) for module_id, by in every if by == writer]
+    adopted_from = None
+    if shared and not found:
+        own = [module_id for module_id, by in every if by == str(owner_id)]
+        if own:
+            _adopt(model_registry, own[0])
+            adopted_from = str(owner_id)
+            found = [modules.get(id=own[0])]
     documents = rule_documents(rules, line) + list(bundle["documents"])
     fields = {
         "system_ref": system_ref,
@@ -171,10 +247,10 @@ def install(
     else:
         module = modules.create(name=str(bundle.get("name") or line), slug=slug, line=line, game_system_id=system_id, **fields)
 
-    records = as_owner(ModuleRecordManager)
-    traits = as_owner(TraitManager)
+    records = as_writer(ModuleRecordManager)
+    traits = as_writer(TraitManager)
     existing = {row.source_id: row for row in records.list(content_module_id=module.id)}
-    summary = Summary(module_id=module.id)
+    summary = Summary(module_id=module.id, instance_wide=shared, adopted_from=adopted_from)
     wanted: set[str] = set()
     for document in documents:
         source_id = document["id"]

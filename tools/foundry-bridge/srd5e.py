@@ -99,6 +99,10 @@ def extract(root: Path) -> dict[str, Any]:
         "system": "srd-5e",
         "name": "SRD 5.2 content",
         "slug": "srd5e",
+        # The SRD is open content (CC-BY-4.0): installed once for the whole instance, every account
+        # reads it (rpg_modules.Install). A private book's bundle leaves this out and stays its owner's.
+        "licence": "CC-BY-4.0",
+        "visibility": "instance",
         "kinds": KINDS,
         "packs": list(PACKS),
         "documents": documents,

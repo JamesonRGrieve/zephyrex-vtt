@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from zephyrex.extensions.rpg_modules.BLL_RPGModules import ContentModuleManager, ModuleRecordManager
+from zephyrex.lib.Environment import env
 from zephyrex.extensions.rpg_traits.BLL_RPGTraits import (  # type: ignore[import-not-found]
     PersonTraitManager,
     TraitManager,
@@ -86,13 +87,13 @@ def import_sheet(
     def as_owner(manager: type[Any]) -> Any:
         return manager(requester_id=owner_id, model_registry=model_registry)
 
-    modules = [
-        one
-        for one in as_owner(ContentModuleManager).list(line=line)
-        if str(one.created_by_user_id) == str(owner_id)
+    # The account's own module of the line, else the instance's (open content, installed for all).
+    listed = as_owner(ContentModuleManager).list(line=line)
+    modules = [one for one in listed if str(one.created_by_user_id) == str(owner_id)] + [
+        one for one in listed if str(one.created_by_user_id) == str(env("SYSTEM_ID"))
     ]
     if not modules:
-        raise ValueError(f"the {line} module isn't installed for this account; install it first")
+        raise ValueError(f"the {line} module isn't installed for this account or the instance; install it first")
     module = modules[0]
     records = {row.source_id: row for row in as_owner(ModuleRecordManager).list(content_module_id=module.id)}
     # Records are keyed by Foundry's compendium UUID (the wiki's compendium_source); a sheet may name

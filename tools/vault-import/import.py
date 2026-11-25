@@ -6,7 +6,7 @@
 
 Each note whose frontmatter has a ``canonical_sheet`` becomes the sheet of the campaign's person
 with the note's ``name`` (the wiki importer makes the persons first). The line's module must be
-installed for --owner (tools/foundry-bridge); this enables it on the campaign, then writes the
+installed for --owner, or for the whole instance (open content; tools/foundry-bridge); this enables it on the campaign, then writes the
 sheet through it (rpg_modules.Sheet). Run with the app's environment, never through a route; --app
 boots a composing app (rpg-ai) from the current directory, as foundry-bridge/install.py does. The
 dry run boots it too (the sheet reader is an extension's) and writes nothing.
@@ -39,7 +39,7 @@ def frontmatter(path: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--notes", required=True, type=Path, help="A note, or a folder of notes")
-    parser.add_argument("--owner", required=True, help="The campaign's GM, who owns the installed module")
+    parser.add_argument("--owner", required=True, help="The campaign's GM, who enables the module and writes the sheets")
     parser.add_argument("--campaign", required=True, help="The campaign whose persons get the sheets")
     parser.add_argument("--line", required=True, help="The installed module's line key (its bundle's)")
     parser.add_argument("--app", default="vtt_app:create", help="The app factory to boot, module:function")
@@ -74,13 +74,14 @@ def main() -> int:
         def as_owner(manager: type) -> object:
             return manager(requester_id=args.owner, model_registry=registry)
 
-        installed = [
-            one
-            for one in as_owner(ContentModuleManager).list(line=args.line)
-            if str(one.created_by_user_id) == str(args.owner)
+        from zephyrex.lib.Environment import env
+
+        listed = as_owner(ContentModuleManager).list(line=args.line)
+        installed = [one for one in listed if str(one.created_by_user_id) == str(args.owner)] + [
+            one for one in listed if str(one.created_by_user_id) == str(env("SYSTEM_ID"))
         ]
         if not installed:
-            print(f"the {args.line} module isn't installed for {args.owner}; run tools/foundry-bridge first")
+            print(f"the {args.line} module isn't installed for {args.owner} or the instance; run tools/foundry-bridge first")
             return 1
         enabled = as_owner(CampaignModuleManager)
         if not enabled.list(campaign_id=args.campaign, content_module_id=installed[0].id):
