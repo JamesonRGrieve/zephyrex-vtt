@@ -1017,6 +1017,16 @@ def _live(manager: Any, **filters: Any) -> list[Any]:
     return list(manager.list(filters=[manager.DB.deleted_at.is_(None)], **filters))
 
 
+def _most_common(values: list[str]) -> Optional[str]:
+    """The value most often given, a tie going to the one given first; None for none."""
+    if not values:
+        return None
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[str(value)] = counts.get(str(value), 0) + 1
+    return max(counts, key=lambda one: (counts[one], -values.index(one)))
+
+
 def _campaign_gms(campaign: Any) -> set[str]:
     """A campaign's GM: its owner, or its creator for a campaign made without one."""
     if campaign is None:
@@ -1744,11 +1754,15 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         gm = next(iter(sorted(self._gms_of(campaign))), None)
         if gm is None:
             return None
-        persons = _live(self._trusted(PersonManager), campaign_id=campaign.id)
-        players = [one for one in persons if _controllers(self.model_registry, one)]
-        place = next((one.location_id for one in players if getattr(one, "location_id", None)), None)
+        # In a fixed order (by name, then id), so the same campaign always gets the same scene
+        # (Zephyrex RPG's find on dev: two starts of one scenario opened in two places).
+        persons = sorted(_live(self._trusted(PersonManager), campaign_id=campaign.id), key=lambda one: (str(one.name or ""), str(one.id)))
+        players = [one for one in persons if _controllers(self.model_registry, one) or getattr(one, "kind", None) == "pc"]
+        # Where the party is: the place most of the player characters stand in (the opening
+        # place), a tie going to the first by name; else where most of anyone stands.
+        place = _most_common([one.location_id for one in players if getattr(one, "location_id", None)])
         if place is None:
-            place = next((one.location_id for one in persons if getattr(one, "location_id", None)), None)
+            place = _most_common([one.location_id for one in persons if getattr(one, "location_id", None)])
         present = [one for one in persons if place is not None and getattr(one, "location_id", None) == place] or players
         location = None if place is None else self._get(LocationManager, place)
         as_gm = lambda manager: manager(requester_id=gm, model_registry=self.model_registry)  # noqa: E731
@@ -1811,19 +1825,32 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             _live(self._trusted(SceneManager), campaign_id=from_campaign_id),
             key=lambda one: one.created_at.timestamp() if one.created_at else 0,
         )
+        from zephyrex.lib.Logging import logger
+
+        # Row by row: one row the copy can't make is logged and left out, never the whole map lost.
         for source in sources:
-            scene = copy(SceneManager, source, campaign_id=to_campaign_id)
+            try:
+                scene = copy(SceneManager, source, campaign_id=to_campaign_id)
+            except Exception as error:  # noqa: BLE001 - a scene that can't be copied is reported, the rest go on
+                logger.warning(f"rpg_scene: scene {source.id} ({source.name}) not copied to {to_campaign_id}: {error}")
+                continue
             for part in (SceneLevelManager, SceneFeatureManager, SceneWallManager, SceneLightManager,
                          SceneTileManager, SceneNoteManager, SceneRegionManager, SceneTokenManager):
                 for row in _live(self._trusted(part), scene_id=source.id):
-                    copy(part, row, scene_id=scene.id)
+                    try:
+                        copy(part, row, scene_id=scene.id)
+                    except Exception as error:  # noqa: BLE001
+                        logger.warning(f"rpg_scene: {part.__name__} row {row.id} of scene {source.id} not copied: {error}")
             copied.append((source, scene))
         # The GM's marker pins on the scope maps (scope_places), onto the copied places. Only the
         # source GM's count there (scope_for), so only theirs come across.
         source_gms = self._gms_of(self._get(CampaignManager, from_campaign_id))
         for pin in _live(self._trusted(ScopePlaceManager), campaign_id=from_campaign_id):
             if str(getattr(pin, "created_by_user_id", "")) in source_gms and pin.x is not None and pin.y is not None:
-                copy(ScopePlaceManager, pin, campaign_id=to_campaign_id)
+                try:
+                    copy(ScopePlaceManager, pin, campaign_id=to_campaign_id)
+                except Exception as error:  # noqa: BLE001
+                    logger.warning(f"rpg_scene: scope pin {pin.id} not copied: {error}")
         if not copied:
             return []
         # The play opens where the story does: the scene of the party's starting place, else the
