@@ -304,9 +304,17 @@ class TestOut(PlainModel):
     target: int
     roll: int
     success: bool
-    degrees: int
+    degrees: Optional[int] = Field(
+        None, description="Degrees of success or failure, for a system that has them (d100); none for a d20 test (5e has none)"
+    )
     natural: Optional[Literal["success", "failure"]]
     steps: list[dict[str, Any]]
+    mechanic: Literal["d100-degrees", "d20"] = Field(
+        "d100-degrees", description="How the result reads: d100 roll-under with degrees, or a d20 against a DC (no degrees)"
+    )
+    natural_roll: Optional[int] = Field(
+        None, description="A d20 test's natural 20 or 1 (the die as it fell); on a check the SRD gives it no automatic result"
+    )
     total: Optional[int] = Field(None, description="A d20 test's roll plus its modifiers (none for d100 roll-under)")
     test_kind: str = Field("d100-under", description="The pack's test: d100-under (percentile) or d20-over (5e)")
     no_sheet: bool = Field(False, description="Rolled for a character with no value for it, as the pack's rules say")
@@ -916,9 +924,11 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             target=outcome.target,
             roll=outcome.roll,
             success=outcome.success,
-            degrees=0,
+            degrees=None,
             natural=None,
             steps=outcome.steps,
+            mechanic="d20",
+            natural_roll=kept if kept in (1, die) else None,
             total=outcome.total,
             test_kind="d20-over",
             no_sheet=no_sheet,

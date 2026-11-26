@@ -126,9 +126,10 @@ class RPGTableExtension(AbstractStaticExtension):
             sheetless = " (no sheet: tested at the rules' average)" if result.get("no_sheet") else ""
             if result.get("test_kind") == "d20-over":
                 added = result["total"] - result["roll"]
+                natural = f", a natural {result['natural_roll']}" if result.get("natural_roll") else ""
                 text = (
                     f"{label} check: rolled {result['roll']} {'+' if added >= 0 else '−'} {abs(added)} = {result['total']} "
-                    f"against DC {result['target']}, {outcome}{sheetless}"
+                    f"against DC {result['target']}, {outcome}{natural}{sheetless}"
                 )
             else:
                 degrees = result["degrees"]

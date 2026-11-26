@@ -134,3 +134,24 @@ def test_roll_to_table_posts_a_check(server: TestClient, world: dict[str, Any]) 
     )
     text = posted["line"]["text"]
     assert text.startswith("Stealth check: rolled ") and "against DC 15" in text and "no sheet" in text
+
+
+def test_a_d20_test_has_no_degrees_and_a_natural_20_or_1_is_reported_but_decides_no_check(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The operator, 2026-11-26: "DnD doesn't have a degree's of success mechanic" and "There's also no
+    natural 20 mechanic implemented for DnD". A d20 test carries no degrees (mechanic d20) and
+    reports the die's natural 20 or 1; on an ability check the SRD gives it no automatic result (a
+    natural 20 still fails a DC it can't reach), only an attack roll's is automatic (rpg_combat)."""
+    from zephyrex.extensions.rpg_dice import BLL_RPGDice
+
+    monkeypatch.setattr(BLL_RPGDice, "live_draw", lambda sides: 20)
+    high = _test(world["player"], world["fighter"], "strength", difficulty="nearly-impossible")
+    assert (high["mechanic"], high["degrees"], high["natural_roll"]) == ("d20", None, 20)
+    assert (high["total"], high["success"]) == (23, False), "a natural 20 is no automatic success on a check"
+    monkeypatch.setattr(BLL_RPGDice, "live_draw", lambda sides: 1)
+    low = _test(world["player"], world["fighter"], "strength", difficulty="very-easy")
+    assert (low["natural_roll"], low["total"], low["success"]) == (1, 4, False)
+    monkeypatch.setattr(BLL_RPGDice, "live_draw", lambda sides: 12)
+    plain = _test(world["player"], world["fighter"], "strength")
+    assert plain["natural_roll"] is None and plain["degrees"] is None

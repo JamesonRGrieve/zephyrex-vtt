@@ -51,6 +51,10 @@ def _run(call: Any) -> Any:
 
 @pytest.fixture(scope="module")
 def fight(server: TestClient) -> dict[str, Any]:
+    return _new_fight(server)
+
+
+def _new_fight(server: TestClient) -> dict[str, Any]:
     gm, player = create_user(server), create_user(server)
     systems = {one["slug"]: one for one in _run(RPGSystemsExtension.game_systems(str(gm.id)))}
     system_id = systems["srd-5e"]["id"]
@@ -155,3 +159,23 @@ def test_stances_come_from_each_ones_dispositions_and_change_mid_fight(server: T
     with pytest.raises(HTTPException) as player:
         _run(RPGCombatExtension.set_disposition(str(fight["player"].id), started["id"], hesk["id"], disposition="hostile"))
     assert player.value.status_code == 404
+
+
+def test_a_natural_20_always_hits_and_crits_and_a_natural_1_always_misses(server: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The operator, 2026-11-26: "There's also no natural 20 mechanic implemented for DnD". The SRD's
+    attack roll: a natural 20 hits whatever the AC, a Critical Hit; a natural 1 misses whatever the
+    total; the result reports the natural die."""
+    from zephyrex.extensions.rpg_combat import BLL_RPGCombat
+
+    fight = _new_fight(server)
+    gm, encounter = str(fight["gm"].id), fight["encounter"]["id"]
+    acting, other = (fight["brann"], fight["guard"]) if _options(fight, fight["brann"])["turn"] else (fight["guard"], fight["brann"])
+    action = _options(fight, acting)["actions"][0]["id"]
+    faces = iter([20, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+    monkeypatch.setattr(BLL_RPGCombat, "live_draw", lambda sides: next(faces) if sides == 20 else 1)
+    hit = _run(RPGCombatExtension.take_combat_action(gm, encounter, acting["id"], action, target_ids=[other["id"]]))
+    assert (hit["roll"], hit["natural_roll"], hit["hit"], hit["critical"]) == (20, 20, True, True)
+    answer = _options(fight, other)["actions"][0]["id"]
+    if _options(fight, other)["hp"] != 0:
+        miss = _run(RPGCombatExtension.take_combat_action(gm, encounter, other["id"], answer, target_ids=[acting["id"]], use_reaction=True))
+        assert (miss["roll"], miss["natural_roll"], miss["hit"], miss["damage"]) == (1, 1, False, 0)

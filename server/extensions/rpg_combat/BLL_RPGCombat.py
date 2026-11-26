@@ -294,6 +294,9 @@ class CombatActionResultOut(PlainModel):
     hit: bool
     critical: bool
     roll: int
+    natural_roll: Optional[int] = Field(
+        None, description="A natural 20 (always hits, a Critical Hit) or 1 (always misses), as the SRD rules an attack roll"
+    )
     total: int
     target_ac: int
     damage: int
@@ -680,6 +683,7 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
             hit=outcome.hit,
             critical=outcome.critical,
             roll=outcome.roll,
+            natural_roll=outcome.roll if outcome.roll in (1, int(pack["test"].get("die", 20))) else None,
             total=outcome.total,
             target_ac=target_ac,
             damage=outcome.damage,

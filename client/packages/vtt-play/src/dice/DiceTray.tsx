@@ -110,6 +110,7 @@ export function DiceResult({ result }: { result: TestResult | RollResult }): Rea
           rolled {result.roll} {added < 0 ? '−' : '+'} {Math.abs(added)} = {result.total ?? result.roll} against DC{' '}
           {result.target}
           {edged ? ` (${result.advantage === 'advantage' ? 'Advantage' : 'Disadvantage'})` : ''}
+          {result.natural_roll ? `, a natural ${result.natural_roll}` : ''}
         </p>
       ) : (
         <p className='text-lg'>

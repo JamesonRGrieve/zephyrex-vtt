@@ -44,7 +44,8 @@ export const testResultSchema = z.object({
     target: z.number(),
     roll: z.number(),
     success: z.boolean(),
-    degrees: z.number(),
+    // None for a d20 test: 5e has no degrees of success (mechanic d20).
+    degrees: z.number().nullable(),
     natural: z.enum(['success', 'failure']).nullable(),
     steps: z.array(step),
     // d20-over (5e): roll + modifiers = total, against target (the DC); d100-under (percentile): roll against target.
@@ -54,6 +55,9 @@ export const testResultSchema = z.object({
     // 5e: rolled with Advantage or Disadvantage; every die rolled (``roll`` is the one kept).
     advantage: z.enum(['advantage', 'disadvantage']).nullish(),
     rolls: z.array(z.number()).default([]),
+    mechanic: z.enum(['d100-degrees', 'd20']).optional(),
+    // A d20 test's natural 20 or 1, as the die fell.
+    natural_roll: z.number().nullish(),
   }),
 });
 export type TestResult = z.infer<typeof testResultSchema>['test'];
