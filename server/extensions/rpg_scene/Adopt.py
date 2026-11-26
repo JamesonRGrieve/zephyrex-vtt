@@ -6,7 +6,8 @@ registered adopt hook with (model_registry, setting_id, scenario_ids, id_map, dr
 rpg_scene's:
 
 - every live scene of those scenarios, its levels, features, walls, lights, tiles, notes, regions
-  and tokens, and the scenarios' scope pins, are made SYSTEM's (every account reads them; a start
+  and tokens, and the scenarios' scope pins, are made the shared copy's, TEMPLATE's (every account
+  reads them; a start
   still copies them as the starter's own);
 - a merged duplicate's (id_map: its ids → the system copy's): its scenes move onto the system
   scenario with every reference turned (a token's person, a scene's or region's place), unless the
@@ -22,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import func, select
+from zephyrex.extensions.rpg_scene.BLL_RPGScene import ASSET_PATH
 
 PART_MANAGERS = (
     "SceneLevelManager",
@@ -81,6 +83,27 @@ def adopt_scenes(model_registry: Any, setting_id: str, scenario_ids: list[str], 
             if not dry_run:
                 session.execute(scenes.update().where(scenes.c.id == row["id"]).values(**_turned(row, scenes, mapped, system)))
         counts["scenes"] += len(kept)
+        # A kept scene's uploaded art (background_url /v1/asset/{id}/content) is shared with it: the
+        # asset and its attachments become TEMPLATE's too, or a non-owner's start can't copy the
+        # picture (Zephyrex RPG's find on CT 7103: the wiki's attachments were TEMPLATE's, their
+        # assets still the importer's).
+        art = sorted(
+            {
+                found.group(1)
+                for row in session.execute(select(scenes.c.background_url).where(scenes.c.id.in_(kept))).scalars()
+                if row and (found := ASSET_PATH.fullmatch(str(row)))
+            }
+        ) if kept else []
+        if art:
+            from zephyrex.extensions.attachments.BLL_Attachments import AssetManager, AttachmentManager  # type: ignore[import-not-found]
+
+            assets = _table(model_registry, AssetManager)
+            links = _table(model_registry, AttachmentManager)
+            counts["art"] = len(art)
+            if not dry_run:
+                session.execute(assets.update().where(assets.c.id.in_(art)).values(created_by_user_id=system))
+                session.execute(links.update().where(links.c.asset_id.in_(art)).values(created_by_user_id=system))
+                touched.update({assets.name, links.name})
         counts["removed scenes"] += len(dropped)
         for part in parts:
             for row in session.execute(select(part).where(part.c.scene_id.in_(kept) & part.c.deleted_at.is_(None))).mappings().all() if kept else []:
@@ -120,7 +143,7 @@ def adopt_scenes(model_registry: Any, setting_id: str, scenario_ids: list[str], 
     if not dry_run:
         _clear_cache(touched)
     said = ", ".join(f"{count} {what}" for what, count in counts.items() if count) or "nothing"
-    return [f"rpg_scene: made SYSTEM's{' (dry run)' if dry_run else ''}: {said}"]
+    return [f"rpg_scene: made TEMPLATE's (the shared copy){' (dry run)' if dry_run else ''}: {said}"]
 
 
 def _turned(row: Any, table: Any, mapped: dict[str, str], system: str) -> dict[str, Any]:

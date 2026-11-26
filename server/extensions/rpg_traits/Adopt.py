@@ -4,9 +4,9 @@ scenarios, pregens, everything with the SRD should also be system level down to 
 are user level"): rpg_traits' hook for the wiki's system_adopt (wiki ed56c11), called with
 (model_registry, setting_id, scenario_ids, id_map, dry_run) after the wiki's own rows are SYSTEM's.
 
-- the scenarios' own trait definitions (a campaign's traits) are made SYSTEM's;
+- the scenarios' own trait definitions (a campaign's traits) are made TEMPLATE's (the shared copy);
 - every live sheet row (person_trait) of a person of those scenarios, or of the setting's canon (a
-  setting pregen: no campaign), is made SYSTEM's, so every account reads the pregens' sheets; a
+  setting pregen: no campaign), is made TEMPLATE's, so every account reads the pregens' sheets; a
   start still copies them as the player's own;
 - a merged duplicate's (id_map: its ids → the system copy's): its traits move onto the system
   scenario unless it has one of the same kind and slug (then the duplicate's is removed and its
@@ -104,7 +104,7 @@ def adopt_traits(model_registry: Any, setting_id: str, scenario_ids: list[str], 
     if not dry_run:
         _clear_cache({traits.name, sheets.name})
     said = ", ".join(f"{count} {what}" for what, count in counts.items() if count) or "nothing"
-    return [f"rpg_traits: made SYSTEM's{' (dry run)' if dry_run else ''}: {said}"]
+    return [f"rpg_traits: made TEMPLATE's (the shared copy){' (dry run)' if dry_run else ''}: {said}"]
 
 
 def _clear_cache(touched: set[str]) -> None:

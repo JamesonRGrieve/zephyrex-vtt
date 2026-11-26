@@ -74,12 +74,26 @@ def test_a_setting_made_system_level_takes_its_scenes_and_sheets_and_merges_a_du
     primary = _copy(server, first, setting, extra_scene=False)
     duplicate = _copy(server, second, other, extra_scene=True)
 
+    # The primary's ground floor has uploaded art (an asset its importer owns, as on CT 7103).
+    from zephyrex.extensions.attachments.BLL_Attachments import AssetManager  # type: ignore[import-not-found]
+
+    art = AssetManager(requester_id=str(first.id), model_registry=registry).create(
+        name="ground.png", content_type="image/png", size=8, sha256="0" * 64, provider="memory", path="attachments/x/ground"
+    )
+    SceneManager(requester_id=env("ROOT_ID"), model_registry=registry).update(
+        id=primary["scene"]["id"], background_url=f"/v1/asset/{art.id}/content"
+    )
+
     # The primary: its ids kept, no map; a dry run first writes nothing.
     dry = adopt_scenes(registry, setting["id"], [primary["scenario"]["id"]], {}, True)
     assert "dry run" in dry[0] and "1 scenes" in dry[0]
     assert str(_rows(registry, SceneManager, id=primary["scene"]["id"])[0].created_by_user_id) == str(first.id)
     said = adopt_scenes(registry, setting["id"], [primary["scenario"]["id"]], {}, False)
-    assert "1 scenes" in said[0] and "1 parts" in said[0], said
+    assert "1 scenes" in said[0] and "1 parts" in said[0] and "1 art" in said[0], said
+    assert said[0].startswith("rpg_scene: made TEMPLATE's"), said
+    # Its art is shared with it: a non-owner's start can copy the picture.
+    held = AssetManager(requester_id=env("ROOT_ID"), model_registry=registry).get(id=art.id)
+    assert str(held.created_by_user_id) == system
     adopt_traits(registry, setting["id"], [primary["scenario"]["id"]], {}, False)
     assert str(_rows(registry, SceneManager, id=primary["scene"]["id"])[0].created_by_user_id) == system
     assert str(_rows(registry, SceneTokenManager, id=primary["token"]["id"])[0].created_by_user_id) == system
