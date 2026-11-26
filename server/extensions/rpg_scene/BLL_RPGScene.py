@@ -962,6 +962,13 @@ class LocationMapRequest(PlainModel):
     uvtt: Optional[dict[str, Any]] = Field(None, description="A Universal VTT map's JSON (.uvtt / .dd2vtt): its walls, doors, lights, size, grid and embedded art")
     image_base64: Optional[str] = Field(None, description="The map picture (PNG, JPEG, WebP or GIF) as base64 or a data: URL; else a UVTT's own")
     image_name: Optional[str] = Field(None, max_length=200, description="The picture's file name, as the vault has it")
+    asset_id: Optional[str] = Field(
+        None,
+        description=(
+            "A picture already uploaded (POST /v1/asset/upload, raw bytes up to 10 MB): the way to send a large map, "
+            "whose base64 would exceed a request body's limit; used as the art over image_base64 and a UVTT's own"
+        ),
+    )
     name: Optional[str] = Field(None, max_length=200, description="The scene's name; none is the place's (\"<place> (level N)\" for a floor above 0)")
     grid_size: Optional[float] = Field(None, gt=0, description="Pixels a square for a plain picture; none is 100 (a UVTT says its own)")
     floor: int = Field(0, ge=0, le=99, description="Which floor of the place: 0 the one it opens on, then 1, 2… (each its own scene)")
@@ -1331,20 +1338,19 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         mine = lambda manager: manager(requester_id=str(self.requester.id), model_registry=self.model_registry)  # noqa: E731
         removed = 0
         if body.replace:
-            for manager in (SceneWallManager, SceneLightManager):
-                for row in _live(self._trusted(manager), scene_id=scene.id):
-                    if getattr(row, "scene_feature_id", None) is None:
-                        self._trusted(manager).delete(id=row.id)
-                        removed += 1
+            # One statement per table (Zephyrex RPG's find on dev: a 1,551-part re-import deleted row by
+            # row, a new manager each, and stalled the worker's event loop for seconds).
+            removed = self._clear_unfeatured(scene.id, (SceneWallManager, SceneLightManager))
         self._trusted(SceneManager).update(id=scene.id, width=found.width, height=found.height, grid_size=found.grid_size)
-        walls = mine(SceneWallManager)
-        for points in found.walls:
-            walls.create(scene_id=scene.id, points=points)
-        for door in found.doors:
-            walls.create(scene_id=scene.id, points=door["points"], door_type="door", door_state=door["door_state"])
-        lights = mine(SceneLightManager)
-        for light in found.lights:
-            lights.create(scene_id=scene.id, **light)
+        made = [{"scene_id": scene.id, "points": points} for points in found.walls]
+        made += [
+            {"scene_id": scene.id, "points": door["points"], "door_type": "door", "door_state": door["door_state"]}
+            for door in found.doors
+        ]
+        if made:
+            mine(SceneWallManager).create(entities=made)
+        if found.lights:
+            mine(SceneLightManager).create(entities=[{"scene_id": scene.id, **light} for light in found.lights])
         return UvttOut(
             scene_id=scene.id,
             level=found.level,
@@ -1356,6 +1362,40 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             lights=len(found.lights),
             removed=removed,
         )
+
+    def _clear_unfeatured(self, scene_id: str, managers: tuple[type[Any], ...]) -> int:
+        """Soft-delete a scene's walls and lights that no feature made (hand-placed or imported), one
+        statement per table; how many."""
+        from sqlalchemy import func, update
+
+        removed = 0
+        session = self.model_registry.DB.session()
+        touched: list[str] = []
+        try:
+            for manager in managers:
+                table = manager(requester_id=env("ROOT_ID"), model_registry=self.model_registry).DB.__table__
+                where = (table.c.scene_id == scene_id) & table.c.scene_feature_id.is_(None) & table.c.deleted_at.is_(None)
+                values: dict[str, Any] = {"deleted_at": func.now()}
+                if "deleted_by_user_id" in table.c:
+                    values["deleted_by_user_id"] = str(self.requester.id)
+                result = session.execute(update(table).where(where).values(**values))
+                removed += int(result.rowcount or 0)
+                touched.append(table.name)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+        try:
+            from zephyrex.logic.AbstractLogicManager.manager import _cache_sync_run, get_entity_cache
+
+            cache = get_entity_cache()
+            for name in touched if cache is not None else []:
+                _cache_sync_run(cache.invalidate_table(name))
+        except Exception:  # noqa: BLE001 - a stale cache entry expires; the rows are right
+            pass
+        return removed
 
     async def map_location_for(self, body: LocationMapRequest) -> LocationMapOut:
         """A place's map made into its scene (the operator, 2026-11-25: a vault's location maps never
@@ -1370,11 +1410,15 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         campaign = None if campaign_id is None else self._get(CampaignManager, campaign_id)
         if location is None or campaign is None or str(self.requester.id) not in self._gms_of(campaign):
             raise _not_found("LocationModel")
-        if body.uvtt is None and not body.image_base64:
+        if body.uvtt is None and not body.image_base64 and not body.asset_id:
             raise HTTPException(status_code=422, detail={"message": "Give a Universal VTT file, a picture, or both"})
+        uploaded = await self._uploaded_map(body.asset_id) if body.asset_id else None
         try:
-            art = decoded(body.image_base64) if body.image_base64 else (uvtt_picture(body.uvtt) if body.uvtt is not None else None)
-            shape = picture(art) if art else None
+            if uploaded is not None:
+                art, shape = None, picture(uploaded)
+            else:
+                art = decoded(body.image_base64) if body.image_base64 else (uvtt_picture(body.uvtt) if body.uvtt is not None else None)
+                shape = picture(art) if art else None
         except MapError as error:
             raise HTTPException(status_code=422, detail={"message": f"Not a map picture this reads: {error}"}) from error
         gm = str(self.requester.id)
@@ -1399,12 +1443,20 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 scene = self._trusted(SceneManager).update(id=scene.id, name=body.name)
         counts = {"walls": 0, "doors": 0, "lights": 0}
         if body.uvtt is not None:
-            imported = self.import_uvtt_for(scene.id, UvttRequest(uvtt=body.uvtt, replace=True))
+            # Off the event loop: a big map's walls are many writes, and every request on this worker
+            # waits on the loop meanwhile.
+            import asyncio
+
+            imported = await asyncio.to_thread(self.import_uvtt_for, scene.id, UvttRequest(uvtt=body.uvtt, replace=True))
             counts = {"walls": imported.walls, "doors": imported.doors, "lights": imported.lights}
         elif shape is not None:
             self._trusted(SceneManager).update(id=scene.id, width=shape[1], height=shape[2], grid_size=body.grid_size or scene.grid_size or DEFAULT_GRID_SIZE)
         asset_id = None
-        if art and shape:
+        if uploaded is not None and body.asset_id:
+            asset_id = str(body.asset_id)
+            self._attach_map(asset_id, location.id)
+            self._trusted(SceneManager).update(id=scene.id, background_url=f"/v1/asset/{asset_id}/content")
+        elif art and shape:
             asset_id = await self._stored_map(art, shape[0], body.image_name or f"{location.name or 'map'}", location.id)
             self._trusted(SceneManager).update(id=scene.id, background_url=f"/v1/asset/{asset_id}/content")
         if str(getattr(campaign, "created_by_user_id", None) or "") == str(env("TEMPLATE_ID")):
@@ -1413,6 +1465,30 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         return LocationMapOut(
             scene_id=scene.id, floor=body.floor, created=created, name=scene.name or "", width=int(scene.width or 0), height=int(scene.height or 0),
             grid_size=float(scene.grid_size or DEFAULT_GRID_SIZE), background_url=self._drawn_background(scene), asset_id=asset_id, **counts,
+        )
+
+    async def _uploaded_map(self, asset_id: str) -> bytes:
+        """An uploaded picture's bytes (the requester's own upload, or one they can see), for its size."""
+        from zephyrex.extensions.attachments.BLL_Attachments import AssetManager  # type: ignore[import-not-found]
+        from zephyrex.extensions.cloud.EXT_Cloud import EXT_Cloud  # type: ignore[import-not-found]
+
+        try:
+            asset = AssetManager(requester_id=str(self.requester.id), model_registry=self.model_registry).get(id=asset_id)
+        except HTTPException:
+            raise HTTPException(status_code=422, detail={"message": "No uploaded picture by that id is yours to use"}) from None
+        if not str(asset.content_type or "").startswith("image/"):
+            raise HTTPException(status_code=422, detail={"message": "That upload isn't a picture"})
+        return bytes(await EXT_Cloud.download_file(asset.provider, asset.path))
+
+    def _attach_map(self, asset_id: str, location_id: str) -> None:
+        """An uploaded picture attached to its place as the place's map, once."""
+        from zephyrex.extensions.attachments.BLL_Attachments import AttachmentManager  # type: ignore[import-not-found]
+
+        held = self._trusted(AttachmentManager).list(target_entity_type="location", target_entity_id=location_id)
+        if any(str(link.asset_id) == asset_id and getattr(link, "role", None) == "map" and not getattr(link, "deleted_at", None) for link in held):
+            return
+        AttachmentManager(requester_id=str(self.requester.id), model_registry=self.model_registry).create(
+            asset_id=asset_id, target_entity_type="location", target_entity_id=location_id, role="map"
         )
 
     def _keep_shared(self, scene_id: str, asset_id: Optional[str]) -> None:

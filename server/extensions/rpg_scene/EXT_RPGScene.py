@@ -125,11 +125,14 @@ class RPGSceneExtension(AbstractStaticExtension):
         name: Optional[str] = None,
         grid_size: Optional[float] = None,
         floor: int = 0,
+        asset_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """A place's map made into its scene (the vault's map beside a location note: a picture, a
         .dd2vtt/.uvtt, or both): the campaign's (a scenario's) scene bound to that place, made if it
         has none, takes the UVTT's walls, doors, lights, size and grid and the picture (given, else
         the UVTT's embedded art) as its background, uploaded and attached to the place as its map.
+        A large picture goes up first (POST /v1/asset/upload, its raw bytes) and comes here as its
+        ``asset_id``, used as the art (base64 in the request would exceed a body's limit).
         ``floor`` names which floor of the place (0, the one it opens on; then 1, 2…): each floor is
         its own scene, named "<place> (level N)" unless ``name`` says. Returns {scene_id, floor,
         created, name, width, height, grid_size, background_url, asset_id, walls, doors, lights}.
@@ -138,7 +141,8 @@ class RPGSceneExtension(AbstractStaticExtension):
         from zephyrex.extensions.rpg_scene.BLL_RPGScene import LocationMapRequest
 
         body = LocationMapRequest(
-            location_id=location_id, uvtt=uvtt, image_base64=image_base64, image_name=image_name, name=name, grid_size=grid_size, floor=floor
+            location_id=location_id, uvtt=uvtt, image_base64=image_base64, image_name=image_name, name=name, grid_size=grid_size, floor=floor,
+            asset_id=asset_id,
         )
         return (await cls.scenes(requester_id).map_location_for(body)).model_dump()
 

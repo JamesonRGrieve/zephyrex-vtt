@@ -192,3 +192,41 @@ def test_the_server_maps_a_system_level_scenarios_place(server: TestClient, stor
     reader = create_user(server)
     seen = server.get(f"/v1/scene/{made['scene_id']}", headers=_headers(reader))
     assert seen.status_code == 200, seen.text
+
+
+def test_a_large_map_goes_up_first_and_comes_in_by_its_asset_id(server: TestClient, store: dict[str, bytes]) -> None:
+    """Zephyrex RPG's dev re-import: a 7.5–8.9 MB map as base64 inside map_location's JSON exceeded the
+    request body's limit. The importer uploads it first (POST /v1/asset/upload, its raw bytes) and
+    gives map_location its asset_id: the scene takes its size and draws it, it's attached to the place
+    once, nothing is uploaded again; an upload that isn't the caller's is refused."""
+    gm, stranger = create_user(server), create_user(server)
+    scenario = _create(server, gm, "campaign", name="The Split Antler", user_id=gm.id, is_scenario=True)
+    square = _create(server, gm, "location", name="The Square", kind="district", campaign_id=scenario["id"])
+    big = png(640, 480)
+    uploaded = server.post(
+        "/v1/asset/upload", params={"name": "the-square.0.png"}, content=big, headers={**_headers(gm), "Content-Type": "image/png"}
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    asset = uploaded.json()["asset"]["id"]
+    stored = len(store)
+
+    made = asyncio.run(RPGSceneExtension.map_location(str(gm.id), square["id"], uvtt=dict(LANTERN, image=""), asset_id=asset))
+    assert made["asset_id"] == asset and made["walls"] == 2, made
+    assert (made["width"], made["height"]) == (2200, 1700), "a UVTT keeps its own size; the art is the upload"
+    again = asyncio.run(RPGSceneExtension.map_location(str(gm.id), square["id"], asset_id=asset, grid_size=40))
+    assert again["scene_id"] == made["scene_id"] and len(store) == stored, "nothing uploaded again"
+    from zephyrex.extensions.attachments.BLL_Attachments import AttachmentManager  # type: ignore[import-not-found]
+    from zephyrex.lib.Environment import env as _env
+
+    links = AttachmentManager(requester_id=_env("ROOT_ID"), model_registry=server.app.state.model_registry)  # type: ignore[attr-defined]
+    held = links.list(filters=[links.DB.deleted_at.is_(None)], target_entity_type="location", target_entity_id=square["id"])
+    assert [(one.role, str(one.asset_id)) for one in held] == [("map", asset)], "attached once"
+    art = server.get(f"/v1/scene/{made['scene_id']}/background", headers=_headers(gm))
+    assert art.status_code == 200 and art.content == big
+
+    theirs = server.post(
+        "/v1/asset/upload", params={"name": "x.png"}, content=png(8, 8), headers={**_headers(stranger), "Content-Type": "image/png"}
+    ).json()["asset"]["id"]
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(RPGSceneExtension.map_location(str(gm.id), square["id"], asset_id=theirs))
+    assert refused.value.status_code == 422
