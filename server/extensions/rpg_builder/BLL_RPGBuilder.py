@@ -609,12 +609,13 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
 
     def levels_for(self, body: LevelsRequest) -> LevelsOut:
         """The levels a campaign's characters can start at, for a starting-level slider: the pack's
-        highest and the campaign's own. The campaign's GM; set it through the campaign's
-        ``starting_level`` (PUT /v1/campaign/{id})."""
+        highest and the campaign's own. The campaign's GM, or anyone for a shared (TEMPLATE's or
+        SYSTEM's) scenario, whose start screen every player opens before it's theirs (Zephyrex RPG,
+        2026-11-26: the picker got a 404 on all seven adopted scenarios). Set it through the
+        campaign's ``starting_level`` (PUT /v1/campaign/{id})."""
         dice = self._dice()
         campaign = dice._get(CampaignManager, "CampaignModel", body.campaign_id)
-        requester = str(self.requester.id)
-        if requester not in {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}:
+        if not self._gm_of(campaign) and not self._shared(campaign):
             raise HTTPException(status_code=404, detail={"message": "Request searched CampaignModel and could not find the required record."})
         try:
             pack = dice._pack_for(campaign)
@@ -631,6 +632,16 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
             starting_level=min(cap, int(getattr(campaign, "starting_level", None) or 1)),
         )
 
+    def _gm_of(self, campaign: Any) -> bool:
+        """Whether the requester is this campaign's GM (its user, or who made it)."""
+        owners = {str(owner) for owner in (campaign.user_id, getattr(campaign, "created_by_user_id", None)) if owner}
+        return str(self.requester.id) in owners
+
+    @staticmethod
+    def _shared(campaign: Any) -> bool:
+        """Whether a campaign is the instance's shared copy (TEMPLATE's, or SYSTEM's before adoption)."""
+        return str(getattr(campaign, "created_by_user_id", None) or "") in {str(env("TEMPLATE_ID")), str(env("SYSTEM_ID"))}
+
     def campaign_pregens_for(self, body: PregensRequest) -> PregensOut:
         """A campaign's (a scenario's) pregens built to its starting level, as the slider moves it:
         ``level`` sets the starting level first (within the pack's), then every player character with
@@ -639,6 +650,9 @@ class BuilderManager(AbstractBLLManager[Any], RouterMixin):
         from zephyrex.extensions.genealogy.BLL_Genealogy import PersonManager
 
         levels = self.levels_for(LevelsRequest(campaign_id=body.campaign_id))
+        # Reading a shared scenario's levels is anyone's; rebuilding its pregens stays its GM's.
+        if not self._gm_of(self._dice()._get(CampaignManager, "CampaignModel", body.campaign_id)):
+            raise HTTPException(status_code=404, detail={"message": "Request searched CampaignModel and could not find the required record."})
         if body.level is not None:
             if body.level > levels.starting_level_max:
                 raise _refuse(f"This campaign's characters start at level {levels.starting_level_max} at most")

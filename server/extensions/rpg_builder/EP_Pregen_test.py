@@ -265,6 +265,12 @@ def test_an_out_of_the_box_scenarios_pregen_sheet_is_the_instances(server: TestC
     assert {str(row.created_by_user_id) for row in rows.list(filters=live, person_id=brann["id"])} == {str(env("TEMPLATE_ID"))}
     # An account's own scenario still builds as that account, and a stranger still can't.
     assert _build(server, reader, brann["id"], dry_run=True).status_code == 404
+    # Every player reads a shared scenario's levels on its start screen (Zephyrex RPG, 2026-11-26),
+    # and still can't move them.
+    seen_levels = server.post("/v1/builder/levels", json={"levels": {"campaign_id": scenario["id"]}}, headers=_headers(reader))
+    assert seen_levels.status_code == 200 and seen_levels.json()["levels"]["max_level"] == 20, seen_levels.text
+    moved = server.post("/v1/builder/pregens", json={"pregens": {"campaign_id": scenario["id"], "level": 3}}, headers=_headers(reader))
+    assert moved.status_code == 404, moved.text
 
 
 def test_a_one_shot_offers_its_own_starting_levels_and_a_start_keeps_them(server: TestClient, world: dict[str, Any]) -> None:
