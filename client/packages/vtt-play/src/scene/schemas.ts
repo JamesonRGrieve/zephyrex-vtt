@@ -42,8 +42,24 @@ export const viewSchema = z.object({
         door_state: z.string().nullish(),
       }),
     ),
+    // Things lying here (unowned item instances at a place this scene shows), at their squares.
+    items: z
+      .array(
+        z.object({
+          id: z.string(),
+          item_id: z.string().nullish(),
+          name: z.string(),
+          quantity: z.number().default(1),
+          x: z.number(),
+          y: z.number(),
+          location_id: z.string().nullish(),
+          picture_url: z.string().nullish(),
+        }),
+      )
+      .default([]),
   }),
 });
 export type SceneViewData = z.infer<typeof viewSchema>['view'];
 export type ViewToken = SceneViewData['tokens'][number];
 export type ViewWall = SceneViewData['walls'][number];
+export type ViewItem = SceneViewData['items'][number];

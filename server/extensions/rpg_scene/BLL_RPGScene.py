@@ -536,6 +536,34 @@ class ScopePlaceModel(
         pass
 
 
+class SceneItemSpotModel(
+    ApplicationModel.Optional,
+    UpdateMixinModel.Optional,
+    SceneModel.Reference.Optional,
+    metaclass=ModelMeta,
+):
+    """Where a lying item (the wiki's item instance: a place, no point) is drawn on a scene: a fallen
+    combatant's things where the body fell (drop_where_fallen)."""
+
+    Manager: ClassVar[Type["SceneItemSpotManager"]] = None
+    item_instance_id: Optional[str] = Field(None, description="The wiki's item instance lying here")
+    x: Optional[float] = Field(None, description="Pixels")
+    y: Optional[float] = Field(None, description="Pixels")
+    table_comment: ClassVar[str] = "Where a lying item is drawn on a scene (a fallen combatant's things where the body fell)"
+
+    class Create(BaseModel, SceneModel.Reference.ID):
+        item_instance_id: str = Field(..., max_length=64)
+        x: float
+        y: float
+
+    class Update(BaseModel):
+        x: Optional[float] = None
+        y: Optional[float] = None
+
+    class Search(ApplicationModel.Search, SceneModel.Reference.ID.Search):
+        item_instance_id: Optional[StringSearchModel] = None
+
+
 class MoveRequest(PlainModel):
     x: float
     y: float
@@ -678,6 +706,10 @@ class ScopePlaceManager(AbstractBLLManager, RouterMixin):
     _model = ScopePlaceModel
 
 
+class SceneItemSpotManager(AbstractBLLManager, RouterMixin):
+    _model = SceneItemSpotModel
+
+
 SceneTokenModel.Manager = SceneTokenManager
 SceneWallModel.Manager = SceneWallManager
 SceneLevelModel.Manager = SceneLevelManager
@@ -687,6 +719,7 @@ SceneTileModel.Manager = SceneTileManager
 SceneNoteModel.Manager = SceneNoteManager
 SceneRegionModel.Manager = SceneRegionManager
 ScopePlaceModel.Manager = ScopePlaceManager
+SceneItemSpotModel.Manager = SceneItemSpotManager
 
 ALL_MODELS: list[type] = [
     SceneModel,
@@ -699,6 +732,7 @@ ALL_MODELS: list[type] = [
     SceneNoteModel,
     SceneRegionModel,
     ScopePlaceModel,
+    SceneItemSpotModel,
 ]
 
 
@@ -774,6 +808,20 @@ class ViewWall(PlainModel):
     door_state: Optional[str]
 
 
+class ViewItem(PlainModel):
+    """A thing lying on the scene (the wiki's item instance with no owner at a place this scene
+    shows), drawn at its square so it can be picked up from the map."""
+
+    id: str = Field(description="The item instance")
+    item_id: Optional[str] = None
+    name: str
+    quantity: int = 1
+    x: float
+    y: float
+    location_id: Optional[str] = None
+    picture_url: Optional[str] = None
+
+
 class ViewOut(PlainModel):
     scene_id: str
     name: Optional[str]
@@ -789,6 +837,7 @@ class ViewOut(PlainModel):
     tokens: list[ViewToken]
     walls: list[ViewWall]
     background_url: Optional[str] = None
+    items: list[ViewItem] = Field(default_factory=list, description="Things lying here, to pick up from the map")
 
 
 class ViewResultEnvelope(PlainModel):
@@ -1248,6 +1297,8 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             tokens = [drawn(row) for row in rows if row.id in seen and (hidden_ok or not row.is_hidden or row.id in mine)]
             doors = set(perceived.doors)
             shown = [wall(row) for row in walls if row.id in doors] if not gm else [wall(row) for row in walls]
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        items = self._items_on(scene, {(int(float(one.x) // grid), int(float(one.y) // grid)) for one in tokens})
         return ViewOut(
             scene_id=scene.id,
             name=scene.name,
@@ -1263,6 +1314,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             tokens=tokens,
             walls=shown,
             background_url=self._drawn_background(scene),
+            items=items,
         )
 
     def _portraits(self, campaign: Any, person_ids: list[str]) -> dict[str, Optional[str]]:
@@ -1636,6 +1688,59 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             media_type=asset.content_type,
             headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
         )
+
+    def _items_on(self, scene: Any, taken: set[tuple[int, int]]) -> list[ViewItem]:
+        """What lies on this scene: the wiki's item instances with no owner at the scene's place or a
+        place one of its regions shows (the operator, 2026-11-26: "I haven't seen any loot
+        functionality at all"), each at its recorded spot (a fallen body's things, where it fell),
+        else on a free square by its place (the region's centre, else the scene's entry)."""
+        try:
+            from zephyrex.extensions.world_inventory.BLL_WorldInventory import ItemInstanceManager, ItemManager  # type: ignore[import-not-found]
+        except ImportError:
+            return []
+        places: dict[str, tuple[float, float]] = {}
+        if getattr(scene, "location_id", None):
+            places[str(scene.location_id)] = self._arrival_point(scene)
+        for region in _live(self._trusted(SceneRegionManager), scene_id=scene.id):
+            boxes = [box for box in (shape_box(shape) for shape in region.shapes or []) if box]
+            if getattr(region, "location_id", None) and boxes:
+                left, top, right, bottom = boxes[0]
+                places.setdefault(str(region.location_id), ((left + right) / 2, (top + bottom) / 2))
+        if not places:
+            return []
+        lying = [
+            one
+            for place in places
+            for one in _live(self._trusted(ItemInstanceManager), location_id=place)
+            if not getattr(one, "owner_person_id", None)
+        ]
+        if not lying:
+            return []
+        spots = {str(row.item_instance_id): (float(row.x or 0), float(row.y or 0)) for row in _live(self._trusted(SceneItemSpotManager), scene_id=scene.id)}
+        names: dict[str, str] = {}
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        used = set(taken)
+        drawn: list[ViewItem] = []
+        for one in sorted(lying, key=lambda row: str(row.id)):
+            if one.item_id and str(one.item_id) not in names:
+                try:
+                    names[str(one.item_id)] = str(self._trusted(ItemManager).get(id=one.item_id).name or "Something")
+                except HTTPException:
+                    names[str(one.item_id)] = "Something"
+            spot = spots.get(str(one.id))
+            if spot is not None:
+                x, y = (spot[0] // grid) * grid, (spot[1] // grid) * grid
+            else:
+                x, y = self._free_cell(scene, places[str(one.location_id)], used, gap=0)
+            used.add((int(x // grid), int(y // grid)))
+            drawn.append(
+                ViewItem(
+                    id=str(one.id), item_id=str(one.item_id) if one.item_id else None,
+                    name=names.get(str(one.item_id), "Something") if one.item_id else "Something",
+                    quantity=int(getattr(one, "quantity", None) or 1), x=x, y=y, location_id=str(one.location_id),
+                )
+            )
+        return drawn
 
     def _empty_view(self, scene: Any) -> dict[str, Any]:
         """A scene's map with nothing on it: for a player of the campaign with no token there."""
@@ -2543,6 +2648,41 @@ for _part in (
     SceneRegionManager,
 ):
     room_of(_part, lambda record: ("scene", record.scene_id) if record.scene_id else None)
+
+
+def drop_where_fallen(model_registry: Any, person_id: str, scene_id: str) -> int:
+    """A fallen combatant's carried things lie where the body fell (the operator, 2026-11-26: loot
+    from the fallen): each item instance they own is unowned and placed at their place, and its spot
+    on the scene recorded at their token, so the map draws it there and Loot lists it. How many."""
+    try:
+        from zephyrex.extensions.world_inventory.BLL_WorldInventory import ItemInstanceManager  # type: ignore[import-not-found]
+    except ImportError:
+        return 0
+    root = env("ROOT_ID")
+    scene = SceneManager(requester_id=root, model_registry=model_registry).get(id=scene_id)
+    token = next(iter(_live(SceneTokenManager(requester_id=root, model_registry=model_registry), scene_id=scene_id, person_id=person_id)), None)
+    person = PersonManager(requester_id=root, model_registry=model_registry).get(id=person_id)
+    place = getattr(person, "location_id", None) or getattr(scene, "location_id", None)
+    if place is None:
+        return 0
+    instances = ItemInstanceManager(requester_id=root, model_registry=model_registry)
+    carried = [one for one in _live(instances, owner_person_id=person_id)]
+    if not carried:
+        return 0
+    session = model_registry.DB.session()
+    try:
+        table = instances.DB.__table__
+        session.execute(
+            table.update().where(table.c.id.in_([str(one.id) for one in carried])).values(owner_person_id=None, location_id=str(place))
+        )
+        session.commit()
+    finally:
+        session.close()
+    if token is not None:
+        spots = SceneItemSpotManager(requester_id=root, model_registry=model_registry)
+        for one in carried:
+            spots.create(scene_id=scene_id, item_instance_id=str(one.id), x=float(token.x or 0), y=float(token.y or 0))
+    return len(carried)
 
 
 def _copy_on_instantiate(model_registry: Any, requester_id: str, source_id: str, made_id: str, id_map: dict[str, str]) -> None:

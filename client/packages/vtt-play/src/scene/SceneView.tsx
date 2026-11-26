@@ -14,7 +14,7 @@ import { ChoiceChip } from 'zephyrex/ui/choice-chip';
 import { LoadProblem } from 'zephyrex/ui/load-problem';
 import { SkeletonRows } from 'zephyrex/ui/skeleton';
 import { MapControls } from './MapControls';
-import { movable, SceneCanvas } from './SceneCanvas';
+import { movable, SceneCanvas, type ContextAction, type SceneTarget } from './SceneCanvas';
 import type { SceneViewData, ViewToken } from './schemas';
 import { useSceneView } from './useSceneView';
 
@@ -27,8 +27,10 @@ export interface SceneViewProps {
   /** Also list the tokens with step buttons under the map (an accessible page's choice; the map
    * itself takes taps and the keyboard, so play doesn't need it). */
   showList?: boolean;
-  /** A long-press on a token: show its details. */
+  /** "Details" in a token's menu: show its details. */
   onTokenDetails?: (token: ViewToken) => void;
+  /** The host's choices in the map's menu (right-click, long-press, Shift+F10): see SceneCanvas. */
+  onContextAction?: (target: SceneTarget) => ContextAction[] | Promise<ContextAction[]>;
   /** The scene's campaign: with it, the GM gets the map controls (the scene to show, the cast to place). */
   campaignId?: string;
   /** The GM picked another scene in the map controls. */
@@ -122,6 +124,7 @@ export function SceneView({
   personHref,
   showList = false,
   onTokenDetails,
+  onContextAction,
   campaignId,
   onScene,
   fill = false,
@@ -148,6 +151,7 @@ export function SceneView({
           view={view}
           onMove={move}
           onTokenDetails={onTokenDetails}
+          onContextAction={onContextAction}
           tool={tool}
           onDoor={view.gm ? (wall) => void scene.toggleDoor(wall) : undefined}
           fill={fill}

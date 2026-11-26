@@ -4,6 +4,7 @@
  * move and measure tools, and for the GM the map controls and door taps. The view is the story's own.
  */
 import type { Meta, StoryObj } from '@storybook/nextjs';
+import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { SceneView } from '../../../packages/vtt-play/src/scene/SceneView';
 import { StoryClient, type Routes } from './StoryClient';
@@ -118,5 +119,73 @@ export const GameMastersView: Story = {
     await expect(await canvas.findByRole('region', { name: 'Map controls' })).toBeInTheDocument();
     await expect(await canvas.findByRole('button', { name: 'Place Wren on the map' })).toBeInTheDocument();
     await expect(canvas.queryByRole('button', { name: 'Place Brann on the map' })).toBeNull();
+  },
+};
+
+/** The ford with a silver key lying by the bank, and the map's menu filled the way rpg-ai fills it:
+ * each choice is the action line the chat would get. */
+function WithMenu() {
+  const [line, setLine] = useState('Nothing done yet');
+  const ford = view(false);
+  const routes: Routes = {
+    ...PLAYER,
+    'POST /v1/scene/s1/view': {
+      view: { ...ford.view, items: [{ id: 'key', item_id: 'silver-key', name: 'Silver key', quantity: 1, x: 300, y: 600 }] },
+    },
+  };
+  return (
+    <StoryClient routes={routes}>
+      <SceneView
+        sceneId='s1'
+        onContextAction={(target) =>
+          target.kind === 'item'
+            ? [{ label: `Pick up ${target.name}`, run: () => setLine(`Brann picks up the ${target.name?.toLowerCase()}`) }]
+            : target.kind === 'token' && target.name !== 'Brann'
+              ? [
+                  { label: `Talk to ${target.name}`, run: () => setLine(`Brann talks to ${target.name}`) },
+                  { label: `Attack ${target.name}`, run: () => setLine(`Brann attacks ${target.name}`) },
+                ]
+              : target.kind === 'token'
+                ? [{ label: 'Look around', run: () => setLine('Brann looks around') }]
+                : []
+        }
+      />
+      <p role='status' aria-label='Action line'>
+        {line}
+      </p>
+    </StoryClient>
+  );
+}
+
+/** A player opens the map's menu from the keyboard (Enter selects Brann, Shift+F10 opens it at him),
+ * moves through it and chooses: the choice becomes the action line. Right-click and long-press open
+ * the same menu (the phone e2e covers them, with an item and a square's Move here). */
+export const MapMenu: StoryObj<typeof WithMenu> = {
+  render: () => <WithMenu />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const map = await canvas.findByRole('application', { name: /^Map of The Ford.*Shift\+F10 opens actions/ });
+    map.focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{Shift>}{F10}{/Shift}');
+    const menu = await canvas.findByRole('menu', { name: 'Actions: Brann' });
+    await expect(within(menu).getByRole('menuitem', { name: 'Look around' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('status', { name: 'Action line' })).toHaveTextContent('Brann looks around');
+    await expect(canvas.queryByRole('menu')).toBeNull();
+  },
+};
+
+/** The menu left open on the bandit, as a player sees it (for the screenshot review): opened from
+ * the keyboard at Brann, it lists what Brann can do there. */
+export const MapMenuOpen: StoryObj<typeof WithMenu> = {
+  render: () => <WithMenu />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const map = await canvas.findByRole('application', { name: /^Map of The Ford/ });
+    map.focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{Shift>}{F10}{/Shift}');
+    await expect(await canvas.findByRole('menu', { name: 'Actions: Brann' })).toBeVisible();
   },
 };

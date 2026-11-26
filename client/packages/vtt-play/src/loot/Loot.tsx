@@ -35,11 +35,22 @@ interface Loaded {
   names: Record<string, string>;
 }
 
-export interface LootProps {
-  personId: string;
+/** What was taken, for the host's action line ("Fennick picks up the silver key"). */
+export interface TakenItem {
+  id: string;
+  item_id: string | null;
+  name: string;
+  quantity: number;
 }
 
-export function Loot({ personId }: LootProps): ReactNode {
+export interface LootProps {
+  personId: string;
+  /** Called after each take succeeds (the operator, 2026-11-26: the panel's actions become chat
+   * lines as if typed). */
+  onTaken?: (item: TakenItem) => void;
+}
+
+export function Loot({ personId, onTaken }: LootProps): ReactNode {
   const client = useClient();
   const [data, setData] = useState<
     { state: 'loading' } | { state: 'failed'; error: Error } | { state: 'ready'; value: Loaded }
@@ -91,7 +102,12 @@ export function Loot({ personId }: LootProps): ReactNode {
   if (here === null) return <p className='text-muted-foreground text-sm'>They aren’t anywhere to search.</p>;
   const name = (one: Instance): string => (one.item_id ? (names[one.item_id] ?? 'Unnamed item') : 'Unnamed item');
   const take = (one: Instance): Promise<unknown> =>
-    client.put(`/v1/item_instance/${one.id}`, { item_instance: { owner_person_id: personId, location_id: null } }, one);
+    client
+      .put(`/v1/item_instance/${one.id}`, { item_instance: { owner_person_id: personId, location_id: null } }, one)
+      .then((written) => {
+        onTaken?.({ id: one.id, item_id: one.item_id ?? null, name: name(one), quantity: one.quantity ?? 1 });
+        return written;
+      });
 
   const takeAll = async (): Promise<void> => {
     setBusy(true);

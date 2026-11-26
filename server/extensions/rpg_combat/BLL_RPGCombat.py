@@ -301,6 +301,7 @@ class CombatActionResultOut(PlainModel):
     target_ac: int
     damage: int
     damage_roll: Optional[dict[str, Any]] = None
+    dropped: int = Field(0, description="Things the target carried that now lie where it fell (defeated by this attack)")
     target_hp: Optional[int] = Field(None, description="The target's hit points after the damage")
     target_defeated: bool = False
     steps: list[dict[str, Any]] = Field(default_factory=list)
@@ -670,10 +671,16 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
         combatants.update_trusted(id=combatant.id, **({"reaction_round": round_now} if body.use_reaction else {"action_round": round_now}))
         hp = target.hp
         defeated = bool(target.is_defeated)
+        dropped = 0
         if outcome.hit and hp is not None:
             hp = max(0, hp - outcome.damage)
             defeated = hp == 0
             combatants.update_trusted(id=target.id, hp=hp, is_defeated=defeated)
+            if defeated and not target.is_defeated and encounter.scene_id and target.person_id:
+                # Loot from the fallen: what they carried lies where they fell, on the map and in Loot.
+                from zephyrex.extensions.rpg_scene.BLL_RPGScene import drop_where_fallen
+
+                dropped = drop_where_fallen(self.model_registry, str(target.person_id), str(encounter.scene_id))
         return CombatActionResultOut(
             encounter_id=encounter.id,
             person_id=body.person_id,
@@ -690,6 +697,7 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
             damage_roll=outcome.damage_roll,
             target_hp=hp,
             target_defeated=defeated,
+            dropped=dropped,
             steps=outcome.steps,
         )
 

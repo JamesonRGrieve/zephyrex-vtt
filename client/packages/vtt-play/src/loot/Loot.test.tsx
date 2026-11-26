@@ -51,11 +51,13 @@ describe('loot', () => {
     expect(list).toHaveBeenCalledWith('/v1/item_instance', 'item_instances', expect.anything(), { location_id: 'chapel' });
   });
 
-  it('takes one onto them: theirs, carried', async () => {
+  it('takes one onto them: theirs, carried, and tells the host what was taken', async () => {
     serve('chapel');
-    render(<Loot personId='osk' />);
+    const taken = vi.fn();
+    render(<Loot personId='osk' onTaken={taken} />);
     await screen.findByText('Torch');
     await userEvent.click(screen.getAllByRole('button', { name: 'Take' })[0]!);
+    expect(taken).toHaveBeenCalledWith({ id: 'i1', item_id: 'torch', name: 'Torch', quantity: 1 });
     expect(put).toHaveBeenCalledWith(
       '/v1/item_instance/i1',
       { item_instance: { owner_person_id: 'osk', location_id: null } },

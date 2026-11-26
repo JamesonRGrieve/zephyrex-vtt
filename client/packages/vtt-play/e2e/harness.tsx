@@ -12,6 +12,7 @@ declare global {
   interface Window {
     moves: { id: string; x: number; y: number }[];
     doors: string[];
+    chosen: string[];
   }
 }
 
@@ -81,10 +82,13 @@ const view = {
     : [],
   background_url: withPicture ? redPicture() : null,
   gm,
+  // A silver key lying three squares below Brann, to pick up from the map.
+  items: [{ id: 'key', item_id: 'silver-key', name: 'Silver key', quantity: 1, x: 1000, y: 1000 }],
 } as unknown as SceneViewData;
 
 window.moves = [];
 window.doors = [];
+window.chosen = [];
 const root = document.getElementById('root');
 if (root) {
   createRoot(root).render(
@@ -93,6 +97,16 @@ if (root) {
       tool={tool}
       onMove={(token, x, y) => window.moves.push({ id: token.id, x, y })}
       onDoor={(wall) => window.doors.push(wall.id)}
+      onContextAction={(target) =>
+        target.kind === 'square'
+          ? []
+          : [
+              {
+                label: target.kind === 'item' ? `Pick up ${target.name}` : `Talk to ${target.name}`,
+                run: () => window.chosen.push(`${target.kind}:${target.id}:${target.distance ?? ''}`),
+              },
+            ]
+      }
     />,
   );
 }

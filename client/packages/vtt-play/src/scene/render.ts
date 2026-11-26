@@ -119,6 +119,9 @@ export interface Ruler {
 /** The smallest a token is drawn on screen, in CSS pixels (its portrait and name still read). */
 export const MIN_DRAWN_RADIUS = 11;
 
+/** A lying item's diamond: gold, unlike any disposition's colour. */
+export const ITEM_FILL = '#d4a017';
+
 export function drawScene(
   context: CanvasRenderingContext2D,
   view: SceneViewData,
@@ -213,6 +216,25 @@ export function drawScene(
     context.stroke();
   }
   context.setLineDash([]);
+
+  // Things lying here, under the tokens: a gold diamond on their square, readable at any zoom.
+  for (const item of view.items ?? []) {
+    const [ix, iy] = toScreen(camera, item.x + grid / 2, item.y + grid / 2);
+    const half = Math.max((grid * camera.zoom) / 4, 7);
+    context.save();
+    context.fillStyle = ITEM_FILL;
+    context.strokeStyle = palette.ink;
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.moveTo(ix, iy - half);
+    context.lineTo(ix + half, iy);
+    context.lineTo(ix, iy + half);
+    context.lineTo(ix - half, iy);
+    context.closePath();
+    context.fill();
+    context.stroke();
+    context.restore();
+  }
 
   // Each name chip drawn so far, so the next steps aside rather than covering one (left, top, right, bottom).
   const chips: [number, number, number, number][] = [];

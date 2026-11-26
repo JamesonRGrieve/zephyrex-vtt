@@ -84,8 +84,9 @@ describe('the inventory', () => {
     expect(remove).toHaveBeenCalledWith('/v1/item_instance/i1', expect.objectContaining({ id: 'i1' }));
   });
 
-  it('drops where they stand and gives to another character, on them', async () => {
-    render(<Inventory personId='osk' />);
+  it('drops where they stand and gives to another character, on them, telling the host each', async () => {
+    const done = vi.fn();
+    render(<Inventory personId='osk' onAction={done} />);
     await screen.findByText('Torch');
     await userEvent.click(screen.getAllByRole('button', { name: 'Drop' })[0]!);
     expect(put).toHaveBeenCalledWith(
@@ -99,13 +100,22 @@ describe('the inventory', () => {
       { item_instance: { owner_person_id: 'wren', location_id: null } },
       expect.anything(),
     );
+    await vi.waitFor(() => expect(done).toHaveBeenCalledTimes(2));
+    expect(done).toHaveBeenNthCalledWith(1, { kind: 'drop', item: { id: 'i1', name: 'Torch' } });
+    expect(done.mock.calls[1]![0]).toMatchObject({
+      kind: 'give',
+      item: { id: 'i2', name: 'Tonic' },
+      to: { personId: 'wren' },
+    });
   });
 
-  it('says when a write was refused', async () => {
+  it('says when a write was refused, and tells the host nothing', async () => {
     put.mockRejectedValue(new Error('403'));
-    render(<Inventory personId='osk' />);
+    const done = vi.fn();
+    render(<Inventory personId='osk' onAction={done} />);
     await screen.findByText('Tonic');
     await userEvent.click(screen.getAllByRole('button', { name: 'Use' })[1]!);
     expect(await screen.findByRole('alert')).toHaveTextContent("Tonic wasn't used");
+    expect(done).not.toHaveBeenCalled();
   });
 });

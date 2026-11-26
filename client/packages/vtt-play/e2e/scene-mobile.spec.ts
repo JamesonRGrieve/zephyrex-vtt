@@ -197,3 +197,51 @@ test.describe('with a mouse', () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
   });
 });
+
+test('right-click an item for its menu; choosing it runs the host’s action, from Brann’s distance', async ({ page }) => {
+  await open(page);
+  const [left, top] = await onPage(page, 1050, 1050);
+  await page.mouse.click(left, top, { button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Actions: Silver key' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Pick up Silver key' }).click();
+  await expect(menu).toBeHidden();
+  // Brann stands at (1000, 700): three squares away, 15 ft.
+  await expect.poll(() => page.evaluate(() => window.chosen)).toEqual(['item:key:15']);
+});
+
+test('long-press a token for its menu; Escape closes it and gives the map back the keys', async ({ page }) => {
+  await open(page);
+  const cdp = await page.context().newCDPSession(page);
+  const [left, top] = await onPage(page, 350, 350);
+  await touch(cdp, 'touchStart', [[left, top]]);
+  await page.waitForTimeout(800);
+  await touch(cdp, 'touchEnd', []);
+  const menu = page.getByRole('menu', { name: 'Actions: Innkeeper' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Talk to Innkeeper' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(page.locator('canvas')).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.chosen)).toEqual([]);
+});
+
+test('right-click an empty square: Move here moves your token through the same move as a drag', async ({ page }) => {
+  await open(page);
+  const [left, top] = await onPage(page, 1450, 750);
+  await page.mouse.click(left, top, { button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Actions: This square' });
+  await menu.getByRole('menuitem', { name: 'Move here' }).click();
+  await expect.poll(() => page.evaluate(() => window.moves)).toEqual([{ id: 'brann', x: 1400, y: 700 }]);
+});
+
+test('the keyboard opens the menu at your token (Shift+F10) and moves through it', async ({ page }) => {
+  await open(page);
+  await page.locator('canvas').focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Shift+F10');
+  const menu = page.getByRole('menu', { name: 'Actions: Brann' });
+  await expect(menu.getByRole('menuitem', { name: 'Talk to Brann' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.chosen)).toEqual(['token:brann:0']);
+});

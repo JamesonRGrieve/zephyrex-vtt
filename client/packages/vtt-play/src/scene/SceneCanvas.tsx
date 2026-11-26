@@ -7,7 +7,12 @@
  *   a cell to move it there (snapped to the grid; the server refuses a move through a wall); tap the
  *   selected token again, or press Escape, to let it go. Dragging a token moves it too.
  * - One finger on the ground pans, two pinch, a wheel zooms (the page doesn't scroll under it).
- * - Long-press a token for its details (onTokenDetails).
+ * - Right-click, long-press, or Shift+F10 / the menu key on the focused map, opens a menu of what can
+ *   be done with what's there (the operator, 2026-11-26: "Right click interact in the vtt should
+ *   trigger action lines in the chat as if typed"): a token, a lying item, a door or a square. The
+ *   host fills it (onContextAction); the canvas adds "Move here" for your token (through onMove,
+ *   so the server's wall check stands) and "Details" (onTokenDetails). Arrow keys move through it,
+ *   Enter chooses, Escape closes.
  * - Keyboard: the canvas takes focus; Enter or Space selects the next token you may move, the arrow
  *   keys move the selected one a cell, Escape lets go. A polite live region says what happened.
  * - It opens on the whole map, fitted to the width of a box shaped like it, and follows its box's size until
@@ -16,7 +21,16 @@
  *   scene's units, whole cells; the line stays until the next measure.
  * - The GM taps a door to open or close it (onDoor).
  */
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react';
 import {
   discAt,
   doorAt,
@@ -33,7 +47,39 @@ import {
   type Disc,
 } from './geometry';
 import { drawScene, paletteOf, type Drag, type Ruler } from './render';
-import type { SceneViewData, ViewToken, ViewWall } from './schemas';
+import type { SceneViewData, ViewItem, ViewToken, ViewWall } from './schemas';
+
+/** What a context menu was opened on: a token, a lying item, a map feature (a door) or a square. */
+export interface SceneTarget {
+  kind: 'token' | 'item' | 'feature' | 'square';
+  id?: string;
+  name?: string;
+  personId?: string;
+  /** The square's top-left, in scene pixels. */
+  x: number;
+  y: number;
+  /** From your token, in the scene's units (whole squares × its grid distance); none without one. */
+  distance?: number;
+}
+
+/** One choice in the menu: the host's (Talk to, Pick up, Attack…) or the canvas's own. */
+export interface ContextAction {
+  label: string;
+  icon?: ReactNode;
+  run: () => void;
+}
+
+/** A lying item under a scene point, with a reach of at least ``minSize`` scene units. */
+function itemAt(items: readonly ViewItem[], x: number, y: number, grid: number, minSize = 0): ViewItem | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]!;
+    const size = Math.max(grid, minSize);
+    const left = item.x + (grid - size) / 2;
+    const top = item.y + (grid - size) / 2;
+    if (x >= left && x < left + size && y >= top && y < top + size) return item;
+  }
+  return null;
+}
 
 export function movable(view: SceneViewData, one: ViewToken): boolean {
   return view.gm || one.mine;
@@ -46,8 +92,11 @@ const LONG_PRESS_MS = 550;
 export interface SceneCanvasProps {
   view: SceneViewData;
   onMove: (token: ViewToken, x: number, y: number) => void;
-  /** A long-press on a token (any token this person sees): show its details. */
+  /** "Details" in a token's menu (right-click or long-press): show its details. */
   onTokenDetails?: (token: ViewToken) => void;
+  /** The host's choices for what a menu was opened on (Talk to, Examine, Pick up, Attack…); each
+   * one's run becomes, in rpg-ai, an action line in the chat as if typed. */
+  onContextAction?: (target: SceneTarget) => ContextAction[] | Promise<ContextAction[]>;
   /** What a drag does: select and move tokens (the default), or measure. */
   tool?: 'select' | 'measure';
   /** The GM tapped a door: open or close it. */
@@ -70,6 +119,7 @@ export function SceneCanvas({
   view,
   onMove,
   onTokenDetails,
+  onContextAction,
   tool = 'select',
   onDoor,
   fill = false,
@@ -91,6 +141,11 @@ export function SceneCanvas({
   const measuring = useRef(false);
   const toolRef = useRef(tool);
   const fillRef = useRef(fill);
+  const [menu, setMenu] = useState<{ left: number; top: number; title: string; actions: ContextAction[] } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // A long-press opened the menu: the finger's lifting must not hand focus back to the map.
+  const longOpened = useRef(false);
+  const hasMenu = Boolean(onContextAction || onTokenDetails);
 
   const refit = useCallback(() => {
     const element = canvas.current;
@@ -206,6 +261,127 @@ export function SceneCanvas({
     [],
   );
 
+  /** Your token: the selected one if it's yours, else your first (for "Move here" and distances). */
+  const yours = (): ViewToken | null => {
+    const current = viewRef.current;
+    const chosen = current.tokens.find((one) => one.id === selectedRef.current && movable(current, one));
+    return chosen ?? current.tokens.find((one) => one.mine) ?? null;
+  };
+
+  /** What lies under a screen point: a token's drawn disc, a lying item, a door, else the square. */
+  const targetAt = (sx: number, sy: number): { target: SceneTarget; token: ViewToken | null } | null => {
+    if (!camera.current) return null;
+    const current = viewRef.current;
+    const grid = current.grid_size;
+    const [x, y] = toScene(camera.current, sx, sy);
+    const reach = MIN_TARGET / camera.current.zoom;
+    const onDisc = discAt(drawn.current, sx, sy);
+    const token =
+      (onDisc && current.tokens.find((one) => one.id === onDisc.id)) || tokenAt(current.tokens, x, y, grid, reach);
+    const mine = yours();
+    const away = (tx: number, ty: number): number | undefined =>
+      mine
+        ? Math.max(
+            Math.abs(Math.floor(tx / grid) - Math.floor(mine.x / grid)),
+            Math.abs(Math.floor(ty / grid) - Math.floor(mine.y / grid)),
+          ) * current.grid_distance
+        : undefined;
+    if (token) {
+      return {
+        token,
+        target: {
+          kind: 'token',
+          id: token.id,
+          name: token.name ?? undefined,
+          personId: token.person_id ?? undefined,
+          x: token.x,
+          y: token.y,
+          distance: away(token.x, token.y),
+        },
+      };
+    }
+    const item = itemAt(current.items ?? [], x, y, grid, reach);
+    if (item) {
+      return {
+        token: null,
+        target: { kind: 'item', id: item.id, name: item.name, x: item.x, y: item.y, distance: away(item.x, item.y) },
+      };
+    }
+    const door = doorAt(current.walls, x, y, reach);
+    if (door) return { token: null, target: { kind: 'feature', id: door.id, name: 'Door', x, y, distance: away(x, y) } };
+    const cellX = Math.floor(x / grid) * grid;
+    const cellY = Math.floor(y / grid) * grid;
+    return { token: null, target: { kind: 'square', x: cellX, y: cellY, distance: away(cellX, cellY) } };
+  };
+
+  const openMenu = async (sx: number, sy: number, at?: { left: number; top: number }): Promise<void> => {
+    const found = targetAt(sx, sy);
+    if (!found) return;
+    const { target, token } = found;
+    const own: ContextAction[] = [];
+    const mine = yours();
+    if (target.kind === 'square' && mine) {
+      own.push({
+        label: 'Move here',
+        run: () => {
+          onMove(mine, target.x, target.y);
+          setSaid(`${mine.name ?? 'Token'} moved`);
+        },
+      });
+    }
+    if (token && onTokenDetails) own.push({ label: 'Details', run: () => onTokenDetails(token) });
+    let theirs: ContextAction[] = [];
+    try {
+      theirs = onContextAction ? await onContextAction(target) : [];
+    } catch {
+      theirs = [];
+    }
+    const actions = [...theirs, ...own];
+    if (actions.length === 0) return;
+    const element = canvas.current;
+    const width = element?.clientWidth ?? 0;
+    const height = element?.clientHeight ?? 0;
+    const title = target.name ?? (target.kind === 'square' ? 'This square' : 'Here');
+    // Kept inside the map: a menu at the right or bottom edge opens back toward the middle.
+    setMenu({
+      left: Math.max(4, Math.min(at?.left ?? sx, width - 200)),
+      top: Math.max(4, Math.min(at?.top ?? sy, height - 48 * (actions.length + 1))),
+      title,
+      actions,
+    });
+  };
+
+  const closeMenu = (): void => {
+    setMenu(null);
+    canvas.current?.focus();
+  };
+
+  const contextMenu = (event: MouseEvent<HTMLCanvasElement>): void => {
+    if (!hasMenu) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    void openMenu(event.clientX - rect.left, event.clientY - rect.top);
+  };
+
+  useEffect(() => {
+    if (menu) menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [menu]);
+
+  const menuKey = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const items = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = (at + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+      items[next]?.focus();
+    } else if (event.key === 'Tab') {
+      closeMenu();
+    }
+  };
+
   const local = (event: PointerEvent<HTMLCanvasElement>): [number, number] => {
     const rect = event.currentTarget.getBoundingClientRect();
     return [event.clientX - rect.left, event.clientY - rect.top];
@@ -242,12 +418,20 @@ export function SceneCanvas({
       (onDisc && viewRef.current.tokens.find((one) => one.id === onDisc.id)) ||
       tokenAt(viewRef.current.tokens, x, y, viewRef.current.grid_size, MIN_TARGET / camera.current.zoom);
     press.current = { sx, sy, hit, moved: false, long: false };
-    if (hit && onTokenDetails) {
+    if (menu) setMenu(null);
+    if (event.button === 2) {
+      // A right-click: the menu (onContextMenu) handles it, never a tap or drag.
+      press.current = null;
+      return;
+    }
+    if (hasMenu) {
+      // A long-press opens the same menu a right-click does (details are in it).
       longTimer.current = setTimeout(() => {
         if (press.current && !press.current.moved) {
           press.current.long = true;
           drag.current = null;
-          onTokenDetails(hit);
+          longOpened.current = true;
+          void openMenu(sx, sy);
         }
       }, LONG_PRESS_MS);
     }
@@ -298,6 +482,10 @@ export function SceneCanvas({
   const up = (event: PointerEvent<HTMLCanvasElement>): void => {
     pointers.current.delete(event.pointerId);
     cancelLong();
+    if (longOpened.current) {
+      // The menu a long-press opened keeps the focus once the finger lifts.
+      window.setTimeout(() => menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus(), 0);
+    }
     if (measuring.current) {
       measuring.current = false;
       if (ruler.current?.label) setSaid(`Measured ${ruler.current.label}`);
@@ -355,6 +543,22 @@ export function SceneCanvas({
       ArrowLeft: [-1, 0],
       ArrowRight: [1, 0],
     };
+    if (hasMenu && (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey))) {
+      event.preventDefault();
+      // At the selected token, else your own, else the middle of the view.
+      const at = chosen ?? current.tokens.find((one) => one.mine) ?? null;
+      const element = canvas.current;
+      if (at && camera.current) {
+        // Beside the token's square, not over it, so you still see whose menu it is.
+        const cell = current.grid_size * camera.current.zoom;
+        const sx = (at.x - camera.current.x) * camera.current.zoom;
+        const sy = (at.y - camera.current.y) * camera.current.zoom;
+        void openMenu(sx + cell / 2, sy + cell / 2, { left: sx + cell + 4, top: sy });
+      } else if (element) {
+        void openMenu(element.clientWidth / 2, element.clientHeight / 2);
+      }
+      return;
+    }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       if (mine.length === 0) return setSaid('No token here you can move');
@@ -384,14 +588,50 @@ export function SceneCanvas({
         tabIndex={0}
         role='application'
         aria-roledescription='map'
-        aria-label={`Map of ${view.name ?? 'the scene'}. Enter selects your token, arrow keys move it, Escape lets go.`}
+        aria-label={`Map of ${view.name ?? 'the scene'}. Enter selects your token, arrow keys move it, Escape lets go.${hasMenu ? ' Shift+F10 opens actions.' : ''}`}
         className='focus-visible:ring-ring h-full w-full touch-none outline-none focus-visible:ring-2'
         onPointerDown={down}
         onPointerMove={moveTo}
         onPointerUp={up}
         onPointerCancel={up}
         onKeyDown={key}
+        onContextMenu={contextMenu}
+        onTouchEnd={(event) => {
+          // No mouse events emulated from a long-press's lifting: they would focus the map over the menu.
+          if (longOpened.current) {
+            event.preventDefault();
+            longOpened.current = false;
+          }
+        }}
       />
+      {menu && (
+        <div
+          ref={menuRef}
+          role='menu'
+          aria-label={`Actions: ${menu.title}`}
+          className='bg-popover text-popover-foreground absolute z-10 min-w-44 rounded-md border p-1 shadow-md'
+          style={{ left: menu.left, top: menu.top }}
+          onKeyDown={menuKey}
+        >
+          <p className='text-muted-foreground px-2 py-1 text-xs font-medium'>{menu.title}</p>
+          {menu.actions.map((action, index) => (
+            <button
+              key={`${action.label}-${index}`}
+              type='button'
+              role='menuitem'
+              className='hover:bg-accent focus-visible:bg-accent flex min-h-11 w-full items-center gap-2 rounded-sm px-2 text-left text-sm outline-none'
+              onClick={() => {
+                setMenu(null);
+                action.run();
+                canvas.current?.focus();
+              }}
+            >
+              {action.icon}
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
       <p aria-live='polite' className='sr-only'>
         {said}
       </p>

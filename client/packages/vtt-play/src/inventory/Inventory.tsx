@@ -41,15 +41,26 @@ interface Loaded {
   others: Member[];
 }
 
+/** What the character did, for the host's action line ("Fennick drops the torch", "Fennick hands
+ * Brakka the rope"). */
+export interface InventoryAction {
+  kind: 'drop' | 'give' | 'use';
+  item: { id: string; name: string };
+  to?: { personId: string; name: string };
+}
+
 export interface InventoryProps {
   personId: string;
+  /** Called after each action's write succeeds (the operator, 2026-11-26: the panel's actions
+   * become chat lines as if typed). */
+  onAction?: (action: InventoryAction) => void;
 }
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-export function Inventory({ personId }: InventoryProps): ReactNode {
+export function Inventory({ personId, onAction }: InventoryProps): ReactNode {
   const client = useClient();
   const [data, setData] = useState<
     { state: 'loading' } | { state: 'failed'; error: Error } | { state: 'ready'; value: Loaded }
@@ -93,11 +104,14 @@ export function Inventory({ personId }: InventoryProps): ReactNode {
     return () => window.clearTimeout(first);
   }, [read]);
 
-  const act = async (write: Promise<unknown>, fallback: string): Promise<void> => {
+  const act = async (write: Promise<unknown>, fallback: string, done?: InventoryAction): Promise<void> => {
     setBusy(true);
     setProblem(
       await writeProblem(
-        write.then(() => read()),
+        write.then(() => {
+          if (done) onAction?.(done);
+          return read();
+        }),
         fallback,
       ),
     );
@@ -134,6 +148,7 @@ export function Inventory({ personId }: InventoryProps): ReactNode {
                           ? client.put(`/v1/item_instance/${one.id}`, { item_instance: { quantity: quantity - 1 } }, one)
                           : client.delete(`/v1/item_instance/${one.id}`, one),
                         `${name(one)} wasn't used`,
+                        { kind: 'use', item: { id: one.id, name: name(one) } },
                       )
                     }
                   >
@@ -150,6 +165,7 @@ export function Inventory({ personId }: InventoryProps): ReactNode {
                       void act(
                         client.put(`/v1/item_instance/${one.id}`, { item_instance: { location_id: here } }, one),
                         `${name(one)} wasn't dropped`,
+                        { kind: 'drop', item: { id: one.id, name: name(one) } },
                       )
                     }
                   >
@@ -171,6 +187,11 @@ export function Inventory({ personId }: InventoryProps): ReactNode {
                               one,
                             ),
                             `${name(one)} wasn't given`,
+                            {
+                              kind: 'give',
+                              item: { id: one.id, name: name(one) },
+                              to: { personId: to, name: others.find((other) => other.id === to)?.name ?? 'someone' },
+                            },
                           );
                       }}
                     >
