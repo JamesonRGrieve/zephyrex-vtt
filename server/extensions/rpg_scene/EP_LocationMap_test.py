@@ -215,6 +215,13 @@ def test_a_large_map_goes_up_first_and_comes_in_by_its_asset_id(server: TestClie
     assert (made["width"], made["height"]) == (2200, 1700), "a UVTT keeps its own size; the art is the upload"
     again = asyncio.run(RPGSceneExtension.map_location(str(gm.id), square["id"], asset_id=asset, grid_size=40))
     assert again["scene_id"] == made["scene_id"] and len(store) == stored, "nothing uploaded again"
+    # A re-import uploads the same picture again: the place keeps its map, the new copy goes.
+    copy = server.post(
+        "/v1/asset/upload", params={"name": "the-square.0.png"}, content=big, headers={**_headers(gm), "Content-Type": "image/png"}
+    ).json()["asset"]["id"]
+    rerun = asyncio.run(RPGSceneExtension.map_location(str(gm.id), square["id"], asset_id=copy))
+    assert rerun["asset_id"] == asset, "the map it had"
+    assert server.get(f"/v1/asset/{copy}", headers=_headers(gm)).status_code == 404, "the duplicate upload deleted"
     from zephyrex.extensions.attachments.BLL_Attachments import AttachmentManager  # type: ignore[import-not-found]
     from zephyrex.lib.Environment import env as _env
 

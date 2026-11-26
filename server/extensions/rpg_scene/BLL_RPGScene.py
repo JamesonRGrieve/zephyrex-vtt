@@ -1453,7 +1453,9 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             self._trusted(SceneManager).update(id=scene.id, width=shape[1], height=shape[2], grid_size=body.grid_size or scene.grid_size or DEFAULT_GRID_SIZE)
         asset_id = None
         if uploaded is not None and body.asset_id:
-            asset_id = str(body.asset_id)
+            # The same picture already the place's map (a re-import uploads it again): that one is kept
+            # and the new copy deleted, so a re-run leaves no unused uploads behind.
+            asset_id = self._same_map(str(body.asset_id), uploaded, location.id)
             self._attach_map(asset_id, location.id)
             self._trusted(SceneManager).update(id=scene.id, background_url=f"/v1/asset/{asset_id}/content")
         elif art and shape:
@@ -1479,6 +1481,30 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         if not str(asset.content_type or "").startswith("image/"):
             raise HTTPException(status_code=422, detail={"message": "That upload isn't a picture"})
         return bytes(await EXT_Cloud.download_file(asset.provider, asset.path))
+
+    def _same_map(self, asset_id: str, art: bytes, location_id: str) -> str:
+        """The place's map asset with these bytes (sha256) when it has one other than ``asset_id``,
+        which is then deleted (the requester's own upload); else ``asset_id``."""
+        import hashlib
+
+        from zephyrex.extensions.attachments.BLL_Attachments import AssetManager, AttachmentManager  # type: ignore[import-not-found]
+
+        digest = hashlib.sha256(art).hexdigest()
+        for link in self._trusted(AttachmentManager).list(target_entity_type="location", target_entity_id=location_id):
+            if getattr(link, "role", None) != "map" or getattr(link, "deleted_at", None) or str(link.asset_id) == asset_id:
+                continue
+            try:
+                held = self._trusted(AssetManager).get(id=link.asset_id)
+            except HTTPException:
+                continue
+            if getattr(held, "deleted_at", None) or held.sha256 != digest:
+                continue
+            try:
+                AssetManager(requester_id=str(self.requester.id), model_registry=self.model_registry).delete(id=asset_id)
+            except HTTPException:
+                pass  # not the requester's to delete: left as it is
+            return str(held.id)
+        return asset_id
 
     def _attach_map(self, asset_id: str, location_id: str) -> None:
         """An uploaded picture attached to its place as the place's map, once."""
