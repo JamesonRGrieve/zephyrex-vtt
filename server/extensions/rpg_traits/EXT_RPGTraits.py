@@ -75,3 +75,14 @@ class RPGTraitsExtension(AbstractStaticExtension):
         hook, never a roll's outcome. For the campaign's GM or one of its players."""
         manager: PersonTraitManager = cls.as_requester(PersonTraitManager, requester_id)
         return PartyChecks(manager.model_registry, requester_id).check(campaign_id, hook_id)
+
+    @classmethod
+    @ability("spells_for_campaign")
+    async def spells_for_campaign(cls, requester_id: str, campaign_id: str) -> dict[str, Any]:
+        """The spells of the campaign's game system, ``{"spells": [{"name", "slug", "description"}]}``
+        (descriptions as stored), for the AI GM's "x casts y (its effects) on z" (the operator,
+        2026-11-26). For the campaign's GM, its players, and anyone for a shared scenario."""
+        from zephyrex.extensions.rpg_traits.Spells import spells_for_campaign
+
+        manager: PersonTraitManager = cls.as_requester(PersonTraitManager, requester_id)
+        return spells_for_campaign(manager.model_registry, requester_id, campaign_id)
