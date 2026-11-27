@@ -236,6 +236,18 @@ def test_the_gm_places_a_new_npc_beside_the_seats_character(server: TestClient) 
     assert placed["scene_id"] == taproom["id"] and placed["token_id"]
     assert max(abs(placed["x"] - 400), abs(placed["y"] - 400)) == 100, "the nearest free cell beside Brann"
 
+    # A grid floating point can't hold (an imported map's 2048/21): Brann's top-left on its own grid
+    # line floors a hair short of it, and his square must still count as taken (Zephyrex RPG,
+    # 2026-11-27: The Boy was placed on Dingus's square at 1852.95, 1950.48 four times).
+    grid = 2048 / 21
+    hall = _create(server, gm, "scene", name="Hall", campaign_id=campaign["id"], width=2048, height=2048, grid_size=grid)
+    corner = (1852.9523809523807, 1950.4761904761904)
+    _create(server, gm, "scene_token", name="Brann", scene_id=hall["id"], person_id=brann["id"], x=corner[0], y=corner[1])
+    boy = _create(server, gm, "person", name="The Boy", kind="npc", campaign_id=campaign["id"])
+    beside = asyncio.run(RPGSceneExtension.place_person(str(gm.id), hall["id"], boy["id"], near_person_id=brann["id"]))
+    apart = max(abs(beside["x"] - corner[0]), abs(beside["y"] - corner[1]))
+    assert abs(apart - grid) < 1e-6, f"the square beside Brann, not his own: {beside}"
+
     with pytest.raises(HTTPException) as refused:
         asyncio.run(RPGSceneExtension.place_person(str(player.id), taproom["id"], tam["id"], x=100, y=100))
     assert refused.value.status_code == 404

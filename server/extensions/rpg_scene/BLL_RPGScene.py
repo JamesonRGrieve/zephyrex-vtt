@@ -1067,6 +1067,14 @@ def _summary(scene: Any) -> SceneSummary:
     )
 
 
+def _cell(x: Any, y: Any, grid: float) -> tuple[int, int]:
+    """The square a token whose top-left is (x, y) stands on, read at its centre: a top-left on a
+    grid line that floating point puts a hair short of it (1852.95 on a 2048/21 grid floors to 18,
+    not 19) is still on its own square (Zephyrex RPG, 2026-11-27: place_person put The Boy on
+    Dingus's square because his square was counted as the one beside it)."""
+    return (int((float(x or 0) + grid / 2) // grid), int((float(y or 0) + grid / 2) // grid))
+
+
 def _live(manager: Any, **filters: Any) -> list[Any]:
     """A trusted manager's rows, without soft-deleted ones. The framework surfaces tombstones to
     ROOT (an audit read), and the rows don't carry deleted_at, so the filter goes in the query."""
@@ -1298,7 +1306,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             doors = set(perceived.doors)
             shown = [wall(row) for row in walls if row.id in doors] if not gm else [wall(row) for row in walls]
         grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
-        items = self._items_on(scene, {(int(float(one.x) // grid), int(float(one.y) // grid)) for one in tokens})
+        items = self._items_on(scene, {_cell(one.x, one.y, grid) for one in tokens})
         return ViewOut(
             scene_id=scene.id,
             name=scene.name,
@@ -1729,10 +1737,11 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                     names[str(one.item_id)] = "Something"
             spot = spots.get(str(one.id))
             if spot is not None:
-                x, y = (spot[0] // grid) * grid, (spot[1] // grid) * grid
+                column, row = _cell(spot[0], spot[1], grid)
+                x, y = column * grid, row * grid
             else:
                 x, y = self._free_cell(scene, places[str(one.location_id)], used, gap=0)
-            used.add((int(x // grid), int(y // grid)))
+            used.add(_cell(x, y, grid))
             drawn.append(
                 ViewItem(
                     id=str(one.id), item_id=str(one.item_id) if one.item_id else None,
@@ -1985,7 +1994,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         tokens = as_gm(SceneTokenManager)
         for person in present:
             x, y = self._free_cell(scene, self._arrival_point(scene), taken, gap=1)
-            taken.add((int(x // grid), int(y // grid)))
+            taken.add(_cell(x, y, grid))
             tokens.create(
                 name=person.name or "Character",
                 scene_id=scene.id,
@@ -2098,10 +2107,10 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
             if scene.id not in taken:
                 taken[scene.id] = {
-                    (int(float(token.x or 0) // grid), int(float(token.y or 0) // grid)) for token in _live(tokens, scene_id=scene.id)
+                    _cell(token.x, token.y, grid) for token in _live(tokens, scene_id=scene.id)
                 }
             x, y = self._free_cell(scene, point, taken[scene.id], gap=1)
-            taken[scene.id].add((int(x // grid), int(y // grid)))
+            taken[scene.id].add(_cell(x, y, grid))
             mine.create(
                 name=getattr(person, "name", None) or "Token", scene_id=scene.id, person_id=person.id, x=x, y=y,
                 disposition="friendly" if getattr(person, "kind", None) == "pc" else "neutral",
@@ -2320,7 +2329,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 tokens.delete(id=token.id)
                 removed += 1
         others = {
-            (int(float(token.x or 0) // grid), int(float(token.y or 0) // grid))
+            _cell(token.x, token.y, grid)
             for token in _live(tokens, scene_id=scene.id)
             if token.person_id != person_id
         }
@@ -2343,7 +2352,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
         # Walk to a free square: never onto someone (the map review, 2026-11-25: the party and the
         # watch captain stood on one square). A place keeps a square between arrivals; a point asked
         # for takes the nearest free square to it.
-        if (int(point[0] // grid), int(point[1] // grid)) != (int(float(here.x or 0) // grid), int(float(here.y or 0) // grid)):
+        if (int(point[0] // grid), int(point[1] // grid)) != _cell(here.x, here.y, grid):
             free = self._free_cell(scene, point, others, gap=0 if x is not None and y is not None else 1)
             point = (free[0] + grid / 2, free[1] + grid / 2)
         bounds = (float(scene.width or 40 * grid), float(scene.height or 30 * grid))
@@ -2389,7 +2398,7 @@ class SceneManager(AbstractBLLManager, RouterMixin):
             return self.pilot_for(token.person_id, scene_id=there.id)
         grid = float(there.grid_size or DEFAULT_GRID_SIZE)
         taken = {
-            (int(float(one.x or 0) // grid), int(float(one.y or 0) // grid))
+            _cell(one.x, one.y, grid)
             for one in _live(self._trusted(SceneTokenManager), scene_id=there.id)
         }
         x, y = self._free_cell(there, self._arrival_point(there), taken, gap=1)
