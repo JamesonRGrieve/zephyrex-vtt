@@ -267,6 +267,21 @@ class RPGCombatExtension(AbstractStaticExtension):
         registry = cls.encounters(requester_id).model_registry
         return recovery_for(registry, requester_id, campaign_of_person(registry, person_id)).set_condition(person_id, condition, present)
 
+    @classmethod
+    @ability("use_item")
+    async def use_item(cls, requester_id: str, person_id: str, item_instance_id: str, quantity: int = 1) -> dict[str, Any]:
+        """A character uses ``quantity`` of an item they carry (items_carried's item_instance_id). A
+        consumable the rules pack knows does what it says, once per unit (srd-5e: a Potion of
+        Healing heals 2d4+2, up to the maximum, and ends Unconscious), and is spent (the wiki's
+        spend_item); another consumable is just spent; anything else is refused (422: narrate it, or
+        test it). 409 when they don't carry it. Returns {person_id, item_instance_id, name, used,
+        effect: {healing, rolled} | null, spent, left, hp, hp_max, hit_dice, exhaustion,
+        conditions}. The campaign's GM only."""
+        from zephyrex.extensions.rpg_combat.Recovery import campaign_of_person, recovery_for
+
+        registry = cls.encounters(requester_id).model_registry
+        return recovery_for(registry, requester_id, campaign_of_person(registry, person_id)).use_item(person_id, item_instance_id, quantity)
+
 
 def _campaign_of(registry: Any, person_id: str) -> Optional[str]:
     from zephyrex.extensions.rpg_combat.Recovery import campaign_of_person

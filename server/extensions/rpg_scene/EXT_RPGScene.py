@@ -221,6 +221,16 @@ class RPGSceneExtension(AbstractStaticExtension):
         return cls.scenes(requester_id).place_person_for(scene_id, body).model_dump()
 
     @classmethod
+    @ability("items_here")
+    async def items_here(cls, requester_id: str, scene_id: str) -> dict[str, Any]:
+        """What lies on a scene, as its map draws it: the wiki's items_at for the scene's place and
+        the places its regions show, each where it's drawn (a fallen body's things where it fell).
+        Returns {scene_id, items: [{item_instance_id, item_id, name, quantity, x, y, location_id}]}.
+        A person picks one up with the wiki's take_item(person_id, item_instance_id, quantity?). The
+        campaign's GM or a member of it."""
+        return cls.scenes(requester_id).items_here_for(scene_id)
+
+    @classmethod
     @ability("remove_person_from_scene")
     async def remove_person_from_scene(cls, requester_id: str, scene_id: str, person_id: str) -> dict[str, Any]:
         """Take a person's token off a scene (they left, the story not saying where): their wiki

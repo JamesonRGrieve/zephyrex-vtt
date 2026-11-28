@@ -1716,40 +1716,67 @@ class SceneManager(AbstractBLLManager, RouterMixin):
                 places.setdefault(str(region.location_id), ((left + right) / 2, (top + bottom) / 2))
         if not places:
             return []
-        lying = [
-            one
-            for place in places
-            for one in _live(self._trusted(ItemInstanceManager), location_id=place)
-            if not getattr(one, "owner_person_id", None)
-        ]
+        from zephyrex.extensions.rpg_scene.WikiItems import wiki_items
+
+        # (instance id, item id, name, quantity, place): the wiki's items_at (what lies there, nobody
+        # carrying it), else, on a wiki without it, its instances there that no one owns.
+        lying: list[tuple[str, Optional[str], str, int, str]] = []
+        names: dict[str, str] = {}
+        for place in places:
+            answer = wiki_items(self.model_registry, "items_at", env("SYSTEM_ID"), location_id=place)
+            if answer is not None:
+                lying.extend(
+                    (str(one["item_instance_id"]), one.get("item_id"), str(one.get("name") or "Something"), int(one.get("quantity") or 1), place)
+                    for one in answer.get("items") or []
+                )
+                continue
+            for one in _live(self._trusted(ItemInstanceManager), location_id=place):
+                if getattr(one, "owner_person_id", None):
+                    continue
+                if one.item_id and str(one.item_id) not in names:
+                    try:
+                        names[str(one.item_id)] = str(self._trusted(ItemManager).get(id=one.item_id).name or "Something")
+                    except HTTPException:
+                        names[str(one.item_id)] = "Something"
+                lying.append((str(one.id), one.item_id, names.get(str(one.item_id), "Something"), int(getattr(one, "quantity", None) or 1), place))
         if not lying:
             return []
         spots = {str(row.item_instance_id): (float(row.x or 0), float(row.y or 0)) for row in _live(self._trusted(SceneItemSpotManager), scene_id=scene.id)}
-        names: dict[str, str] = {}
         grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
         used = set(taken)
         drawn: list[ViewItem] = []
-        for one in sorted(lying, key=lambda row: str(row.id)):
-            if one.item_id and str(one.item_id) not in names:
-                try:
-                    names[str(one.item_id)] = str(self._trusted(ItemManager).get(id=one.item_id).name or "Something")
-                except HTTPException:
-                    names[str(one.item_id)] = "Something"
-            spot = spots.get(str(one.id))
+        for instance_id, item_id, name, quantity, place in sorted(lying):
+            spot = spots.get(instance_id)
             if spot is not None:
                 column, row = _cell(spot[0], spot[1], grid)
                 x, y = column * grid, row * grid
             else:
-                x, y = self._free_cell(scene, places[str(one.location_id)], used, gap=0)
+                x, y = self._free_cell(scene, places[place], used, gap=0)
             used.add(_cell(x, y, grid))
             drawn.append(
                 ViewItem(
-                    id=str(one.id), item_id=str(one.item_id) if one.item_id else None,
-                    name=names.get(str(one.item_id), "Something") if one.item_id else "Something",
-                    quantity=int(getattr(one, "quantity", None) or 1), x=x, y=y, location_id=str(one.location_id),
+                    id=instance_id, item_id=str(item_id) if item_id else None, name=name or "Something",
+                    quantity=quantity, x=x, y=y, location_id=place,
                 )
             )
         return drawn
+
+    def items_here_for(self, scene_id: str) -> dict[str, Any]:
+        """What lies on a scene (items_here): each item the map draws, where it's drawn, for the
+        campaign's GM or a member of it; anyone else the same 404 as a missing scene."""
+        scene = self._get(SceneManager, scene_id)
+        campaign = None if scene is None or scene.campaign_id is None else self._get(CampaignManager, scene.campaign_id)
+        if scene is None or (str(self.requester.id) not in _campaign_gms(campaign) and (campaign is None or not self._is_member(campaign))):
+            raise _not_found("SceneModel")
+        grid = float(scene.grid_size or DEFAULT_GRID_SIZE)
+        tokens = {_cell(one.x, one.y, grid) for one in _live(self._trusted(SceneTokenManager), scene_id=scene.id)}
+        return {
+            "scene_id": scene.id,
+            "items": [
+                {"item_instance_id": one.id, "item_id": one.item_id, "name": one.name, "quantity": one.quantity, "x": one.x, "y": one.y, "location_id": one.location_id}
+                for one in self._items_on(scene, tokens)
+            ],
+        }
 
     def _empty_view(self, scene: Any) -> dict[str, Any]:
         """A scene's map with nothing on it: for a player of the campaign with no token there."""
@@ -2661,12 +2688,16 @@ for _part in (
 
 def drop_where_fallen(model_registry: Any, person_id: str, scene_id: str) -> int:
     """A fallen combatant's carried things lie where the body fell (the operator, 2026-11-26: loot
-    from the fallen): each item instance they own is unowned and placed at their place, and its spot
-    on the scene recorded at their token, so the map draws it there and Loot lists it. How many."""
+    from the fallen): each thing they carry is dropped at their place (the wiki's drop_item: still
+    theirs by right, only no longer carried), and its spot on the scene recorded at their token, so
+    the map draws it there and Loot lists it. How many. On a wiki without drop_item, the instances
+    they own are unowned and placed there instead."""
     try:
         from zephyrex.extensions.world_inventory.BLL_WorldInventory import ItemInstanceManager  # type: ignore[import-not-found]
     except ImportError:
         return 0
+    from zephyrex.extensions.rpg_scene.WikiItems import carried_by, wiki_items
+
     root = env("ROOT_ID")
     scene = SceneManager(requester_id=root, model_registry=model_registry).get(id=scene_id)
     token = next(iter(_live(SceneTokenManager(requester_id=root, model_registry=model_registry), scene_id=scene_id, person_id=person_id)), None)
@@ -2674,6 +2705,21 @@ def drop_where_fallen(model_registry: Any, person_id: str, scene_id: str) -> int
     place = getattr(person, "location_id", None) or getattr(scene, "location_id", None)
     if place is None:
         return 0
+    spots = SceneItemSpotManager(requester_id=root, model_registry=model_registry)
+    held = carried_by(model_registry, env("SYSTEM_ID"), person_id)
+    if held is not None:
+        dropped = 0
+        drawn = {str(one.item_instance_id) for one in _live(spots, scene_id=scene_id)}
+        for one in held:
+            answer = wiki_items(
+                model_registry, "drop_item", env("SYSTEM_ID"), person_id=person_id, item_instance_id=str(one["item_instance_id"]), location_id=str(place)
+            ) or {}
+            lying = str(answer.get("item_instance_id") or one["item_instance_id"])
+            dropped += 1
+            if token is not None and lying not in drawn:
+                spots.create(scene_id=scene_id, item_instance_id=lying, x=float(token.x or 0), y=float(token.y or 0))
+                drawn.add(lying)
+        return dropped
     instances = ItemInstanceManager(requester_id=root, model_registry=model_registry)
     carried = [one for one in _live(instances, owner_person_id=person_id)]
     if not carried:
@@ -2688,7 +2734,6 @@ def drop_where_fallen(model_registry: Any, person_id: str, scene_id: str) -> int
     finally:
         session.close()
     if token is not None:
-        spots = SceneItemSpotManager(requester_id=root, model_registry=model_registry)
         for one in carried:
             spots.create(scene_id=scene_id, item_instance_id=str(one.id), x=float(token.x or 0), y=float(token.y or 0))
     return len(carried)

@@ -2,8 +2,9 @@
 """Things lying on the map (the operator, 2026-11-26: "I haven't seen any loot functionality at
 all"): the scene view carries the wiki's unowned item instances at a place the scene shows (its own
 place, or one of its regions'), each on a free square by its place; what someone carries isn't
-drawn. A fallen combatant's things drop where the body fell (drop_where_fallen): unowned, at their
-place, drawn on the body's square."""
+drawn. A fallen combatant's things drop where the body fell (drop_where_fallen, through the wiki's
+drop_item): still theirs by right, at their place, drawn on the body's square; items_here lists what
+the map draws, and the wiki's take_item takes a thing off it."""
 
 import asyncio
 from collections.abc import Iterator
@@ -78,15 +79,31 @@ def test_lying_things_are_drawn_and_a_fallen_bodys_things_drop_where_it_fell(ser
     assert {one["name"] for one in _view(server, player, scene["id"])["items"]} == {"Silver key", "Flour sack"}
     assert milled["id"] in {one["id"] for one in drawn.values()}
 
-    # The bandit falls: the purse lies on the body's square, at the bandit's place, no one's.
+    here = asyncio.run(RPGSceneExtension.items_here(str(gm.id), scene["id"]))
+    assert {(one["name"], one["quantity"]) for one in here["items"]} == {("Silver key", 1), ("Flour sack", 3)}
+    assert {one["item_instance_id"] for one in here["items"]} == {lying["id"], milled["id"]}
+
+    # The bandit falls: the purse lies on the body's square, at the bandit's place, still the bandit's.
     from zephyrex.extensions.world_inventory.BLL_WorldInventory import ItemInstanceManager  # type: ignore[import-not-found]
     from zephyrex.lib.Environment import env
 
     registry = server.app.state.model_registry  # type: ignore[attr-defined]
     assert drop_where_fallen(registry, bandit["id"], scene["id"]) == 1
     dropped = ItemInstanceManager(requester_id=env("ROOT_ID"), model_registry=registry).get(id=purse["id"])
-    assert (dropped.owner_person_id, str(dropped.location_id)) == (None, ford["id"])
+    assert (dropped.owner_person_id, str(dropped.location_id)) == (bandit["id"], ford["id"]), "dropping never changes the owner"
     after = {one["name"]: one for one in _view(server, gm, scene["id"])["items"]}
     assert (after["Coin purse"]["x"], after["Coin purse"]["y"]) == (400.0, 500.0), "where the body fell"
     assert drop_where_fallen(registry, bandit["id"], scene["id"]) == 0, "nothing more on them"
+    # Brann loots the purse (the wiki's take_item): it's off the map and on his sheet.
+    from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
+    from zephyrex.extensions.rpg_dice.EXT_RPGDice import RPGDiceExtension  # type: ignore[import-not-found]
+
+    take = loaded_ability(registry, "rpg_core", "take_item")
+    assert take is not None, "the wiki offers take_item (13ceb82+)"
+    taken = take(registry, str(gm.id), person_id=brann["id"], item_instance_id=purse["id"])
+    taken = asyncio.run(taken) if hasattr(taken, "__await__") else taken
+    assert taken["taken"] == 1
+    assert "Coin purse" not in {one["name"] for one in asyncio.run(RPGSceneExtension.items_here(str(gm.id), scene["id"]))["items"]}
+    gear = asyncio.run(RPGDiceExtension.character_sheet(str(gm.id), brann["id"]))["gear"]
+    assert sorted(one["name"] for one in gear) == ["Coin purse", "Knife"], "his own knife (owned, nowhere) and the purse he carries"
     assert asyncio.run(RPGSceneExtension.current_scene(str(gm.id), campaign["id"])) is not None

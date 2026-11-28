@@ -276,6 +276,54 @@ class Recovery:
         return next((dict(one) for one in self.pack.get("consumables") or [] if one.get("slug") == slug), None)
 
 
+    def use_item(self, person_id: str, item_instance_id: str, quantity: int = 1) -> dict[str, Any]:
+        """A character uses ``quantity`` of something they carry. A consumable the pack knows (a
+        Potion of Healing) does what the pack says, once per unit (its healing rolled and added,
+        up to the maximum), and a use spends it; another consumable is spent with no rules effect;
+        anything else has no use the rules know, and is refused (narrate it, or test_options). The
+        carrying and spending are the wiki's (items_carried, spend_item)."""
+        from zephyrex.extensions.rpg_scene.WikiItems import carried_by, wiki_items  # type: ignore[import-not-found]
+
+        if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 1:
+            raise _refuse("quantity is a whole number from 1")
+        carried = carried_by(self.model_registry, env("SYSTEM_ID"), person_id)
+        if carried is None:
+            raise _refuse("The wiki offers no items_carried: nothing can be used")
+        held = next((one for one in carried if str(one.get("item_instance_id")) == str(item_instance_id)), None)
+        if held is None:
+            raise HTTPException(status_code=409, detail={"message": "They don't carry that"})
+        if quantity > int(held.get("quantity") or 1):
+            raise _refuse(f"They carry only {int(held.get('quantity') or 1)}")
+        item = None
+        if held.get("item_id"):
+            try:
+                from zephyrex.extensions.world_inventory.BLL_WorldInventory import ItemManager  # type: ignore[import-not-found]
+
+                item = self._trusted(ItemManager).get(id=held["item_id"])
+            except (ImportError, HTTPException):
+                item = None
+        name = str(held.get("name") or getattr(item, "name", "") or "Something")
+        effect = None if item is None else self.consumable(item)
+        consumable = effect is not None or str(held.get("kind") or getattr(item, "kind", "") or "") == "consumable"
+        if not consumable:
+            raise _refuse(f"{name} has no use the rules know: narrate it, or test it (test_options)")
+        healing = [self.heal(person_id, str(effect["healing"])) for _ in range(quantity)] if effect and effect.get("healing") else []
+        spent: dict[str, Any] = {}
+        if effect is None or effect.get("spent_on_use", True):
+            spent = wiki_items(self.model_registry, "spend_item", env("SYSTEM_ID"), person_id=person_id, item_instance_id=str(item_instance_id), quantity=quantity) or {}
+        state = self.state(person_id)
+        return {
+            "person_id": person_id,
+            "item_instance_id": str(item_instance_id),
+            "name": name,
+            "used": quantity,
+            "effect": None if not healing else {"healing": effect["healing"] if effect else None, "rolled": [one["rolled"] for one in healing]},
+            "spent": int(spent.get("spent") or 0),
+            "left": int(spent["left"]) if "left" in spent else int(held.get("quantity") or 1),
+            **state,
+        }
+
+
 def recovery_for(model_registry: Any, requester_id: str, campaign_id: str, draw: Draw = live_draw) -> Recovery:
     """The campaign's Recovery, for its GM (or the server); anyone else a 404."""
     try:

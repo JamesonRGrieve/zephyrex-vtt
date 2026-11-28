@@ -845,14 +845,7 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             sections[section].append(entry)
         for entries in sections.values():
             entries.sort(key=lambda one: (one.name.casefold(), (one.specialisation or "").casefold()))
-        items = self._trusted(ItemManager)
-        gear = []
-        for instance in self._trusted(ItemInstanceManager).list(owner_person_id=person.id):
-            try:
-                item_name = None if instance.item_id is None else items.get(id=instance.item_id).name
-            except HTTPException:
-                item_name = None
-            gear.append(SheetItem(id=instance.id, item_id=instance.item_id, name=item_name, quantity=int(instance.quantity or 1)))
+        gear = self._gear(person.id)
         state = None
         try:
             from zephyrex.extensions.rpg_combat.Recovery import Recovery  # type: ignore[import-not-found]
@@ -869,6 +862,32 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             state=state,
             **sections,
         )
+
+    def _gear(self, person_id: str) -> list[SheetItem]:
+        """What the character carries: the wiki's items_carried (its carry rows, and gear owned that
+        lies nowhere), else, on a wiki without it, the instances they own."""
+        from zephyrex.extensions.AbstractExtensionProvider import loaded_ability
+
+        call = loaded_ability(self.model_registry, "rpg_core", "items_carried")
+        if call is not None:
+            answer = call(self.model_registry, str(env("SYSTEM_ID")), person_ids=[str(person_id)])
+            if hasattr(answer, "__await__"):
+                from zephyrex.logic.AbstractLogicManager.manager import _cache_sync_run
+
+                answer = _cache_sync_run(answer)
+            return [
+                SheetItem(id=str(one["item_instance_id"]), item_id=one.get("item_id"), name=one.get("name") or None, quantity=int(one.get("quantity") or 1))
+                for one in ((answer or {}).get("items") or {}).get(str(person_id), [])
+            ]
+        items = self._trusted(ItemManager)
+        gear = []
+        for instance in self._trusted(ItemInstanceManager).list(owner_person_id=person_id):
+            try:
+                item_name = None if instance.item_id is None else items.get(id=instance.item_id).name
+            except HTTPException:
+                item_name = None
+            gear.append(SheetItem(id=instance.id, item_id=instance.item_id, name=item_name, quantity=int(instance.quantity or 1)))
+        return gear
 
     def _has_sheet(self, person_id: str, pack: dict[str, Any], campaign: Any, gm: bool) -> bool:
         """Whether the character holds a value for any of the pack's characteristics."""

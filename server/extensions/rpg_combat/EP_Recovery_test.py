@@ -153,3 +153,37 @@ def test_hit_points_outlast_a_fight_and_no_one_rests_in_one(server: TestClient) 
     # A heal mid-fight shows in the fight.
     table["recovery"].heal(brann, "1d4")
     assert _run(RPGCombatExtension.combat_options(gm, started["id"], brann))["hp"] == 11
+
+
+def test_a_potion_heals_and_is_spent_and_a_sword_has_no_use(server: TestClient) -> None:
+    table = _table(server)
+    gm, brann, campaign = str(table["gm"].id), table["brann"]["id"], table["campaign"]["id"]
+    potion = _create(server, table["gm"], "item", name="Potion of Healing", kind="consumable", stack_size=5, campaign_id=campaign)
+    sword = _create(server, table["gm"], "item", name="Longsword", kind="weapon", campaign_id=campaign)
+    potions = _create(server, table["gm"], "item_instance", item_id=potion["id"], owner_person_id=brann, quantity=2)
+    blade = _create(server, table["gm"], "item_instance", item_id=sword["id"], owner_person_id=brann)
+    table["recovery"].set_hp(brann, 0)
+
+    drunk = _run(RPGCombatExtension.use_item(gm, brann, potions["id"]))
+    assert drunk["effect"]["healing"] == "2d4+2" and 4 <= drunk["effect"]["rolled"][0] <= 10
+    assert drunk["hp"] == drunk["effect"]["rolled"][0] and "Unconscious" not in drunk["conditions"], "healed from 0, awake"
+    assert (drunk["spent"], drunk["left"]) == (1, 1)
+    gear = {one["name"]: one["quantity"] for one in _run(RPGDiceExtension.character_sheet(gm, brann))["gear"]}
+    assert gear == {"Potion of Healing": 1, "Longsword": 1}
+
+    with pytest.raises(HTTPException) as too_many:
+        _run(RPGCombatExtension.use_item(gm, brann, potions["id"], quantity=2))
+    assert too_many.value.status_code == 422 and "only 1" in too_many.value.detail["message"]
+    with pytest.raises(HTTPException) as no_use:
+        _run(RPGCombatExtension.use_item(gm, brann, blade["id"]))
+    assert no_use.value.status_code == 422 and "Longsword has no use the rules know" in no_use.value.detail["message"]
+    stranger_thing = _create(server, table["gm"], "item_instance", item_id=potion["id"], quantity=1)
+    with pytest.raises(HTTPException) as not_carried:
+        _run(RPGCombatExtension.use_item(gm, brann, stranger_thing["id"]))
+    assert not_carried.value.status_code == 409
+    with pytest.raises(HTTPException) as player:
+        _run(RPGCombatExtension.use_item(str(table["player"].id), brann, potions["id"]))
+    assert player.value.status_code == 404
+
+    last = _run(RPGCombatExtension.use_item(gm, brann, potions["id"]))
+    assert last["left"] == 0 and "Potion of Healing" not in {one["name"] for one in _run(RPGDiceExtension.character_sheet(gm, brann))["gear"]}
