@@ -162,6 +162,40 @@ def ordered(combatants: list[Any]) -> list[Any]:
     return sorted(combatants, key=key)
 
 
+class CharacterStateModel(
+    ApplicationModel.Optional,
+    UpdateMixinModel.Optional,
+    PersonModel.Reference.Optional,
+    metaclass=ModelMeta,
+):
+    """What a fight, a rest or a potion leaves on a character, and outlasts the fight (Zephyrex RPG,
+    2026-11-28: the story follows the game's state): hit points now, spent Hit Point Dice, the
+    Exhaustion level and the conditions it has. No row, or no hp, is a character at its sheet's
+    maximum with none spent and no condition (Recovery.py reads and writes it)."""
+
+    Manager: ClassVar[Type["CharacterStateManager"]] = None
+    hp: Optional[int] = Field(None, description="Hit points now; none = the sheet's maximum")
+    hit_dice_spent: Optional[int] = Field(0, description="Hit Point Dice spent since the last Long Rest")
+    exhaustion: Optional[int] = Field(0, description="The Exhaustion level (0 = none)")
+    conditions: Optional[str] = Field(None, description="The conditions it has, names as JSON text")
+    table_comment: ClassVar[str] = "A character's state that outlasts a fight: hit points, spent Hit Point Dice, Exhaustion, conditions"
+
+    class Create(BaseModel, PersonModel.Reference.ID):
+        hp: Optional[int] = None
+        hit_dice_spent: int = 0
+        exhaustion: int = 0
+        conditions: Optional[str] = None
+
+    class Update(BaseModel):
+        hp: Optional[int] = None
+        hit_dice_spent: Optional[int] = None
+        exhaustion: Optional[int] = None
+        conditions: Optional[str] = None
+
+    class Search(ApplicationModel.Search, PersonModel.Reference.ID.Search):
+        pass
+
+
 class CombatantOut(PlainModel):
     id: str
     name: Optional[str]
@@ -547,8 +581,14 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
                     step if step["step"] != "proficiency" else {"step": "proficiency", "value": int(bonus)} for step in one.steps
                 ]
         if combatant.hp_max is None and resources.get("hit-points") is not None:
-            hp = int(resources["hit-points"])
-            self._trusted(CombatantManager).update_trusted(id=combatant.id, hp=hp, hp_max=hp)
+            # A fight starts from the hit points the last one (or a rest, or a potion) left.
+            from zephyrex.extensions.rpg_combat.Recovery import Recovery
+
+            hp_max = int(resources["hit-points"])
+            lasting = Recovery(self.model_registry, campaign).state(person_id)["hp"]
+            hp = hp_max if lasting is None else min(int(lasting), hp_max)
+            down = {"is_defeated": True} if hp == 0 else {}  # still down from the last fight
+            self._trusted(CombatantManager).update_trusted(id=combatant.id, hp=hp, hp_max=hp_max, **down)
             combatant = self._find(CombatantManager, combatant.id)
         return combatant, person, pack, attacks, armor_class(pack, scores, resources.get("armor-class"))
 
@@ -676,6 +716,11 @@ class EncounterManager(_Combat, AbstractBLLManager, RouterMixin):
             hp = max(0, hp - outcome.damage)
             defeated = hp == 0
             combatants.update_trusted(id=target.id, hp=hp, is_defeated=defeated)
+            if target.person_id:
+                # The hit outlasts the fight (Recovery: a character at 0 has the pack's at-zero condition).
+                from zephyrex.extensions.rpg_combat.Recovery import Recovery
+
+                Recovery(self.model_registry, campaign).set_hp(str(target.person_id), hp)
             if defeated and not target.is_defeated and encounter.scene_id and target.person_id:
                 # Loot from the fallen: what they carried lies where they fell, on the map and in Loot.
                 from zephyrex.extensions.rpg_scene.BLL_RPGScene import drop_where_fallen
@@ -828,8 +873,42 @@ class CombatantManager(_Combat, AbstractBLLManager, RouterMixin):
         return super().create(**kwargs)
 
 
+class CharacterStateManager(_Combat, AbstractBLLManager, RouterMixin):
+    """Characters' lasting state: read by the campaign's GM and the character's own player; written
+    by the GM (and by rest, use_item and combat, through Recovery.py)."""
+
+    _model = CharacterStateModel
+
+    def _guard(self, person_id: Optional[str]) -> None:
+        if str(self.requester.id) in {str(env("ROOT_ID")), str(env("SYSTEM_ID"))}:
+            return  # the server's own writes (Recovery.py, after its own GM check)
+        person = self._find(PersonManager, person_id)
+        campaign = None if person is None else self._find(CampaignManager, getattr(person, "campaign_id", None))
+        if person is None or not self._is_gm(campaign):
+            raise _not_found("PersonModel")
+
+    def create(self, **kwargs: Any) -> Any:
+        self._guard(kwargs.get("person_id"))
+        return super().create(**kwargs)
+
+    def update(self, id: str, **kwargs: Any) -> Any:
+        row = self._find(CharacterStateManager, id)
+        if row is None:
+            raise _not_found("CharacterStateModel")
+        self._guard(row.person_id)
+        return super().update(id=id, **kwargs)
+
+    def delete(self, id: str) -> Any:
+        row = self._find(CharacterStateManager, id)
+        if row is None:
+            raise _not_found("CharacterStateModel")
+        self._guard(row.person_id)
+        return super().delete(id=id)
+
+
 EncounterModel.Manager = EncounterManager
 CombatantModel.Manager = CombatantManager
+CharacterStateModel.Manager = CharacterStateManager
 
 # Live rooms (server-framework `rooms`; inert when the app doesn't load it): an encounter and its
 # combatants change in the encounter's room; an encounter is also news in its campaign's room (a

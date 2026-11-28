@@ -299,6 +299,57 @@ def npc_stat_blocks(root: Path, abilities: list[dict[str, Any]]) -> list[dict[st
     return blocks
 
 
+def hit_dice(root: Path) -> dict[str, int]:
+    """Each class's Hit Point Die (its sides), as the classes pack's documents state it."""
+    found: dict[str, int] = {}
+    for document in _documents(root, "classes24", []):
+        if document.get("type") != "class":
+            continue
+        denomination = str(((document.get("system") or {}).get("hd") or {}).get("denomination") or "")
+        if re.fullmatch(r"d\d+", denomination):
+            found[document["name"]] = int(denomination[1:])
+    if not found:
+        raise RulesTextError("the classes pack no longer states each class's Hit Point Die")
+    return found
+
+
+def consumables(root: Path) -> list[dict[str, Any]]:
+    """The SRD's consumables that heal (the Potions of Healing): their healing dice from the item's own
+    heal activity, and whether using one spends it (the item's uses destroy it when empty)."""
+    found = []
+    for path in sorted((root / "packs" / "_source" / "equipment24").rglob("*.yml")):
+        if path.name == "_folder.yml":
+            continue
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if not document or document.get("type") != "consumable":
+            continue
+        system = document.get("system") or {}
+        heal = next((one for one in (system.get("activities") or {}).values() if one.get("type") == "heal"), None)
+        healing = (heal or {}).get("healing") or {}
+        dice = _dice(healing)
+        if heal is None or dice is None:
+            continue
+        bonus = str(healing.get("bonus") or "").strip()
+        if bonus and not re.fullmatch(r"\d+", bonus):
+            continue  # a bonus the pack can't read as a number (a formula): left out rather than guessed
+        uuid = f"Compendium.dnd5e.equipment24.Item.{document['_id']}"
+        same = next((one for one in found if one["slug"] == path.stem), None)
+        if same is not None:
+            # One item in two of the pack's folders (adventuring gear and potions): one entry, both UUIDs.
+            same["uuids"].append(uuid)
+            continue
+        found.append({
+            "slug": path.stem,
+            "name": document["name"],
+            "healing": dice + (f"+{int(bonus)}" if bonus and int(bonus) else ""),
+            "spent_on_use": bool((system.get("uses") or {}).get("autoDestroy")),
+            "uuids": [uuid],
+        })
+    if not found:
+        raise RulesTextError("the equipment pack no longer holds a healing potion")
+    return found
+
+
 def test_pack(root: Path) -> dict[str, Any]:
     """vtt's rules pack for the fifth-edition SRD 5.2 (rpg_systems/packs/srd-5e.json), parsed from its own text:
     a D20 Test (d20 + ability modifier + Proficiency Bonus if proficient, against a DC), the
@@ -396,6 +447,36 @@ def test_pack(root: Path) -> dict[str, Any]:
     minimum = int(re.search(r"add the total \(minimum of (\d+)\) to your Hit Point maximum", creation).group(1))  # type: ignore[union-attr]
     advancement = find(creation, r"Character Advancement Level Experience Points Proficiency Bonus ((?:\d+ [\d,]+ \+\d+ ?)+)", "the Character Advancement table")
     levels = [int(level) for level, _, _ in re.findall(r"(\d+) ([\d,]+) (\+\d+)", advancement.group(1))]
+    glossary, conditions_page = page("content24/appendices/rules-glossary.yml"), page("content24/chapter-1/conditions.yml")
+    short = find(
+        glossary,
+        r"Short Rest rule \w+ rule A Short Rest is a (\d+)-hour period.*?To start a Short Rest, you must have at least (\d+) Hit Point\..*?"
+        r"For each Hit Point Die you spend in this way, roll the die and add your (\w+) modifier to it\. You regain Hit Points equal to "
+        r"the total \(minimum of (\d+) Hit Point\)",
+        "the Short Rest",
+    )
+    long = find(
+        glossary,
+        r"Long Rest rule \w+ rule A Long Rest is a period of extended downtime—at least (\d+) hours.*?To start a Long Rest, you must have at "
+        r"least (\d+) Hit Point\..*?You regain all lost Hit Points and all spent Hit Point Dice\..*?If you have the &Reference\[Exhaustion\] "
+        r"condition, its level decreases by (\d+)\.",
+        "the Long Rest",
+    )
+    listed = find(conditions_page, r"This glossary defines these conditions: (.*?) A condition doesn’t stack with itself", "the conditions").group(1)
+    names = re.findall(r"@UUID\[[^\]]+\]\{(\w+)\}", listed)
+    if len(names) < 10:
+        raise RulesTextError("the SRD's conditions no longer read as a list")
+    exhaustion = find(
+        glossary,
+        r"Each time you receive it, you gain (\d+) Exhaustion level\. You die if your Exhaustion level is (\d+)\. D20 Tests Affected\. When "
+        r"you make a &Reference\[D20 Test\], the roll is reduced by (\d+) times your Exhaustion level",
+        "Exhaustion's levels",
+    )
+    dropping = find(
+        damage_page,
+        r"0 Hit Points and don’t die instantly, you have the &Reference\[(\w+)\] condition until you regain any Hit Points",
+        "what 0 Hit Points does to a character",
+    )
     attribution = find(legal, r"(This work includes material from the System Reference Document .*?legalcode) \.", "the attribution").group(1)
 
     return {
@@ -451,8 +532,38 @@ def test_pack(root: Path) -> dict[str, Any]:
             "max_level": max(levels),
             "fixed_hit_points": per_class,
             "minimum_per_level": minimum,
+            # Each class's Hit Point Die: a character has one per level, spent on a Short Rest.
+            "hit_die": hit_dice(root),
             "cite": "Creating a Character › Gaining a Level; Fixed Hit Points by Class; Character Advancement",
         },
+        # Resting (rpg_combat's rest): a Short Rest spends Hit Point Dice, each rolled plus the
+        # Constitution modifier (at least the minimum); a Long Rest restores all Hit Points and Hit
+        # Point Dice and takes one Exhaustion level off. Either needs at least the Hit Points to start.
+        "rest": {
+            "short": {
+                "hours": int(short.group(1)),
+                "needs_hit_points": int(short.group(2)),
+                "hit_dice": {"characteristic": by_name[short.group(3)], "minimum": int(short.group(4))},
+            },
+            "long": {
+                "hours": int(long.group(1)),
+                "needs_hit_points": int(long.group(2)),
+                "hit_points": "all",
+                "hit_dice": "all",
+                "exhaustion": -int(long.group(3)),
+            },
+            "cite": "Rules Glossary › Short Rest; Long Rest",
+        },
+        # The conditions a character can have (a condition doesn't stack, Exhaustion excepted: it has
+        # levels, and its last is death); a character at 0 Hit Points has the one named until healed.
+        "conditions": {
+            "names": names,
+            "levelled": {"Exhaustion": {"per": int(exhaustion.group(1)), "dies_at": int(exhaustion.group(2)), "d20_per_level": -int(exhaustion.group(3))}},
+            "at_zero_hit_points": dropping.group(1),
+            "cite": "Playing the Game › Conditions; Rules Glossary › Exhaustion; Damage and Healing › Dropping to 0 Hit Points",
+        },
+        # Consumables that heal (use_item): their healing dice and whether a use spends one.
+        "consumables": consumables(root),
         # A weapon attack: its ability by melee or range (Finesse: either), the same modifier on the
         # damage, a natural 20 a Critical Hit (the damage dice rolled twice), a natural 1 a miss.
         "attack": {

@@ -403,6 +403,11 @@ class SheetOut(PlainModel):
     origins: list[SheetEntry]
     abilities: list[SheetEntry]
     gear: list[SheetItem]
+    state: Optional[dict[str, Any]] = Field(
+        None,
+        description="What fights, rests and potions left (rpg_combat): hp and hp_max, hit_dice {die, total, spent, left}, "
+        "exhaustion, conditions; none without rpg_combat",
+    )
 
 
 class SheetResultEnvelope(PlainModel):
@@ -848,12 +853,20 @@ class DiceManager(AbstractBLLManager[Any], RouterMixin):
             except HTTPException:
                 item_name = None
             gear.append(SheetItem(id=instance.id, item_id=instance.item_id, name=item_name, quantity=int(instance.quantity or 1)))
+        state = None
+        try:
+            from zephyrex.extensions.rpg_combat.Recovery import Recovery  # type: ignore[import-not-found]
+        except ImportError:
+            pass  # no rpg_combat: no lasting state to show
+        else:
+            state = Recovery(self.model_registry, campaign).state(person.id)
         return SheetOut(
             person_id=person.id,
             name=getattr(person, "name", None),
             system=None if system is None else system.slug,
             has_sheet=any(one.value is not None for one in sections["characteristics"]),
             gear=gear,
+            state=state,
             **sections,
         )
 

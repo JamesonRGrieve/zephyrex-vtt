@@ -1225,8 +1225,107 @@
       "Wizard": 4
     },
     "minimum_per_level": 1,
+    "hit_die": {
+      "Barbarian": 12,
+      "Bard": 8,
+      "Cleric": 8,
+      "Druid": 8,
+      "Fighter": 10,
+      "Monk": 8,
+      "Paladin": 10,
+      "Ranger": 10,
+      "Rogue": 8,
+      "Sorcerer": 6,
+      "Warlock": 8,
+      "Wizard": 6
+    },
     "cite": "Creating a Character › Gaining a Level; Fixed Hit Points by Class; Character Advancement"
   },
+  "rest": {
+    "short": {
+      "hours": 1,
+      "needs_hit_points": 1,
+      "hit_dice": {
+        "characteristic": "constitution",
+        "minimum": 1
+      }
+    },
+    "long": {
+      "hours": 8,
+      "needs_hit_points": 1,
+      "hit_points": "all",
+      "hit_dice": "all",
+      "exhaustion": -1
+    },
+    "cite": "Rules Glossary › Short Rest; Long Rest"
+  },
+  "conditions": {
+    "names": [
+      "Blinded",
+      "Charmed",
+      "Deafened",
+      "Exhaustion",
+      "Frightened",
+      "Grappled",
+      "Incapacitated",
+      "Invisible",
+      "Paralyzed",
+      "Petrified",
+      "Poisoned",
+      "Prone",
+      "Restrained",
+      "Stunned",
+      "Unconscious"
+    ],
+    "levelled": {
+      "Exhaustion": {
+        "per": 1,
+        "dies_at": 6,
+        "d20_per_level": -2
+      }
+    },
+    "at_zero_hit_points": "Unconscious",
+    "cite": "Playing the Game › Conditions; Rules Glossary › Exhaustion; Damage and Healing › Dropping to 0 Hit Points"
+  },
+  "consumables": [
+    {
+      "slug": "potion-of-healing",
+      "name": "Potion of Healing",
+      "healing": "2d4+2",
+      "spent_on_use": true,
+      "uuids": [
+        "Compendium.dnd5e.equipment24.Item.phbagPotionofHea",
+        "Compendium.dnd5e.equipment24.Item.dmgPotionOfHeali"
+      ]
+    },
+    {
+      "slug": "potion-of-healing-greater",
+      "name": "Potion of Healing (Greater)",
+      "healing": "4d4+4",
+      "spent_on_use": true,
+      "uuids": [
+        "Compendium.dnd5e.equipment24.Item.dmgGreaterPotion"
+      ]
+    },
+    {
+      "slug": "potion-of-healing-superior",
+      "name": "Potion of Healing (Superior)",
+      "healing": "8d4+8",
+      "spent_on_use": true,
+      "uuids": [
+        "Compendium.dnd5e.equipment24.Item.dmgSuperiorPotio"
+      ]
+    },
+    {
+      "slug": "potion-of-healing-supreme",
+      "name": "Potion of Healing (Supreme)",
+      "healing": "10d4+20",
+      "spent_on_use": true,
+      "uuids": [
+        "Compendium.dnd5e.equipment24.Item.dmgSupremePotion"
+      ]
+    }
+  ],
   "attack": {
     "melee": "strength",
     "ranged": "dexterity",

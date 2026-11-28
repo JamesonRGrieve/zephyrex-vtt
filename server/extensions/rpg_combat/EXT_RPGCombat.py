@@ -231,3 +231,47 @@ class RPGCombatExtension(AbstractStaticExtension):
         """A campaign's fight in progress in initiative order, or None."""
         found = cls.encounters(requester_id).current_for(campaign_id)
         return None if found is None else found.model_dump()
+
+    @classmethod
+    @ability("rest")
+    async def rest(
+        cls, requester_id: str, campaign_id: str, person_ids: list[str], kind: str, hit_dice: Optional[int] = None
+    ) -> dict[str, Any]:
+        """A rest for characters of the campaign, as its rules pack says (srd-5e: ``short`` or
+        ``long``). A Short Rest spends Hit Point Dice (each rolled plus the Constitution modifier, at
+        least 1) one at a time until the character is whole or its dice, or ``hit_dice`` at most, run
+        out; a Long Rest restores all hit points and Hit Point Dice and takes one Exhaustion level
+        off. A character below the hit points a rest needs is listed with ``refused``. Refused while
+        a fight is running (Initiative interrupts a rest) or when the pack has no rest rules.
+        Returns {kind, rested: [{person_id, name, hp_before, hp, hp_max, hit_dice, exhaustion,
+        conditions, rolls, refused?}]}. The campaign's GM only."""
+        from zephyrex.extensions.rpg_combat.Recovery import recovery_for
+
+        registry = cls.encounters(requester_id).model_registry
+        recovery = recovery_for(registry, requester_id, campaign_id)
+        strangers = [one for one in person_ids if _campaign_of(registry, one) != str(campaign_id)]
+        if strangers:
+            raise HTTPException(status_code=422, detail={"message": "Every character resting must be the campaign's"})
+        return recovery.rest_all(list(person_ids), kind, hit_dice)
+
+    @classmethod
+    @ability("set_condition")
+    async def set_condition(cls, requester_id: str, person_id: str, condition: str, present: bool = True) -> dict[str, Any]:
+        """Give a character a condition (``present``), or take it off: the pack's conditions (srd-5e:
+        Blinded … Unconscious), named in any case. Exhaustion goes up or down one level instead, ends
+        at 0, and ``dies`` is true at its last. Returns the character's state: {person_id, condition,
+        present, dies, hp, hp_max, hit_dice, exhaustion, conditions}. The campaign's GM only;
+        character_sheet shows the state too."""
+        from zephyrex.extensions.rpg_combat.Recovery import campaign_of_person, recovery_for
+
+        registry = cls.encounters(requester_id).model_registry
+        return recovery_for(registry, requester_id, campaign_of_person(registry, person_id)).set_condition(person_id, condition, present)
+
+
+def _campaign_of(registry: Any, person_id: str) -> Optional[str]:
+    from zephyrex.extensions.rpg_combat.Recovery import campaign_of_person
+
+    try:
+        return campaign_of_person(registry, person_id)
+    except HTTPException:
+        return None
